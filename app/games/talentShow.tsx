@@ -82,6 +82,13 @@ export default function TalentShowScreen() {
   const [submitted, setSubmitted] = useState(false);
   const [timeLeft, setTimeLeft] = useState(TIMER_SECONDS);
   const timerRef = useRef<ReturnType<typeof setInterval> | null>(null);
+  // Latest values for timer callbacks (avoid stale closures)
+  const answerRef = useRef(answer);
+  answerRef.current = answer;
+  const submittedRef = useRef(submitted);
+  const handleSubmitRef = useRef<(overrideAnswer?: string, forRound?: number) => Promise<void>>(
+    async () => {}
+  );
 
   const gs: GameState | null = room?.game_state ?? null;
   const phase = gs?.phase ?? null;
@@ -115,7 +122,9 @@ export default function TalentShowScreen() {
   useEffect(() => {
     if (phase === "answering") {
       setAnswer("");
+      answerRef.current = "";
       setSubmitted(false);
+      submittedRef.current = false;
       setTimeLeft(TIMER_SECONDS);
     }
   }, [phase, gs?.round]);
@@ -129,18 +138,20 @@ export default function TalentShowScreen() {
       return;
     }
 
+    const timerRound = gs?.round;
+    let remaining = TIMER_SECONDS;
     timerRef.current = setInterval(() => {
-      setTimeLeft((prev) => {
-        if (prev <= 1) {
-          if (timerRef.current) clearInterval(timerRef.current);
-          // Auto-submit empty if not yet submitted
-          if (!submitted) {
-            handleSubmit("");
-          }
-          return 0;
+      remaining -= 1;
+      if (remaining <= 0) {
+        if (timerRef.current) clearInterval(timerRef.current);
+        setTimeLeft(0);
+        // Auto-submit the latest typed answer if not yet submitted
+        if (!submittedRef.current && timerRound !== undefined) {
+          handleSubmitRef.current(answerRef.current, timerRound);
         }
-        return prev - 1;
-      });
+        return;
+      }
+      setTimeLeft(remaining);
     }, 1000);
 
     return () => {
@@ -156,7 +167,7 @@ export default function TalentShowScreen() {
     const totalPlayers = players.length;
     const totalAnswered = Object.keys(gs.answers).length;
     if (totalPlayers > 0 && totalAnswered >= totalPlayers) {
-      advanceToReveal();
+      advanceToReveal(gs.round);
     }
   }, [gs?.answers, players.length, phase, isHost]);
 
@@ -165,12 +176,13 @@ export default function TalentShowScreen() {
   // -----------------------------------------------------------------------
 
   const handleSubmit = useCallback(
-    async (overrideAnswer?: string) => {
-      if (submitted || !gs || !myId) return;
+    async (overrideAnswer?: string, forRound?: number) => {
+      if (submittedRef.current || !gs || !myId) return;
+      submittedRef.current = true;
       setSubmitted(true);
 
-      const finalAnswer = (overrideAnswer ?? answer).trim();
-      const answerRound = gs.round;
+      const finalAnswer = (overrideAnswer ?? answerRef.current).trim();
+      const answerRound = forRound ?? gs.round;
       // Merge only our own answer into the fresh server state (no lost updates)
       await mutateGameState((cur) => {
         if (!cur || cur.phase !== "answering" || cur.round !== answerRound) return null;
@@ -179,83 +191,96 @@ export default function TalentShowScreen() {
         return { ...cur, answers: { ...curAnswers, [myId]: finalAnswer } };
       });
     },
-    [submitted, gs, myId, answer, mutateGameState]
+    [gs, myId, mutateGameState]
   );
+  handleSubmitRef.current = handleSubmit;
 
-  /** Host: move from answering -> reveal */
-  const advanceToReveal = useCallback(async () => {
-    if (!gs) return;
-    const dupes = findDuplicateUserIds(gs.answers);
-    // Calculate round scores
-    const roundScores: Record<string, number> = {};
-    for (const uid of Object.keys(gs.answers)) {
-      roundScores[uid] = dupes.includes(uid) ? 0 : 1;
-    }
-    // Add to cumulative
-    const newScores = { ...gs.scores };
-    for (const [uid, pts] of Object.entries(roundScores)) {
-      newScores[uid] = (newScores[uid] ?? 0) + pts;
-    }
-    await updateGameState({
-      ...gs,
-      phase: "reveal" as Phase,
-      duplicates: dupes,
-      scores: newScores,
-    });
-  }, [gs, updateGameState]);
+  /** Host: move from answering -> reveal (computed from FRESH state; idempotent) */
+  const advanceToReveal = useCallback(
+    async (forRound: number) => {
+      await mutateGameState((cur) => {
+        if (!cur || cur.phase !== "answering" || cur.round !== forRound) return null;
+        const curAnswers: Record<string, string> = cur.answers ?? {};
+        const dupes = findDuplicateUserIds(curAnswers);
+        // Calculate round scores
+        const roundScores: Record<string, number> = {};
+        for (const uid of Object.keys(curAnswers)) {
+          roundScores[uid] = dupes.includes(uid) ? 0 : 1;
+        }
+        // Add to cumulative
+        const newScores: Record<string, number> = { ...(cur.scores ?? {}) };
+        for (const [uid, pts] of Object.entries(roundScores)) {
+          newScores[uid] = (newScores[uid] ?? 0) + pts;
+        }
+        return { ...cur, phase: "reveal" as Phase, duplicates: dupes, scores: newScores };
+      });
+    },
+    [mutateGameState]
+  );
 
   /** Host: move from reveal -> round-end */
   const advanceToRoundEnd = useCallback(async () => {
-    if (!gs) return;
-    await updateGameState({ ...gs, phase: "round-end" as Phase });
-  }, [gs, updateGameState]);
+    const forRound = gs?.round;
+    if (forRound === undefined) return;
+    await mutateGameState((cur) => {
+      if (!cur || cur.phase !== "reveal" || cur.round !== forRound) return null;
+      return { ...cur, phase: "round-end" as Phase };
+    });
+  }, [gs?.round, mutateGameState]);
 
   /** Host: move from round-end -> next round or game-over */
   const advanceToNextRound = useCallback(async () => {
-    if (!gs) return;
-    if (gs.round >= gs.totalRounds) {
-      await updateGameState({ ...gs, phase: "game-over" as Phase });
-      return;
-    }
-    const nextRound = gs.round + 1;
-    const nextPromptIndex = gs.promptIndices[nextRound - 1];
-    await updateGameState({
-      ...gs,
-      phase: "answering" as Phase,
-      round: nextRound,
-      prompt: TALENT_SHOW_PROMPTS[nextPromptIndex],
-      answers: {},
-      duplicates: [],
+    const forRound = gs?.round;
+    if (forRound === undefined) return;
+    await mutateGameState((cur) => {
+      if (!cur || cur.phase !== "round-end" || cur.round !== forRound) return null;
+      if (cur.round >= cur.totalRounds) {
+        return { ...cur, phase: "game-over" as Phase };
+      }
+      const nextRound = cur.round + 1;
+      const nextPromptIndex = cur.promptIndices[nextRound - 1];
+      return {
+        ...cur,
+        phase: "answering" as Phase,
+        round: nextRound,
+        prompt: TALENT_SHOW_PROMPTS[nextPromptIndex],
+        answers: {},
+        duplicates: [],
+      };
     });
-  }, [gs, updateGameState]);
+  }, [gs?.round, mutateGameState]);
 
   /** Host: force end timer (skip to reveal) */
   const forceEndTimer = useCallback(async () => {
-    if (!gs || !isHost) return;
-    // Fill in empty answers for players who haven't answered
-    const newAnswers = { ...gs.answers };
-    for (const p of players) {
-      if (!(p.user_id in newAnswers)) {
-        newAnswers[p.user_id] = "";
+    const forRound = gs?.round;
+    if (forRound === undefined || !useRoomStore.getState().isHost) return;
+    await mutateGameState((cur) => {
+      if (!cur || cur.phase !== "answering" || cur.round !== forRound) return null;
+      // Fill in empty answers for players who haven't answered
+      const newAnswers: Record<string, string> = { ...(cur.answers ?? {}) };
+      for (const p of useRoomStore.getState().players) {
+        if (!(p.user_id in newAnswers)) {
+          newAnswers[p.user_id] = "";
+        }
       }
-    }
-    const dupes = findDuplicateUserIds(newAnswers);
-    const roundScores: Record<string, number> = {};
-    for (const uid of Object.keys(newAnswers)) {
-      roundScores[uid] = dupes.includes(uid) ? 0 : 1;
-    }
-    const newScores = { ...gs.scores };
-    for (const [uid, pts] of Object.entries(roundScores)) {
-      newScores[uid] = (newScores[uid] ?? 0) + pts;
-    }
-    await updateGameState({
-      ...gs,
-      phase: "reveal" as Phase,
-      answers: newAnswers,
-      duplicates: dupes,
-      scores: newScores,
+      const dupes = findDuplicateUserIds(newAnswers);
+      const roundScores: Record<string, number> = {};
+      for (const uid of Object.keys(newAnswers)) {
+        roundScores[uid] = dupes.includes(uid) ? 0 : 1;
+      }
+      const newScores: Record<string, number> = { ...(cur.scores ?? {}) };
+      for (const [uid, pts] of Object.entries(roundScores)) {
+        newScores[uid] = (newScores[uid] ?? 0) + pts;
+      }
+      return {
+        ...cur,
+        phase: "reveal" as Phase,
+        answers: newAnswers,
+        duplicates: dupes,
+        scores: newScores,
+      };
     });
-  }, [gs, isHost, players, updateGameState]);
+  }, [gs?.round, mutateGameState]);
 
   const handleBackToLobby = useCallback(async () => {
     await endGame();
@@ -286,9 +311,11 @@ export default function TalentShowScreen() {
   // -----------------------------------------------------------------------
 
   const startFromIntro = useCallback(async () => {
-    if (!gs) return;
-    await updateGameState({ ...gs, phase: "answering" as Phase });
-  }, [gs, updateGameState]);
+    await mutateGameState((cur) => {
+      if (!cur || cur.game !== "talentShow" || cur.phase !== "intro") return null;
+      return { ...cur, phase: "answering" as Phase };
+    });
+  }, [mutateGameState]);
 
   // -----------------------------------------------------------------------
   // Loading state

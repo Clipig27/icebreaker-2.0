@@ -78,7 +78,7 @@ function formatPenalty(p: number): string {
 
 export default function NumberGuessorScreen() {
   const router = useRouter();
-  const { room, players, isHost, updateGameState, mutateGameState } = useRoomStore();
+  const { room, players, isHost, mutateGameState } = useRoomStore();
   const { user } = useAuthStore();
 
   const gs: GameState | null = room?.game_state ?? null;
@@ -185,7 +185,9 @@ export default function NumberGuessorScreen() {
     const totalGuesses = gs.guesses?.length ?? 0;
     if (totalPlayers > 0 && totalGuesses >= totalPlayers) {
       // Small delay so last guesser sees their submission
-      setTimeout(() => advanceToReveal(), 800);
+      const forRound = gs.currentRound;
+      const t = setTimeout(() => advanceToReveal(forRound), 800);
+      return () => clearTimeout(t);
     }
   }, [gs?.guesses?.length, phase, isHost, players.length]);
 
@@ -198,19 +200,23 @@ export default function NumberGuessorScreen() {
     const selected = shuffled.slice(0, selectedRounds);
     const firstPrompt = selected[0];
 
-    const newState: GameState = {
-      phase: "guessing",
-      totalRounds: selectedRounds,
-      currentRound: 1,
-      promptIds: selected.map((p) => p.id),
-      currentPrompt: firstPrompt,
-      guesses: [],
-      roundResults: [],
-      penalties: {},
-      roundStartedAt: Date.now(),
-    };
-    await updateGameState(newState);
-  }, [selectedRounds, updateGameState]);
+    await mutateGameState((cur) => {
+      // Only start from the setup screen (idempotent: no-op if already started)
+      if (!cur || cur.phase !== "setup") return null;
+      const newState: GameState = {
+        phase: "guessing",
+        totalRounds: selectedRounds,
+        currentRound: 1,
+        promptIds: selected.map((p) => p.id),
+        currentPrompt: firstPrompt,
+        guesses: [],
+        roundResults: [],
+        penalties: {},
+        roundStartedAt: Date.now(),
+      };
+      return newState;
+    });
+  }, [selectedRounds, mutateGameState]);
 
   const submitGuess = useCallback(
     async (timedOut = false) => {
@@ -244,69 +250,83 @@ export default function NumberGuessorScreen() {
     [gs, user, hasGuessed, guessText, players, mutateGameState]
   );
 
-  const advanceToReveal = useCallback(async () => {
-    if (!gs) return;
+  // Host transition guessing -> reveal for `forRound`. Penalties are computed
+  // from the FRESH server state; idempotent (no-op if already revealed).
+  const advanceToReveal = useCallback(
+    async (forRound: number) => {
+      await mutateGameState((cur) => {
+        if (!cur || cur.phase !== "guessing" || cur.currentRound !== forRound) return null;
 
-    const correctAnswer = gs.currentPrompt?.correctAnswer ?? 0;
-    const guesses: Guess[] = gs.guesses || [];
+        const correctAnswer = cur.currentPrompt?.correctAnswer ?? 0;
+        const guesses: Guess[] = cur.guesses || [];
 
-    // Calculate penalties for this round
-    const newPenalties = { ...(gs.penalties || {}) };
-    for (const g of guesses) {
-      const distance = g.timedOut || g.value === null ? NO_GUESS_PENALTY : Math.abs(g.value - correctAnswer);
-      const timePenalty = g.timedOut ? 0 : Math.round(g.timeMs / 1000);
-      const roundPenalty = distance + timePenalty;
-      newPenalties[g.userId] = (newPenalties[g.userId] || 0) + roundPenalty;
-    }
+        // Calculate penalties for this round
+        const newPenalties: Record<string, number> = { ...(cur.penalties || {}) };
+        for (const g of guesses) {
+          const distance = g.timedOut || g.value === null ? NO_GUESS_PENALTY : Math.abs(g.value - correctAnswer);
+          const timePenalty = g.timedOut ? 0 : Math.round(g.timeMs / 1000);
+          const roundPenalty = distance + timePenalty;
+          newPenalties[g.userId] = (newPenalties[g.userId] || 0) + roundPenalty;
+        }
 
-    // Also penalize players who didn't submit at all
-    for (const p of players) {
-      if (!guesses.some((g) => g.userId === p.user_id)) {
-        newPenalties[p.user_id] = (newPenalties[p.user_id] || 0) + NO_GUESS_PENALTY;
-      }
-    }
+        // Also penalize players who didn't submit at all
+        for (const p of useRoomStore.getState().players) {
+          if (!guesses.some((g) => g.userId === p.user_id)) {
+            newPenalties[p.user_id] = (newPenalties[p.user_id] || 0) + NO_GUESS_PENALTY;
+          }
+        }
 
-    const roundResult: RoundResult = {
-      promptId: gs.currentPrompt?.id ?? "",
-      promptText: gs.currentPrompt?.text ?? "",
-      correctAnswer,
-      guesses,
-    };
+        const roundResult: RoundResult = {
+          promptId: cur.currentPrompt?.id ?? "",
+          promptText: cur.currentPrompt?.text ?? "",
+          correctAnswer,
+          guesses,
+        };
 
-    await updateGameState({
-      ...gs,
-      phase: "reveal",
-      penalties: newPenalties,
-      roundResults: [...(gs.roundResults || []), roundResult],
-    });
-  }, [gs, players, updateGameState]);
+        return {
+          ...cur,
+          phase: "reveal",
+          penalties: newPenalties,
+          roundResults: [...(cur.roundResults || []), roundResult],
+        };
+      });
+    },
+    [mutateGameState]
+  );
 
   const advanceToRoundEnd = useCallback(async () => {
-    if (!gs) return;
-    await updateGameState({ ...gs, phase: "round-end" });
-  }, [gs, updateGameState]);
+    const forRound = gs?.currentRound;
+    if (forRound === undefined) return;
+    await mutateGameState((cur) => {
+      if (!cur || cur.phase !== "reveal" || cur.currentRound !== forRound) return null;
+      return { ...cur, phase: "round-end" };
+    });
+  }, [gs?.currentRound, mutateGameState]);
 
   const advanceToNextRound = useCallback(async () => {
-    if (!gs) return;
+    const forRound = gs?.currentRound;
+    if (forRound === undefined) return;
+    await mutateGameState((cur) => {
+      if (!cur || cur.phase !== "round-end" || cur.currentRound !== forRound) return null;
 
-    if (gs.currentRound >= gs.totalRounds) {
-      await updateGameState({ ...gs, phase: "game-over" });
-      return;
-    }
+      if (cur.currentRound >= cur.totalRounds) {
+        return { ...cur, phase: "game-over" };
+      }
 
-    const nextRound = gs.currentRound + 1;
-    const nextPromptId = gs.promptIds[nextRound - 1];
-    const nextPrompt = NUMBER_GUESSOR_PROMPTS.find((p) => p.id === nextPromptId) ?? null;
+      const nextRound = cur.currentRound + 1;
+      const nextPromptId = cur.promptIds[nextRound - 1];
+      const nextPrompt = NUMBER_GUESSOR_PROMPTS.find((p) => p.id === nextPromptId) ?? null;
 
-    await updateGameState({
-      ...gs,
-      phase: "guessing",
-      currentRound: nextRound,
-      currentPrompt: nextPrompt,
-      guesses: [],
-      roundStartedAt: Date.now(),
+      return {
+        ...cur,
+        phase: "guessing",
+        currentRound: nextRound,
+        currentPrompt: nextPrompt,
+        guesses: [],
+        roundStartedAt: Date.now(),
+      };
     });
-  }, [gs, updateGameState]);
+  }, [gs?.currentRound, mutateGameState]);
 
   const backToLobby = useCallback(async () => {
     const { endGame } = useRoomStore.getState();
@@ -344,8 +364,13 @@ export default function NumberGuessorScreen() {
   // -------------------------------------------------------------------------
 
   const advanceToSetup = useCallback(async () => {
-    await updateGameState({ phase: "setup" });
-  }, [updateGameState]);
+    await mutateGameState((cur) => {
+      // Only from the intro screen (idempotent: no-op if already past intro)
+      const curPhase = cur?.phase ?? "starting";
+      if (curPhase !== "intro" && curPhase !== "starting") return null;
+      return { phase: "setup" };
+    });
+  }, [mutateGameState]);
 
   const renderIntro = () => (
     <ScrollView contentContainerStyle={styles.introContainer}>

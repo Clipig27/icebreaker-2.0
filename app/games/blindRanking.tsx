@@ -184,32 +184,29 @@ export default function BlindRankingScreen() {
     const allSubmitted = players.length > 0 && players.every((p) => submittedIds.includes(p.user_id));
 
     if (allSubmitted) {
-      // Calculate consensus and scores
-      const cat = CATEGORIES[categoryIndex] ?? CATEGORIES[0];
-      const cons = computeConsensus(rankings, cat.items);
-      const rScores: Record<string, number> = {};
-      const tScores = { ...(gs.totalScores ?? {}) };
+      const forRound = round;
+      // Calculate consensus and scores from the FRESH server state (idempotent)
+      mutateGameState((cur) => {
+        if (!cur || cur.phase !== "ranking" || cur.round !== forRound) return null;
+        const curRankings: Record<string, string[]> = cur.rankings ?? {};
+        const cat = CATEGORIES[cur.categoryIndex ?? 0] ?? CATEGORIES[0];
+        const cons = computeConsensus(curRankings, cat.items);
+        const rScores: Record<string, number> = {};
+        const tScores: Record<string, number> = { ...(cur.totalScores ?? {}) };
 
-      for (const pid of Object.keys(rankings)) {
-        const s = scoreRanking(rankings[pid], cons);
-        rScores[pid] = s;
-        tScores[pid] = (tScores[pid] ?? 0) + s;
-      }
-
-      // Also update room_players scores
-      for (const pid of Object.keys(rScores)) {
-        const player = players.find((p) => p.user_id === pid);
-        if (player) {
-          // We set the total directly via game_state; room_players score is secondary
+        for (const pid of Object.keys(curRankings)) {
+          const s = scoreRanking(curRankings[pid], cons);
+          rScores[pid] = s;
+          tScores[pid] = (tScores[pid] ?? 0) + s;
         }
-      }
 
-      updateGameState({
-        ...gs,
-        phase: "reveal",
-        consensus: cons,
-        roundScores: rScores,
-        totalScores: tScores,
+        return {
+          ...cur,
+          phase: "reveal",
+          consensus: cons,
+          roundScores: rScores,
+          totalScores: tScores,
+        };
       });
     }
   }, [rankings, players, isHost, phase]);
@@ -267,24 +264,24 @@ export default function BlindRankingScreen() {
   // ------------------------------------------------------------------
   const handleNextRound = () => {
     if (!isHost) return;
-    const nextRound = round + 1;
+    const forRound = round;
 
-    if (nextRound > TOTAL_ROUNDS) {
-      updateGameState({
-        ...gs,
-        phase: "game-over",
-      });
-    } else {
-      updateGameState({
-        ...gs,
+    mutateGameState((cur) => {
+      if (!cur || cur.phase !== "reveal" || cur.round !== forRound) return null;
+      const nextRound = forRound + 1;
+      if (nextRound > TOTAL_ROUNDS) {
+        return { ...cur, phase: "game-over" };
+      }
+      return {
+        ...cur,
         phase: "ranking",
         round: nextRound,
         categoryIndex: nextRound - 1,
         rankings: {},
         roundScores: {},
         consensus: [],
-      });
-    }
+      };
+    });
   };
 
   // ------------------------------------------------------------------
@@ -296,9 +293,11 @@ export default function BlindRankingScreen() {
   };
 
   const startFromIntro = useCallback(async () => {
-    const currentGs = room?.game_state ?? {};
-    await updateGameState({ ...currentGs, phase: "ranking" });
-  }, [room?.game_state, updateGameState]);
+    await mutateGameState((cur) => {
+      if (!cur || cur.phase !== "intro") return null;
+      return { ...cur, phase: "ranking" };
+    });
+  }, [mutateGameState]);
 
   // ==================================================================
   // RENDER

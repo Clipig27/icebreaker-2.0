@@ -141,18 +141,20 @@ export default function PieChartsScreen() {
       return;
     }
     setTimeLeft(VOTE_TIMER);
+    const timerRound = round;
+    let remaining = VOTE_TIMER;
     timerRef.current = setInterval(() => {
-      setTimeLeft((prev) => {
-        if (prev <= 1) {
-          if (timerRef.current) clearInterval(timerRef.current);
-          // Time's up — host forces advance to results
-          if (isHost) {
-            advanceToResults();
-          }
-          return 0;
+      remaining -= 1;
+      if (remaining <= 0) {
+        if (timerRef.current) clearInterval(timerRef.current);
+        setTimeLeft(0);
+        // Time's up — host forces advance to results (reads fresh state)
+        if (useRoomStore.getState().isHost) {
+          advanceToResults(timerRound);
         }
-        return prev - 1;
-      });
+        return;
+      }
+      setTimeLeft(remaining);
     }, 1000);
 
     return () => {
@@ -165,10 +167,11 @@ export default function PieChartsScreen() {
   useEffect(() => {
     if (phase === "voting" && allVoted && isHost) {
       // Small delay so voters see their selection
-      const t = setTimeout(() => advanceToResults(), 800);
+      const forRound = round;
+      const t = setTimeout(() => advanceToResults(forRound), 800);
       return () => clearTimeout(t);
     }
-  }, [phase, allVoted, isHost, totalVotes]);
+  }, [phase, allVoted, isHost, totalVotes, round]);
 
   // ── Navigate away if room returns to lobby ─────────────────────────────
 
@@ -195,48 +198,52 @@ export default function PieChartsScreen() {
     [user, gs, round, myVote, mutateGameState]
   );
 
-  const advanceToResults = useCallback(async () => {
-    if (!gs) return;
-    // Tally votes for this round
-    const tally: Record<string, number> = {};
-    Object.values(gs.votes).forEach((vid) => {
-      tally[vid] = (tally[vid] || 0) + 1;
-    });
-    const maxVotes = Math.max(0, ...Object.values(tally));
-    const winners = maxVotes > 0
-      ? Object.entries(tally).filter(([, c]) => c === maxVotes).map(([uid]) => uid)
-      : [];
+  // Host transition voting -> results for `forRound`. Everything is computed
+  // from the FRESH server state; idempotent (no-op if already advanced).
+  const advanceToResults = useCallback(
+    async (forRound: number) => {
+      await mutateGameState((cur) => {
+        if (!cur || cur.phase !== "voting" || (cur.round ?? 1) !== forRound) return null;
+        // Tally votes for this round
+        const tally: Record<string, number> = {};
+        Object.values((cur.votes ?? {}) as Record<string, string>).forEach((vid) => {
+          tally[vid] = (tally[vid] || 0) + 1;
+        });
+        const maxVotes = Math.max(0, ...Object.values(tally));
+        const winners = maxVotes > 0
+          ? Object.entries(tally).filter(([, c]) => c === maxVotes).map(([uid]) => uid)
+          : [];
 
-    // Update scores
-    const newScores = { ...gs.scores };
-    winners.forEach((uid) => {
-      newScores[uid] = (newScores[uid] || 0) + 1;
-    });
+        // Update scores
+        const newScores: Record<string, number> = { ...(cur.scores ?? {}) };
+        winners.forEach((uid) => {
+          newScores[uid] = (newScores[uid] || 0) + 1;
+        });
 
-    const newRoundWinners = [...gs.roundWinners, winners];
+        const newRoundWinners = [...(cur.roundWinners ?? []), winners];
 
-    await updateGameState({
-      ...gs,
-      phase: "results",
-      scores: newScores,
-      roundWinners: newRoundWinners,
-    });
-  }, [gs, updateGameState]);
+        return {
+          ...cur,
+          phase: "results",
+          scores: newScores,
+          roundWinners: newRoundWinners,
+        };
+      });
+    },
+    [mutateGameState]
+  );
 
   const nextRound = useCallback(async () => {
-    if (!gs) return;
-    if (round >= TOTAL_ROUNDS) {
-      // Game over
-      await updateGameState({ ...gs, phase: "game-over", votes: {} });
-    } else {
-      await updateGameState({
-        ...gs,
-        phase: "voting",
-        round: round + 1,
-        votes: {},
-      });
-    }
-  }, [gs, round, updateGameState]);
+    const forRound = round;
+    await mutateGameState((cur) => {
+      if (!cur || cur.phase !== "results" || (cur.round ?? 1) !== forRound) return null;
+      if (forRound >= TOTAL_ROUNDS) {
+        // Game over
+        return { ...cur, phase: "game-over", votes: {} };
+      }
+      return { ...cur, phase: "voting", round: forRound + 1, votes: {} };
+    });
+  }, [round, mutateGameState]);
 
   const handleBackToLobby = useCallback(async () => {
     await endGame();
@@ -244,9 +251,11 @@ export default function PieChartsScreen() {
   }, [endGame, router]);
 
   const startFromIntro = useCallback(async () => {
-    if (!gs) return;
-    await updateGameState({ ...gs, phase: "voting" });
-  }, [gs, updateGameState]);
+    await mutateGameState((cur) => {
+      if (!cur || (cur.phase !== "intro" && cur.phase !== "starting")) return null;
+      return { ...cur, phase: "voting" };
+    });
+  }, [mutateGameState]);
 
   // ── Derived data ───────────────────────────────────────────────────────
 

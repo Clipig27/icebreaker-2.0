@@ -93,6 +93,9 @@ export default function PotLuckScreen() {
   const [timeLeft, setTimeLeft] = useState(QUESTION_TIME);
   const timerRef = useRef<ReturnType<typeof setInterval> | null>(null);
   const revealTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  // Round for which the host already requested question -> reveal (avoids
+  // re-firing every 250ms tick while remaining <= 0)
+  const revealRequestedRoundRef = useRef<number | null>(null);
 
   // Fade anim for question card
   const fadeAnim = useRef(new Animated.Value(1)).current;
@@ -128,13 +131,15 @@ export default function PotLuckScreen() {
       return;
     }
 
+    const timerEnd = gs.timerEnd;
+    const tickRound = gs.round;
     const tick = () => {
-      const remaining = Math.max(0, Math.ceil((gs.timerEnd - Date.now()) / 1000));
+      const remaining = Math.max(0, Math.ceil((timerEnd - Date.now()) / 1000));
       setTimeLeft(remaining);
 
-      if (remaining <= 0 && isHost) {
-        // Time's up — force reveal
-        advanceToReveal();
+      if (remaining <= 0 && useRoomStore.getState().isHost) {
+        // Time's up — force reveal (at most once per round)
+        requestReveal(tickRound);
       }
     };
 
@@ -150,7 +155,7 @@ export default function PotLuckScreen() {
     if (phase !== "question" || !isHost || !gs) return;
     const answered = Object.keys(answers).length;
     if (answered >= players.length && players.length > 0) {
-      advanceToReveal();
+      requestReveal(round);
     }
   }, [Object.keys(answers).length, players.length, phase]);
 
@@ -158,8 +163,9 @@ export default function PotLuckScreen() {
   useEffect(() => {
     if (phase !== "reveal" || !isHost) return;
 
+    const revealRound = round;
     revealTimerRef.current = setTimeout(() => {
-      advanceFromReveal();
+      if (useRoomStore.getState().isHost) advanceFromReveal(revealRound);
     }, REVEAL_DURATION);
 
     return () => {
@@ -205,53 +211,71 @@ export default function PotLuckScreen() {
     [gs, user, phase, round, answers, mutateGameState]
   );
 
-  const advanceToReveal = useCallback(async () => {
-    if (!gs || !currentQuestion) return;
+  // Host transition question -> reveal for `forRound`. Scores are computed from
+  // the FRESH server state; idempotent (no-op if already revealed).
+  const advanceToReveal = useCallback(
+    async (forRound: number) => {
+      await mutateGameState((cur) => {
+        if (!cur || cur.game !== "potLuck" || cur.phase !== "question" || cur.round !== forRound) {
+          return null;
+        }
+        const question = DEFAULT_QUESTIONS.find(
+          (q) => q.id === (cur.questionIds ?? [])[forRound]
+        );
+        if (!question) return null;
 
-    // Calculate new scores
-    const newScores = { ...scores };
-    const pot = currentQuestion.startingPot;
+        // Calculate new scores
+        const newScores: Record<string, number> = { ...(cur.scores ?? {}) };
+        const pot = question.startingPot;
 
-    Object.entries(answers).forEach(([uid, choice]) => {
-      if (choice === currentQuestion.correctIndex) {
-        newScores[uid] = (newScores[uid] ?? 0) + pot;
-      }
-    });
+        Object.entries((cur.answers ?? {}) as Record<string, number>).forEach(([uid, choice]) => {
+          if (choice === question.correctIndex) {
+            newScores[uid] = (newScores[uid] ?? 0) + pot;
+          }
+        });
 
-    // Also make sure players who didn't answer get 0 added (keep their score)
-    players.forEach((p) => {
-      if (newScores[p.user_id] === undefined) {
-        newScores[p.user_id] = 0;
-      }
-    });
+        // Also make sure players who didn't answer get 0 added (keep their score)
+        useRoomStore.getState().players.forEach((p) => {
+          if (newScores[p.user_id] === undefined) {
+            newScores[p.user_id] = 0;
+          }
+        });
 
-    await updateGameState({
-      ...gs,
-      phase: "reveal" as Phase,
-      scores: newScores,
-    });
-  }, [gs, currentQuestion, answers, scores, players]);
-
-  const advanceFromReveal = useCallback(async () => {
-    if (!gs) return;
-
-    const nextRound = round + 1;
-    if (nextRound >= TOTAL_ROUNDS || nextRound >= gs.questionIds.length) {
-      // Game over
-      await updateGameState({
-        ...gs,
-        phase: "game-over" as Phase,
+        return { ...cur, phase: "reveal" as Phase, scores: newScores };
       });
-    } else {
-      await updateGameState({
-        ...gs,
-        phase: "question" as Phase,
-        round: nextRound,
-        answers: {},
-        timerEnd: Date.now() + QUESTION_TIME * 1000,
+    },
+    [mutateGameState]
+  );
+
+  const requestReveal = (forRound: number) => {
+    if (revealRequestedRoundRef.current === forRound) return;
+    revealRequestedRoundRef.current = forRound;
+    advanceToReveal(forRound);
+  };
+
+  // Host transition reveal -> next question / game-over for `forRound`. Idempotent.
+  const advanceFromReveal = useCallback(
+    async (forRound: number) => {
+      await mutateGameState((cur) => {
+        if (!cur || cur.game !== "potLuck" || cur.phase !== "reveal" || cur.round !== forRound) {
+          return null;
+        }
+        const nextRound = forRound + 1;
+        if (nextRound >= TOTAL_ROUNDS || nextRound >= (cur.questionIds ?? []).length) {
+          // Game over
+          return { ...cur, phase: "game-over" as Phase };
+        }
+        return {
+          ...cur,
+          phase: "question" as Phase,
+          round: nextRound,
+          answers: {},
+          timerEnd: Date.now() + QUESTION_TIME * 1000,
+        };
       });
-    }
-  }, [gs, round]);
+    },
+    [mutateGameState]
+  );
 
   const handleBackToLobby = async () => {
     // Sync scores to room_players before ending
@@ -268,13 +292,16 @@ export default function PotLuckScreen() {
   };
 
   const startFromIntro = useCallback(async () => {
-    if (!gs) return;
-    await updateGameState({
-      ...gs,
-      phase: "question" as Phase,
-      timerEnd: Date.now() + QUESTION_TIME * 1000,
+    await mutateGameState((cur) => {
+      if (!cur || cur.game !== "potLuck") return null;
+      if (cur.phase !== "intro" && cur.phase !== "starting") return null;
+      return {
+        ...cur,
+        phase: "question" as Phase,
+        timerEnd: Date.now() + QUESTION_TIME * 1000,
+      };
     });
-  }, [gs, updateGameState]);
+  }, [mutateGameState]);
 
   // ── Derived state ─────────────────────────────────────────────────────
 
