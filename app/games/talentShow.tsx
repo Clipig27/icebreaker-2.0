@@ -69,6 +69,23 @@ function findDuplicateUserIds(answers: Record<string, string>): string[] {
   return dupes;
 }
 
+/** Empty / whitespace-only answers (timeout or Skip Timer) never score */
+function isEmptyAnswer(answer: string | null | undefined): boolean {
+  return !(answer ?? "").trim();
+}
+
+/** Round points per userId: 0 for empty or duplicate answers, 1 otherwise */
+function computeRoundScores(
+  answers: Record<string, string>,
+  dupes: string[]
+): Record<string, number> {
+  const roundScores: Record<string, number> = {};
+  for (const [uid, ans] of Object.entries(answers)) {
+    roundScores[uid] = isEmptyAnswer(ans) || dupes.includes(uid) ? 0 : 1;
+  }
+  return roundScores;
+}
+
 // ---------------------------------------------------------------------------
 // Component
 // ---------------------------------------------------------------------------
@@ -217,10 +234,7 @@ export default function TalentShowScreen() {
         const curAnswers: Record<string, string> = cur.answers ?? {};
         const dupes = findDuplicateUserIds(curAnswers);
         // Calculate round scores
-        const roundScores: Record<string, number> = {};
-        for (const uid of Object.keys(curAnswers)) {
-          roundScores[uid] = dupes.includes(uid) ? 0 : 1;
-        }
+        const roundScores = computeRoundScores(curAnswers, dupes);
         // Add to cumulative
         const newScores: Record<string, number> = { ...(cur.scores ?? {}) };
         for (const [uid, pts] of Object.entries(roundScores)) {
@@ -278,10 +292,7 @@ export default function TalentShowScreen() {
         }
       }
       const dupes = findDuplicateUserIds(newAnswers);
-      const roundScores: Record<string, number> = {};
-      for (const uid of Object.keys(newAnswers)) {
-        roundScores[uid] = dupes.includes(uid) ? 0 : 1;
-      }
+      const roundScores = computeRoundScores(newAnswers, dupes);
       const newScores: Record<string, number> = { ...(cur.scores ?? {}) };
       for (const [uid, pts] of Object.entries(roundScores)) {
         newScores[uid] = (newScores[uid] ?? 0) + pts;
@@ -484,8 +495,9 @@ export default function TalentShowScreen() {
     const answerEntries = Object.entries(answers).map(([uid, ans]) => ({
       uid,
       username: playerMap[uid]?.username ?? "Unknown",
-      answer: (ans as string) || "(no answer)",
-      isDuplicate: duplicates.includes(uid),
+      answer: isEmptyAnswer(ans as string) ? "(no answer)" : (ans as string),
+      // Empty answers score 0 and use the same non-unique (red, +0) styling
+      isDuplicate: isEmptyAnswer(ans as string) || duplicates.includes(uid),
     }));
 
     return (
