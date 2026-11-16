@@ -165,11 +165,20 @@ export default function TalentShowScreen() {
   useEffect(() => {
     if (!isHost || phase !== "answering" || !gs) return;
     const totalPlayers = players.length;
-    const totalAnswered = Object.keys(gs.answers).length;
+    const totalAnswered = Object.keys(gs.answers ?? {}).length;
     if (totalPlayers > 0 && totalAnswered >= totalPlayers) {
       advanceToReveal(gs.round);
     }
   }, [gs?.answers, players.length, phase, isHost]);
+
+  // -----------------------------------------------------------------------
+  // Navigate away if room returns to lobby
+  // -----------------------------------------------------------------------
+  useEffect(() => {
+    if (room?.status === "lobby" || room?.status === "finished") {
+      router.back();
+    }
+  }, [room?.status]);
 
   // -----------------------------------------------------------------------
   // Handlers
@@ -284,7 +293,7 @@ export default function TalentShowScreen() {
 
   const handleBackToLobby = useCallback(async () => {
     await endGame();
-    router.replace("/room" as any);
+    router.replace("/lobby");
   }, [endGame, router]);
 
   // -----------------------------------------------------------------------
@@ -293,17 +302,19 @@ export default function TalentShowScreen() {
 
   const playerMap = Object.fromEntries(players.map((p) => [p.user_id, p]));
 
-  const sortedLeaderboard = gs?.scores
-    ? Object.entries(gs.scores)
-        .map(([uid, score]) => ({
-          uid,
-          username: playerMap[uid]?.username ?? "Unknown",
-          score: score as number,
-        }))
-        .sort((a, b) => b.score - a.score)
-    : [];
+  const scores: Record<string, number> = gs?.scores ?? {};
+  const answers: Record<string, string> = gs?.answers ?? {};
+  const duplicates: string[] = gs?.duplicates ?? [];
 
-  const answeredCount = gs ? Object.keys(gs.answers).length : 0;
+  const sortedLeaderboard = Object.entries(scores)
+    .map(([uid, score]) => ({
+      uid,
+      username: playerMap[uid]?.username ?? "Unknown",
+      score: score as number,
+    }))
+    .sort((a, b) => b.score - a.score);
+
+  const answeredCount = Object.keys(answers).length;
   const totalPlayers = players.length;
 
   // -----------------------------------------------------------------------
@@ -321,7 +332,14 @@ export default function TalentShowScreen() {
   // Loading state
   // -----------------------------------------------------------------------
 
-  if (!gs || !gs.phase) {
+  // Show loading until the host has initialised talentShow state (startGame
+  // only writes { phase: "starting", game }), so no phase UI reads missing fields.
+  if (
+    !gs ||
+    (gs.game as string) !== "talentShow" ||
+    !phase ||
+    (phase as string) === "starting"
+  ) {
     return (
       <SafeAreaView style={styles.container}>
         <View style={styles.centered}>
@@ -458,11 +476,11 @@ export default function TalentShowScreen() {
   // -----------------------------------------------------------------------
 
   if (phase === "reveal") {
-    const answerEntries = Object.entries(gs.answers).map(([uid, ans]) => ({
+    const answerEntries = Object.entries(answers).map(([uid, ans]) => ({
       uid,
       username: playerMap[uid]?.username ?? "Unknown",
       answer: (ans as string) || "(no answer)",
-      isDuplicate: gs.duplicates.includes(uid),
+      isDuplicate: duplicates.includes(uid),
     }));
 
     return (
