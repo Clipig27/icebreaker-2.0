@@ -101,6 +101,20 @@ export default function NumberGuessorScreen() {
   const guessStartRef = useRef<number>(Date.now());
 
   // -------------------------------------------------------------------------
+  // Navigate back to the lobby when the room returns to lobby (host + players).
+  // Single place that leaves the game screen; fires once.
+  // -------------------------------------------------------------------------
+  const navigatedBackRef = useRef(false);
+  useEffect(() => {
+    if (navigatedBackRef.current) return;
+    if (room?.status === "lobby" || room?.status === "finished") {
+      navigatedBackRef.current = true;
+      if (router.canGoBack()) router.back();
+      else router.replace("/lobby");
+    }
+  }, [room?.status]);
+
+  // -------------------------------------------------------------------------
   // Reset local state when phase changes
   // -------------------------------------------------------------------------
   useEffect(() => {
@@ -328,11 +342,11 @@ export default function NumberGuessorScreen() {
     });
   }, [gs?.currentRound, mutateGameState]);
 
+  // Navigation happens in the room-status effect above once status is "lobby".
   const backToLobby = useCallback(async () => {
     const { endGame } = useRoomStore.getState();
     await endGame();
-    router.replace("/lobby");
-  }, [router]);
+  }, []);
 
   // -------------------------------------------------------------------------
   // Derived data

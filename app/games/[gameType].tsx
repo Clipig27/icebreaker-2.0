@@ -1,4 +1,4 @@
-import { useEffect } from "react";
+import { useEffect, useRef } from "react";
 import { View, Text, Pressable, StyleSheet } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { useLocalSearchParams, useRouter } from "expo-router";
@@ -46,15 +46,20 @@ export default function GameScreen() {
   const info = GAME_INFO[gameType ?? ""] ?? GAME_INFO.talentShow;
   const phase = room?.game_state?.phase ?? "starting";
 
+  // Single place that returns to the lobby (host + players); fires once.
+  const navigatedBackRef = useRef(false);
   useEffect(() => {
+    if (navigatedBackRef.current) return;
     if (room?.status === "lobby" || room?.status === "finished") {
-      router.back();
+      navigatedBackRef.current = true;
+      if (router.canGoBack()) router.back();
+      else router.replace("/lobby");
     }
   }, [room?.status]);
 
+  // Navigation happens in the room-status effect above once status is "lobby".
   const handleEndGame = async () => {
     await endGame();
-    router.replace("/lobby");
   };
 
   return (

@@ -342,15 +342,30 @@ export const useRoomStore = create<RoomState>((set, get) => ({
     const { room, isHost } = get();
     if (!room || !isHost) return;
 
-    await supabase
+    const updatedAt = new Date().toISOString();
+    const { error } = await supabase
       .from("rooms")
       .update({
         status: "lobby",
         game_type: null,
         game_state: {},
-        updated_at: new Date().toISOString(),
+        updated_at: updatedAt,
       })
       .eq("id", room.id);
+
+    if (error) {
+      console.warn("[endGame] failed to reset room:", error.message);
+      return;
+    }
+
+    // Optimistically reflect the reset locally so screens don't act on a
+    // stale "playing" status before the realtime UPDATE arrives.
+    const current = get().room;
+    if (current && current.id === room.id) {
+      set({
+        room: { ...current, status: "lobby", game_type: null, game_state: {}, updated_at: updatedAt },
+      });
+    }
   },
 
   cleanup: () => {

@@ -174,9 +174,14 @@ export default function TalentShowScreen() {
   // -----------------------------------------------------------------------
   // Navigate away if room returns to lobby
   // -----------------------------------------------------------------------
+  // Single place that returns to the lobby (host + players); fires once.
+  const navigatedBackRef = useRef(false);
   useEffect(() => {
+    if (navigatedBackRef.current) return;
     if (room?.status === "lobby" || room?.status === "finished") {
-      router.back();
+      navigatedBackRef.current = true;
+      if (router.canGoBack()) router.back();
+      else router.replace("/lobby");
     }
   }, [room?.status]);
 
@@ -291,10 +296,10 @@ export default function TalentShowScreen() {
     });
   }, [gs?.round, mutateGameState]);
 
+  // Navigation happens in the room-status effect above once status is "lobby".
   const handleBackToLobby = useCallback(async () => {
     await endGame();
-    router.replace("/lobby");
-  }, [endGame, router]);
+  }, [endGame]);
 
   // -----------------------------------------------------------------------
   // Derived data

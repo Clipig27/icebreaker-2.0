@@ -7,7 +7,7 @@ import Animated, {
   FadeInDown,
 } from "react-native-reanimated";
 import { SafeAreaView } from "react-native-safe-area-context";
-import { useRouter } from "expo-router";
+import { useRouter, useIsFocused } from "expo-router";
 import { Ionicons } from "@expo/vector-icons";
 import * as Haptics from "expo-haptics";
 import * as Clipboard from "expo-clipboard";
@@ -103,12 +103,22 @@ export default function Lobby() {
     }
   }, [room, kicked]);
 
-  // Navigate to game when room status changes to "playing"
+  // Navigate to game when room status transitions into "playing".
+  // Track the last game we pushed so a stale "playing" status (e.g. while
+  // returning from a game) never re-pushes the same game; reset once the room
+  // is back out of "playing" so the next game start navigates again.
+  const isFocused = useIsFocused();
+  const lastPushedGameRef = useRef<string | null>(null);
   useEffect(() => {
-    if (room?.status === "playing" && room.game_type) {
-      router.push(`/games/${room.game_type}`);
+    if (room?.status !== "playing" || !room.game_type) {
+      lastPushedGameRef.current = null;
+      return;
     }
-  }, [room?.status, room?.game_type]);
+    const key = `${room.id}:${room.game_type}`;
+    if (!isFocused || lastPushedGameRef.current === key) return;
+    lastPushedGameRef.current = key;
+    router.push(`/games/${room.game_type}`);
+  }, [room?.id, room?.status, room?.game_type, isFocused]);
 
   if (!room) return null;
 
