@@ -309,6 +309,15 @@ export const useRoomStore = create<RoomState>((set, get) => ({
           get()._fetchPlayers(roomId);
         }
       )
+      // Realtime doesn't deliver DELETE events for column-filtered listeners,
+      // so listen for deletes unfiltered and refetch (handles players leaving).
+      .on(
+        "postgres_changes",
+        { event: "DELETE", schema: "public", table: "room_players" },
+        () => {
+          get()._fetchPlayers(roomId);
+        }
+      )
       .subscribe();
 
     set({ _roomChannel: roomChannel, _playersChannel: playersChannel });

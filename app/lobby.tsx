@@ -99,6 +99,13 @@ export default function Lobby() {
     }
   }, [room]);
 
+  // Navigate to game when room status changes to "playing"
+  useEffect(() => {
+    if (room?.status === "playing" && room.game_type) {
+      router.push(`/games/${room.game_type}`);
+    }
+  }, [room?.status, room?.game_type]);
+
   if (!room) return null;
 
   const handleCopyCode = async () => {
@@ -121,13 +128,6 @@ export default function Lobby() {
       },
     ]);
   };
-
-  // Navigate to game when room status changes to "playing"
-  useEffect(() => {
-    if (room?.status === "playing" && room.game_type) {
-      router.push(`/games/${room.game_type}`);
-    }
-  }, [room?.status, room?.game_type]);
 
   const handleStartGame = (gameType: GameType) => {
     Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
