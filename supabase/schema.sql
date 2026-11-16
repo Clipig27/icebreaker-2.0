@@ -98,7 +98,11 @@ DO $$ BEGIN
     CREATE POLICY "rp_update" ON public.room_players FOR UPDATE TO authenticated USING (true);
   END IF;
   IF NOT EXISTS (SELECT 1 FROM pg_policies WHERE tablename='room_players' AND policyname='rp_delete') THEN
-    CREATE POLICY "rp_delete" ON public.room_players FOR DELETE TO authenticated USING (user_id = auth.uid());
+    -- A player can remove themself; the room's host can remove (kick) anyone in that room.
+    CREATE POLICY "rp_delete" ON public.room_players FOR DELETE TO authenticated USING (
+      user_id = auth.uid()
+      OR EXISTS (SELECT 1 FROM public.rooms r WHERE r.id = room_players.room_id AND r.host_id = auth.uid())
+    );
   END IF;
 END $$;
 

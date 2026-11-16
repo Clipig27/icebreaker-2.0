@@ -90,14 +90,18 @@ function GameCard({ game, onPress }: { game: typeof GAMES[number]; onPress: () =
 
 export default function Lobby() {
   const router = useRouter();
-  const { room, players, isHost, leaveRoom, startGame, kickPlayer } = useRoomStore();
+  const { room, players, isHost, leaveRoom, startGame, kickPlayer, kicked, clearKicked } = useRoomStore();
 
   useEffect(() => {
-    // If room gets closed, go back
+    // If room gets closed (or we were kicked), go back
     if (!room) {
+      if (kicked) {
+        clearKicked();
+        Alert.alert("Removed", "You were removed from the room");
+      }
       router.replace("/(tabs)/play");
     }
-  }, [room]);
+  }, [room, kicked]);
 
   // Navigate to game when room status changes to "playing"
   useEffect(() => {
@@ -138,7 +142,21 @@ export default function Lobby() {
     Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
     Alert.alert("Kick Player", `Remove ${username}?`, [
       { text: "Cancel", style: "cancel" },
-      { text: "Kick", style: "destructive", onPress: () => kickPlayer(userId) },
+      {
+        text: "Kick",
+        style: "destructive",
+        onPress: async () => {
+          try {
+            // kickPlayer refetches players on success
+            await kickPlayer(userId);
+          } catch (e) {
+            Alert.alert(
+              "Couldn't remove player",
+              e instanceof Error ? e.message : "Something went wrong. Please try again."
+            );
+          }
+        },
+      },
     ]);
   };
 

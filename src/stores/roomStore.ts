@@ -33,6 +33,10 @@ interface RoomState {
   isHost: boolean;
   loading: boolean;
   error: string | null;
+  // True after the current user was removed from the room by the host
+  kicked: boolean;
+  // True while leaveRoom() is running, so our own removal isn't treated as a kick
+  _leaving: boolean;
 
   // Channels for cleanup
   _roomChannel: RealtimeChannel | null;
@@ -48,6 +52,7 @@ interface RoomState {
   kickPlayer: (userId: string) => Promise<void>;
   endGame: () => Promise<void>;
   cleanup: () => void;
+  clearKicked: () => void;
   _subscribe: (roomId: string) => void;
   _fetchPlayers: (roomId: string) => Promise<void>;
 }
@@ -58,6 +63,8 @@ export const useRoomStore = create<RoomState>((set, get) => ({
   isHost: false,
   loading: false,
   error: null,
+  kicked: false,
+  _leaving: false,
   _roomChannel: null,
   _playersChannel: null,
 
@@ -69,7 +76,7 @@ export const useRoomStore = create<RoomState>((set, get) => ({
       return set({ error: "Not authenticated" });
     }
 
-    set({ loading: true, error: null });
+    set({ loading: true, error: null, kicked: false });
 
     // Generate room code client-side
     const chars = "ABCDEFGHJKLMNPQRSTUVWXYZ23456789";
@@ -115,7 +122,7 @@ export const useRoomStore = create<RoomState>((set, get) => ({
     const user = useAuthStore.getState().user;
     if (!user) return set({ error: "Not authenticated" });
 
-    set({ loading: true, error: null });
+    set({ loading: true, error: null, kicked: false });
 
     // Get username
     const { data: profile } = await supabase
@@ -159,6 +166,8 @@ export const useRoomStore = create<RoomState>((set, get) => ({
     const { room } = get();
     const user = useAuthStore.getState().user;
     if (!room || !user) return;
+
+    set({ _leaving: true });
 
     // Remove self from players
     await supabase
@@ -242,11 +251,19 @@ export const useRoomStore = create<RoomState>((set, get) => ({
     const { room, isHost } = get();
     if (!room || !isHost) return;
 
-    await supabase
+    const { data, error } = await supabase
       .from("room_players")
       .delete()
       .eq("room_id", room.id)
-      .eq("user_id", userId);
+      .eq("user_id", userId)
+      .select();
+
+    if (error) throw new Error(error.message);
+    if (!data || data.length === 0) {
+      throw new Error("The player could not be removed. You may not have permission to kick players.");
+    }
+
+    await get()._fetchPlayers(room.id);
   },
 
   endGame: async () => {
@@ -273,10 +290,13 @@ export const useRoomStore = create<RoomState>((set, get) => ({
       players: [],
       isHost: false,
       error: null,
+      _leaving: false,
       _roomChannel: null,
       _playersChannel: null,
     });
   },
+
+  clearKicked: () => set({ kicked: false }),
 
   // Internal: subscribe to realtime changes
   _subscribe: (roomId: string) => {
@@ -325,12 +345,26 @@ export const useRoomStore = create<RoomState>((set, get) => ({
 
   // Internal: fetch current players
   _fetchPlayers: async (roomId: string) => {
-    const { data } = await supabase
+    const { data, error } = await supabase
       .from("room_players")
       .select("id, user_id, username, score, is_host")
       .eq("room_id", roomId)
       .order("joined_at");
 
-    if (data) set({ players: data });
+    if (error || !data) return;
+
+    // Ignore stale results for a room we're no longer in
+    if (get().room?.id !== roomId) return;
+
+    // If we're still in this room but no longer in its player list, the host kicked us.
+    // Skip while leaving voluntarily (leaveRoom deletes our row before cleaning up).
+    const userId = useAuthStore.getState().user?.id;
+    if (userId && !get()._leaving && !data.some((p) => p.user_id === userId)) {
+      get().cleanup();
+      set({ kicked: true });
+      return;
+    }
+
+    set({ players: data });
   },
 }));
