@@ -18,6 +18,7 @@ import { colors, fonts } from "../../src/theme";
 import { useRoomStore } from "../../src/stores/roomStore";
 import { useAuthStore } from "../../src/stores/authStore";
 import { TALENT_SHOW_PROMPTS } from "../../src/data/talentShow";
+import { competitionRanks, joinNames } from "../../src/utils/rank";
 
 // ---------------------------------------------------------------------------
 // Types
@@ -329,6 +330,7 @@ export default function TalentShowScreen() {
       score: score as number,
     }))
     .sort((a, b) => b.score - a.score);
+  const leaderboardRanks = competitionRanks(sortedLeaderboard, (p) => p.score);
 
   const answeredCount = Object.keys(answers).length;
   const totalPlayers = players.length;
@@ -577,14 +579,15 @@ export default function TalentShowScreen() {
           contentContainerStyle={styles.listContent}
           renderItem={({ item, index }) => {
             const isMe = item.uid === myId;
+            const rank = leaderboardRanks[index] ?? index + 1;
             const medal =
-              index === 0 ? "trophy" : index === 1 ? "medal" : index === 2 ? "ribbon" : null;
+              rank === 1 ? "trophy" : rank === 2 ? "medal" : rank === 3 ? "ribbon" : null;
             const medalColor =
-              index === 0 ? colors.warning : index === 1 ? colors.gray400 : "#CD7F32";
+              rank === 1 ? colors.warning : rank === 2 ? colors.gray400 : "#CD7F32";
             return (
               <View style={[styles.leaderRow, isMe && styles.leaderRowMe]}>
                 <View style={styles.leaderLeft}>
-                  <Text style={styles.leaderRank}>#{index + 1}</Text>
+                  <Text style={styles.leaderRank}>#{rank}</Text>
                   {medal && (
                     <Ionicons name={medal as any} size={20} color={medalColor} style={{ marginRight: 8 }} />
                   )}
@@ -621,6 +624,7 @@ export default function TalentShowScreen() {
 
   if (phase === "game-over") {
     const winner = sortedLeaderboard[0];
+    const coWinners = sortedLeaderboard.filter((_, i) => leaderboardRanks[i] === 1);
     return (
       <SafeAreaView style={styles.container}>
         <View style={styles.gameOverHeader}>
@@ -628,7 +632,11 @@ export default function TalentShowScreen() {
           <Text style={styles.gameOverTitle}>Game Over!</Text>
           {winner && (
             <Text style={styles.gameOverWinner}>
-              {winner.uid === myId ? "You win!" : `${winner.username} wins!`}
+              {coWinners.length > 1
+                ? `${joinNames(coWinners.map((p) => p.username))} tie!`
+                : winner.uid === myId
+                  ? "You win!"
+                  : `${winner.username} wins!`}
             </Text>
           )}
           {winner && <Text style={styles.gameOverScore}>{winner.score} points</Text>}
@@ -640,14 +648,15 @@ export default function TalentShowScreen() {
           contentContainerStyle={styles.listContent}
           renderItem={({ item, index }) => {
             const isMe = item.uid === myId;
+            const rank = leaderboardRanks[index] ?? index + 1;
             const medal =
-              index === 0 ? "trophy" : index === 1 ? "medal" : index === 2 ? "ribbon" : null;
+              rank === 1 ? "trophy" : rank === 2 ? "medal" : rank === 3 ? "ribbon" : null;
             const medalColor =
-              index === 0 ? colors.warning : index === 1 ? colors.gray400 : "#CD7F32";
+              rank === 1 ? colors.warning : rank === 2 ? colors.gray400 : "#CD7F32";
             return (
               <View style={[styles.leaderRow, isMe && styles.leaderRowMe]}>
                 <View style={styles.leaderLeft}>
-                  <Text style={styles.leaderRank}>#{index + 1}</Text>
+                  <Text style={styles.leaderRank}>#{rank}</Text>
                   {medal && (
                     <Ionicons name={medal as any} size={20} color={medalColor} style={{ marginRight: 8 }} />
                   )}

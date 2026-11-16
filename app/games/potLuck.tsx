@@ -14,6 +14,7 @@ import { colors, fonts } from "../../src/theme";
 import { useRoomStore } from "../../src/stores/roomStore";
 import { useAuthStore } from "../../src/stores/authStore";
 import { DEFAULT_QUESTIONS, PotLuckQuestion } from "../../src/data/potLuck";
+import { competitionRanks, joinNames } from "../../src/utils/rank";
 
 // ─── Constants ──────────────────────────────────────────────────────────────
 const TOTAL_ROUNDS = 10;
@@ -320,6 +321,7 @@ export default function PotLuckScreen() {
       gameScore: scores[p.user_id] ?? 0,
     }))
     .sort((a, b) => b.gameScore - a.gameScore);
+  const leaderboardRanks = competitionRanks(leaderboard, (p) => p.gameScore);
 
   // ── Render: Intro Phase ──────────────────────────────────────────────
 
@@ -598,6 +600,7 @@ export default function PotLuckScreen() {
 
   const renderGameOver = () => {
     const winner = leaderboard[0];
+    const coWinners = leaderboard.filter((_, i) => leaderboardRanks[i] === 1);
 
     return (
       <Animated.View style={[s.content, { opacity: fadeAnim }]}>
@@ -606,44 +609,50 @@ export default function PotLuckScreen() {
           <Text style={s.gameOverTitle}>Game Over!</Text>
           {winner && (
             <Text style={s.winnerText}>
-              {winner.username} wins with {winner.gameScore} pts!
+              {coWinners.length > 1
+                ? `${joinNames(coWinners.map((p) => p.username))} tie with ${winner.gameScore} pts!`
+                : `${winner.username} wins with ${winner.gameScore} pts!`}
             </Text>
           )}
         </View>
 
         <View style={s.leaderboardCard}>
           <Text style={s.leaderboardTitle}>Final Standings</Text>
-          {leaderboard.map((p, idx) => (
+          {leaderboard.map((p, idx) => {
+            const rank = leaderboardRanks[idx] ?? idx + 1;
+            const isFirst = rank === 1;
+            return (
             <View
               key={p.user_id}
-              style={[s.leaderboardRow, idx === 0 && s.leaderboardRowFirst]}
+              style={[s.leaderboardRow, isFirst && s.leaderboardRowFirst]}
             >
               <View style={s.rankContainer}>
-                {idx < 3 ? (
+                {rank <= 3 ? (
                   <Ionicons
                     name="medal"
                     size={22}
                     color={
-                      idx === 0
+                      rank === 1
                         ? "#FFD700"
-                        : idx === 1
+                        : rank === 2
                         ? "#C0C0C0"
                         : "#CD7F32"
                     }
                   />
                 ) : (
-                  <Text style={s.rankNumber}>{idx + 1}</Text>
+                  <Text style={s.rankNumber}>{rank}</Text>
                 )}
               </View>
-              <Text style={[s.leaderboardName, idx === 0 && s.leaderboardNameFirst]}>
+              <Text style={[s.leaderboardName, isFirst && s.leaderboardNameFirst]}>
                 {p.username}
                 {p.user_id === user?.id ? " (You)" : ""}
               </Text>
-              <Text style={[s.leaderboardScore, idx === 0 && s.leaderboardScoreFirst]}>
+              <Text style={[s.leaderboardScore, isFirst && s.leaderboardScoreFirst]}>
                 {p.gameScore} pts
               </Text>
             </View>
-          ))}
+            );
+          })}
         </View>
 
         {isHost && (

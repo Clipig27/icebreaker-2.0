@@ -19,6 +19,7 @@ import { colors, fonts } from "../../src/theme";
 import { useRoomStore } from "../../src/stores/roomStore";
 import { useAuthStore } from "../../src/stores/authStore";
 import { NUMBER_GUESSOR_PROMPTS } from "../../src/data/numberGuessor";
+import { competitionRanks, joinNames, ordinal } from "../../src/utils/rank";
 
 // ---------------------------------------------------------------------------
 // Types
@@ -366,12 +367,26 @@ export default function NumberGuessorScreen() {
   const currentRoundGuesses = React.useMemo(() => {
     if (!gs?.guesses || !gs.currentPrompt) return [];
     const correct = gs.currentPrompt.correctAnswer;
-    return [...gs.guesses].sort((a, b) => {
-      const distA = a.timedOut || a.value === null ? NO_GUESS_PENALTY : Math.abs(a.value - correct);
-      const distB = b.timedOut || b.value === null ? NO_GUESS_PENALTY : Math.abs(b.value - correct);
-      return distA - distB;
-    });
+    const dist = (g: Guess) =>
+      g.timedOut || g.value === null ? NO_GUESS_PENALTY : Math.abs(g.value - correct);
+    // Rank by the round penalty actually shown (distance + time); distance breaks display order only.
+    const roundPen = (g: Guess) =>
+      dist(g) + (g.timedOut ? 0 : Math.round(g.timeMs / 1000));
+    return [...gs.guesses].sort((a, b) => roundPen(a) - roundPen(b) || dist(a) - dist(b));
   }, [gs?.guesses, gs?.currentPrompt]);
+
+  const leaderboardRanks = React.useMemo(
+    () => competitionRanks(leaderboard, (p) => p.penalty),
+    [leaderboard]
+  );
+
+  const currentRoundRanks = React.useMemo(() => {
+    const correct = gs?.currentPrompt?.correctAnswer ?? 0;
+    return competitionRanks(currentRoundGuesses, (g) => {
+      const distance = g.timedOut || g.value === null ? NO_GUESS_PENALTY : Math.abs(g.value - correct);
+      return distance + (g.timedOut ? 0 : Math.round(g.timeMs / 1000));
+    });
+  }, [currentRoundGuesses, gs?.currentPrompt]);
 
   // -------------------------------------------------------------------------
   // Renders
@@ -609,12 +624,13 @@ export default function NumberGuessorScreen() {
             const timePenalty = item.timedOut ? 0 : Math.round(item.timeMs / 1000);
             const roundPenalty = distance + timePenalty;
             const isMe = item.userId === user?.id;
+            const rank = currentRoundRanks[index] ?? index + 1;
 
             return (
-              <View style={[styles.guessRow, isMe && styles.guessRowMe, index === 0 && styles.guessRowFirst]}>
+              <View style={[styles.guessRow, isMe && styles.guessRowMe, rank === 1 && styles.guessRowFirst]}>
                 <View style={styles.guessRank}>
                   <Text style={styles.guessRankText}>
-                    {index === 0 ? "1st" : index === 1 ? "2nd" : index === 2 ? "3rd" : `${index + 1}th`}
+                    {ordinal(rank)}
                   </Text>
                 </View>
                 <View style={styles.guessInfo}>
@@ -631,7 +647,7 @@ export default function NumberGuessorScreen() {
                     </Text>
                   </Text>
                 </View>
-                <Text style={[styles.guessPenalty, index === 0 && { color: colors.success }]}>
+                <Text style={[styles.guessPenalty, rank === 1 && { color: colors.success }]}>
                   +{formatPenalty(roundPenalty)}
                 </Text>
               </View>
@@ -663,12 +679,13 @@ export default function NumberGuessorScreen() {
         contentContainerStyle={{ paddingBottom: 16 }}
         renderItem={({ item, index }) => {
           const isMe = item.userId === user?.id;
+          const rank = leaderboardRanks[index] ?? index + 1;
           const medal =
-            index === 0
+            rank === 1
               ? { icon: "trophy" as const, color: "#FFD700" }
-              : index === 1
+              : rank === 2
               ? { icon: "medal" as const, color: "#C0C0C0" }
-              : index === 2
+              : rank === 3
               ? { icon: "medal" as const, color: "#CD7F32" }
               : null;
 
@@ -678,7 +695,7 @@ export default function NumberGuessorScreen() {
                 {medal ? (
                   <Ionicons name={medal.icon} size={22} color={medal.color} />
                 ) : (
-                  <Text style={styles.lbRankText}>{index + 1}</Text>
+                  <Text style={styles.lbRankText}>{rank}</Text>
                 )}
               </View>
               <Text style={[styles.lbName, isMe && { color: colors.primaryLight }]}>
@@ -710,6 +727,7 @@ export default function NumberGuessorScreen() {
 
   const renderGameOver = () => {
     const winner = leaderboard[0];
+    const coWinners = leaderboard.filter((_, i) => leaderboardRanks[i] === 1);
 
     return (
       <Animated.View style={[styles.centerContainer, { opacity: fadeAnim }]}>
@@ -719,7 +737,11 @@ export default function NumberGuessorScreen() {
         {winner && (
           <View style={styles.winnerCard}>
             <Text style={styles.winnerLabel}>Winner</Text>
-            <Text style={styles.winnerName}>{winner.username}</Text>
+            <Text style={styles.winnerName}>
+              {coWinners.length > 1
+                ? `${joinNames(coWinners.map((p) => p.username))} tie!`
+                : winner.username}
+            </Text>
             <Text style={styles.winnerPenalty}>
               {formatPenalty(winner.penalty)} total penalty
             </Text>
@@ -733,12 +755,13 @@ export default function NumberGuessorScreen() {
           contentContainerStyle={{ paddingBottom: 16 }}
           renderItem={({ item, index }) => {
             const isMe = item.userId === user?.id;
+            const rank = leaderboardRanks[index] ?? index + 1;
             const medal =
-              index === 0
+              rank === 1
                 ? { icon: "trophy" as const, color: "#FFD700" }
-                : index === 1
+                : rank === 2
                 ? { icon: "medal" as const, color: "#C0C0C0" }
-                : index === 2
+                : rank === 3
                 ? { icon: "medal" as const, color: "#CD7F32" }
                 : null;
 
@@ -748,7 +771,7 @@ export default function NumberGuessorScreen() {
                   {medal ? (
                     <Ionicons name={medal.icon} size={22} color={medal.color} />
                   ) : (
-                    <Text style={styles.lbRankText}>{index + 1}</Text>
+                    <Text style={styles.lbRankText}>{rank}</Text>
                   )}
                 </View>
                 <Text style={[styles.lbName, isMe && { color: colors.primaryLight }]}>

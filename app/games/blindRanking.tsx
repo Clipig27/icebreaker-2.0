@@ -6,6 +6,7 @@ import { Ionicons } from "@expo/vector-icons";
 import { colors, fonts } from "../../src/theme";
 import { useRoomStore } from "../../src/stores/roomStore";
 import { useAuthStore } from "../../src/stores/authStore";
+import { competitionRanks } from "../../src/utils/rank";
 
 // ---------------------------------------------------------------------------
 // Categories
@@ -528,10 +529,12 @@ export default function BlindRankingScreen() {
             {players
               .slice()
               .sort((a, b) => (roundScores[b.user_id] ?? 0) - (roundScores[a.user_id] ?? 0))
-              .map((p, i) => (
+              .map((p, i, arr) => (
                 <View key={p.user_id} style={s.scoreRow}>
                   <View style={s.scoreLeft}>
-                    <Text style={s.scoreRank}>#{i + 1}</Text>
+                    <Text style={s.scoreRank}>
+                      #{competitionRanks(arr, (x) => roundScores[x.user_id] ?? 0)[i]}
+                    </Text>
                     <Text style={s.scoreName}>
                       {p.username}
                       {p.user_id === userId ? " (you)" : ""}
@@ -573,6 +576,7 @@ export default function BlindRankingScreen() {
       .sort((a, b) => (totalScores[b.user_id] ?? 0) - (totalScores[a.user_id] ?? 0));
 
     const maxScore = totalScores[sorted[0]?.user_id] ?? 0;
+    const ranks = competitionRanks(sorted, (p) => totalScores[p.user_id] ?? 0);
 
     return (
       <SafeAreaView style={s.safe}>
@@ -598,6 +602,7 @@ export default function BlindRankingScreen() {
               const isWinner = score === maxScore;
               const barWidth = maxScore > 0 ? (score / maxScore) * 100 : 0;
               const medals = ["gold", "silver", "#CD7F32"];
+              const rank = ranks[i] ?? i + 1;
 
               return (
                 <View key={p.user_id} style={s.leaderRow}>
@@ -605,17 +610,17 @@ export default function BlindRankingScreen() {
                     <View
                       style={[
                         s.leaderRank,
-                        i < 3 && { backgroundColor: (medals[i] ?? colors.gray500) + "30" },
+                        rank <= 3 && { backgroundColor: (medals[rank - 1] ?? colors.gray500) + "30" },
                       ]}
                     >
-                      {i === 0 ? (
+                      {rank === 1 ? (
                         <Ionicons name="medal" size={20} color="gold" />
-                      ) : i === 1 ? (
+                      ) : rank === 2 ? (
                         <Ionicons name="medal" size={20} color="silver" />
-                      ) : i === 2 ? (
+                      ) : rank === 3 ? (
                         <Ionicons name="medal" size={20} color="#CD7F32" />
                       ) : (
-                        <Text style={s.leaderRankText}>{i + 1}</Text>
+                        <Text style={s.leaderRankText}>{rank}</Text>
                       )}
                     </View>
                     <View style={s.leaderInfo}>
@@ -629,7 +634,7 @@ export default function BlindRankingScreen() {
                             s.leaderBarInner,
                             {
                               width: `${barWidth}%`,
-                              backgroundColor: i === 0 ? colors.gold : i === 1 ? colors.gray400 : colors.primary,
+                              backgroundColor: rank === 1 ? colors.gold : rank === 2 ? colors.gray400 : colors.primary,
                             },
                           ]}
                         />

@@ -15,6 +15,7 @@ import { colors, fonts } from "../../src/theme";
 import { useRoomStore, Player } from "../../src/stores/roomStore";
 import { useAuthStore } from "../../src/stores/authStore";
 import { PIE_CHARTS_PROMPTS } from "../../src/data/pieCharts";
+import { competitionRanks, joinNames } from "../../src/utils/rank";
 
 // ─── Constants ───────────────────────────────────────────────────────────────
 
@@ -297,6 +298,11 @@ export default function PieChartsScreen() {
       }))
       .sort((a, b) => b.gameScore - a.gameScore);
   }, [players, scores]);
+  const leaderboardRanks = useMemo(
+    () => competitionRanks(leaderboard, (r) => r.gameScore),
+    [leaderboard]
+  );
+  const topPlayers = leaderboard.filter((_, i) => leaderboardRanks[i] === 1);
 
   // Player lookup
   const playerMap = useMemo(() => {
@@ -563,7 +569,9 @@ export default function PieChartsScreen() {
                 <View style={s.winnerCard}>
                   <Text style={s.winnerLabel}>Winner</Text>
                   <Text style={s.winnerName}>
-                    {leaderboard[0].player.username}
+                    {topPlayers.length > 1
+                      ? `${joinNames(topPlayers.map((t) => t.player.username))} tie!`
+                      : leaderboard[0].player.username}
                   </Text>
                   <Text style={s.winnerScore}>
                     {leaderboard[0].gameScore}{" "}
@@ -580,10 +588,10 @@ export default function PieChartsScreen() {
                     <Text
                       style={[
                         s.lbRank,
-                        idx === 0 && { color: colors.warning },
+                        leaderboardRanks[idx] === 1 && { color: colors.warning },
                       ]}
                     >
-                      #{idx + 1}
+                      #{leaderboardRanks[idx] ?? idx + 1}
                     </Text>
                     <View
                       style={[
