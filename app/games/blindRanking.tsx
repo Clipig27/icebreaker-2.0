@@ -79,7 +79,7 @@ function scoreRanking(playerRanking: string[], consensus: string[]): number {
 
 export default function BlindRankingScreen() {
   const router = useRouter();
-  const { room, players, isHost, updateGameState, endGame } = useRoomStore();
+  const { room, players, isHost, updateGameState, mutateGameState, endGame } = useRoomStore();
   const user = useAuthStore((s) => s.user);
   const userId = user?.id ?? "";
 
@@ -250,13 +250,16 @@ export default function BlindRankingScreen() {
         }
       }
 
-      const newRankings = { ...rankings, [userId]: ranking };
-      updateGameState({
-        ...gs,
-        rankings: newRankings,
+      if (!userId) return;
+      // Merge only our own ranking into the fresh server state (no lost updates)
+      mutateGameState((cur) => {
+        if (!cur || cur.phase !== "ranking" || cur.round !== round) return null;
+        const curRankings = cur.rankings ?? {};
+        if (curRankings[userId]) return null;
+        return { ...cur, rankings: { ...curRankings, [userId]: ranking } };
       });
     },
-    [hasSubmitted, selectedOrder, categoryIndex, rankings, userId, gs]
+    [hasSubmitted, selectedOrder, categoryIndex, round, userId, mutateGameState]
   );
 
   // ------------------------------------------------------------------

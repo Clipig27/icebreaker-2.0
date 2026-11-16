@@ -73,7 +73,7 @@ interface GameState {
 
 export default function PotLuckScreen() {
   const router = useRouter();
-  const { room, players, isHost, updateGameState, endGame } = useRoomStore();
+  const { room, players, isHost, updateGameState, mutateGameState, endGame } = useRoomStore();
   const user = useAuthStore((s) => s.user);
 
   const gs: GameState | null = room?.game_state?.game === "potLuck" ? room.game_state : null;
@@ -191,10 +191,18 @@ export default function PotLuckScreen() {
       if (!gs || !user || phase !== "question") return;
       if (answers[user.id] !== undefined) return; // already answered
 
-      const newAnswers = { ...answers, [user.id]: choiceIndex };
-      await updateGameState({ ...gs, answers: newAnswers });
+      const answerRound = round;
+      // Merge only our own answer into the fresh server state (no lost updates)
+      await mutateGameState((cur) => {
+        if (!cur || cur.game !== "potLuck" || cur.phase !== "question" || cur.round !== answerRound) {
+          return null;
+        }
+        const curAnswers = cur.answers ?? {};
+        if (curAnswers[user.id] !== undefined) return null;
+        return { ...cur, answers: { ...curAnswers, [user.id]: choiceIndex } };
+      });
     },
-    [gs, user, phase, answers]
+    [gs, user, phase, round, answers, mutateGameState]
   );
 
   const advanceToReveal = useCallback(async () => {

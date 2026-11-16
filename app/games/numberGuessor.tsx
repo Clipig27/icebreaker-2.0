@@ -78,7 +78,7 @@ function formatPenalty(p: number): string {
 
 export default function NumberGuessorScreen() {
   const router = useRouter();
-  const { room, players, isHost, updateGameState } = useRoomStore();
+  const { room, players, isHost, updateGameState, mutateGameState } = useRoomStore();
   const { user } = useAuthStore();
 
   const gs: GameState | null = room?.game_state ?? null;
@@ -232,10 +232,16 @@ export default function NumberGuessorScreen() {
         timedOut,
       };
 
-      const updatedGuesses = [...(gs.guesses || []), guess];
-      await updateGameState({ ...gs, guesses: updatedGuesses });
+      const round = gs.currentRound;
+      // Merge only our own guess into the fresh server state (no lost updates)
+      await mutateGameState((cur) => {
+        if (!cur || cur.phase !== "guessing" || cur.currentRound !== round) return null;
+        const existing: Guess[] = cur.guesses || [];
+        if (existing.some((g) => g.userId === user.id)) return null;
+        return { ...cur, guesses: [...existing, guess] };
+      });
     },
-    [gs, user, hasGuessed, guessText, players, updateGameState]
+    [gs, user, hasGuessed, guessText, players, mutateGameState]
   );
 
   const advanceToReveal = useCallback(async () => {

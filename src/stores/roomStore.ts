@@ -25,6 +25,7 @@ export type Room = {
   status: "lobby" | "playing" | "finished";
   game_type: GameType | null;
   game_state: any;
+  updated_at?: string;
 };
 
 interface RoomState {
@@ -48,6 +49,12 @@ interface RoomState {
   leaveRoom: () => Promise<void>;
   startGame: (gameType: GameType) => Promise<void>;
   updateGameState: (gameState: any) => Promise<void>;
+  /**
+   * Atomically read-modify-write rooms.game_state using optimistic concurrency
+   * on rooms.updated_at. The mutator receives the FRESH server game_state and
+   * returns the next state, or null/undefined to abort. Returns true if written.
+   */
+  mutateGameState: (mutator: (current: any) => any | null, maxRetries?: number) => Promise<boolean>;
   updateScore: (userId: string, delta: number) => Promise<void>;
   kickPlayer: (userId: string) => Promise<void>;
   endGame: () => Promise<void>;
@@ -231,6 +238,71 @@ export const useRoomStore = create<RoomState>((set, get) => ({
       .from("rooms")
       .update({ game_state: gameState, updated_at: new Date().toISOString() })
       .eq("id", room.id);
+  },
+
+  mutateGameState: async (mutator, maxRetries = 8) => {
+    const roomId = get().room?.id;
+    if (!roomId) return false;
+
+    const backoff = () =>
+      new Promise<void>((resolve) => setTimeout(resolve, 20 + Math.random() * 100));
+
+    for (let attempt = 0; attempt <= maxRetries; attempt++) {
+      if (attempt > 0) await backoff();
+
+      // 1. Read the fresh row from the server (never the cached store copy)
+      const { data: fresh, error: readErr } = await supabase
+        .from("rooms")
+        .select("game_state, updated_at, status")
+        .eq("id", roomId)
+        .single();
+
+      if (readErr || !fresh) {
+        console.warn("[mutateGameState] read failed:", readErr?.message);
+        continue;
+      }
+      if (fresh.status !== "playing") return false;
+
+      // 2. Compute the next state from the fresh state
+      const next = mutator(fresh.game_state ?? {});
+      if (next === null || next === undefined) return false;
+
+      // 3. New timestamp strictly greater than the one we read
+      const prevMs = Date.parse(fresh.updated_at);
+      const newUpdatedAt = new Date(
+        Number.isNaN(prevMs) ? Date.now() : Math.max(Date.now(), prevMs + 1)
+      ).toISOString();
+
+      // 4. Compare-and-swap: only succeeds if nobody wrote since our read
+      const { data: written, error: writeErr } = await supabase
+        .from("rooms")
+        .update({ game_state: next, updated_at: newUpdatedAt })
+        .eq("id", roomId)
+        .eq("updated_at", fresh.updated_at)
+        .select("id");
+
+      if (writeErr) {
+        console.warn("[mutateGameState] write failed:", writeErr.message);
+        continue;
+      }
+      if (!written || written.length === 0) {
+        // Another client won the race; retry from a fresh read
+        continue;
+      }
+
+      // Success: optimistically reflect our write locally (realtime will confirm)
+      const current = get().room;
+      if (current && current.id === roomId) {
+        const curMs = current.updated_at ? Date.parse(current.updated_at) : NaN;
+        if (Number.isNaN(curMs) || curMs <= Date.parse(newUpdatedAt)) {
+          set({ room: { ...current, game_state: next, updated_at: newUpdatedAt } });
+        }
+      }
+      return true;
+    }
+
+    console.warn("[mutateGameState] gave up after", maxRetries + 1, "attempts");
+    return false;
   },
 
   updateScore: async (userId: string, delta: number) => {

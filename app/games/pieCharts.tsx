@@ -66,7 +66,7 @@ interface PieChartsGameState {
 
 export default function PieChartsScreen() {
   const router = useRouter();
-  const { room, players, isHost, updateGameState, endGame } = useRoomStore();
+  const { room, players, isHost, updateGameState, mutateGameState, endGame } = useRoomStore();
   const user = useAuthStore((s) => s.user);
 
   const gs = room?.game_state as PieChartsGameState | undefined;
@@ -183,10 +183,16 @@ export default function PieChartsScreen() {
   const castVote = useCallback(
     async (targetUserId: string) => {
       if (!user || !gs || myVote) return;
-      const newVotes = { ...votes, [user.id]: targetUserId };
-      await updateGameState({ ...gs, votes: newVotes });
+      const voteRound = round;
+      // Merge only our own vote into the fresh server state (no lost updates)
+      await mutateGameState((cur) => {
+        if (!cur || cur.phase !== "voting" || (cur.round ?? 1) !== voteRound) return null;
+        const curVotes = cur.votes ?? {};
+        if (curVotes[user.id]) return null;
+        return { ...cur, votes: { ...curVotes, [user.id]: targetUserId } };
+      });
     },
-    [user, gs, votes, myVote, updateGameState]
+    [user, gs, round, myVote, mutateGameState]
   );
 
   const advanceToResults = useCallback(async () => {

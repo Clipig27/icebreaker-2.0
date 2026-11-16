@@ -75,7 +75,7 @@ function findDuplicateUserIds(answers: Record<string, string>): string[] {
 
 export default function TalentShowScreen() {
   const router = useRouter();
-  const { room, players, isHost, updateGameState, endGame } = useRoomStore();
+  const { room, players, isHost, updateGameState, mutateGameState, endGame } = useRoomStore();
   const user = useAuthStore((s) => s.user);
 
   const [answer, setAnswer] = useState("");
@@ -170,10 +170,16 @@ export default function TalentShowScreen() {
       setSubmitted(true);
 
       const finalAnswer = (overrideAnswer ?? answer).trim();
-      const newAnswers = { ...gs.answers, [myId]: finalAnswer };
-      await updateGameState({ ...gs, answers: newAnswers });
+      const answerRound = gs.round;
+      // Merge only our own answer into the fresh server state (no lost updates)
+      await mutateGameState((cur) => {
+        if (!cur || cur.phase !== "answering" || cur.round !== answerRound) return null;
+        const curAnswers = cur.answers ?? {};
+        if (curAnswers[myId] !== undefined) return null;
+        return { ...cur, answers: { ...curAnswers, [myId]: finalAnswer } };
+      });
     },
-    [submitted, gs, myId, answer, updateGameState]
+    [submitted, gs, myId, answer, mutateGameState]
   );
 
   /** Host: move from answering -> reveal */
