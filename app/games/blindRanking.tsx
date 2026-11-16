@@ -650,11 +650,18 @@ export default function BlindRankingScreen() {
           </View>
         </ScrollView>
 
-        {/* Back to lobby */}
+        {/* Back to lobby (host only; players follow room status) */}
         <View style={s.footer}>
-          <Pressable style={s.submitBtn} onPress={handleBackToLobby}>
-            <Text style={s.submitBtnText}>Back to Lobby</Text>
-          </Pressable>
+          {isHost ? (
+            <Pressable style={s.submitBtn} onPress={handleBackToLobby}>
+              <Text style={s.submitBtnText}>Back to Lobby</Text>
+            </Pressable>
+          ) : (
+            <View style={s.waitingBox}>
+              <Ionicons name="hourglass-outline" size={20} color={colors.primaryLight} />
+              <Text style={s.waitingText}>Waiting for host...</Text>
+            </View>
+          )}
         </View>
       </SafeAreaView>
     );
