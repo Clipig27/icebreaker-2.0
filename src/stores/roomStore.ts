@@ -64,6 +64,12 @@ interface RoomState {
   _fetchPlayers: (roomId: string) => Promise<void>;
 }
 
+// Monotonic id for _fetchPlayers requests; only the newest response is applied.
+let playersFetchSeq = 0;
+// Room id in which we've seen our own player row in a fetched list (this session).
+// Kick detection only runs after that, so a snapshot predating our join can't kick us.
+let selfSeenInRoomId: string | null = null;
+
 export const useRoomStore = create<RoomState>((set, get) => ({
   room: null,
   players: [],
@@ -372,6 +378,9 @@ export const useRoomStore = create<RoomState>((set, get) => ({
     const { _roomChannel, _playersChannel } = get();
     if (_roomChannel) supabase.removeChannel(_roomChannel);
     if (_playersChannel) supabase.removeChannel(_playersChannel);
+    // Invalidate any in-flight player fetches and reset the per-session join marker
+    playersFetchSeq++;
+    selfSeenInRoomId = null;
     set({
       room: null,
       players: [],
@@ -410,10 +419,22 @@ export const useRoomStore = create<RoomState>((set, get) => ({
       .channel(`room_players:${roomId}`)
       .on(
         "postgres_changes",
-        { event: "*", schema: "public", table: "room_players", filter: `room_id=eq.${roomId}` },
+        { event: "UPDATE", schema: "public", table: "room_players", filter: `room_id=eq.${roomId}` },
         () => {
-          // Refetch all players on any change
+          // Refetch all players on score / host changes
           get()._fetchPlayers(roomId);
+        }
+      )
+      // Column-filtered INSERT delivery proved unreliable (a simultaneous join was
+      // missed), so listen for inserts unfiltered and refetch for our room.
+      .on(
+        "postgres_changes",
+        { event: "INSERT", schema: "public", table: "room_players" },
+        (payload) => {
+          const insertedRoomId = (payload.new as { room_id?: string } | null)?.room_id;
+          if (!insertedRoomId || insertedRoomId === roomId) {
+            get()._fetchPlayers(roomId);
+          }
         }
       )
       // Realtime doesn't deliver DELETE events for column-filtered listeners,
@@ -425,18 +446,31 @@ export const useRoomStore = create<RoomState>((set, get) => ({
           get()._fetchPlayers(roomId);
         }
       )
-      .subscribe();
+      .subscribe((status) => {
+        // Changes made between our initial fetch and the channel going live are
+        // never delivered, so reconcile once the subscription is actually active
+        // (also fires again after a reconnect).
+        if (status === "SUBSCRIBED") {
+          get()._fetchPlayers(roomId);
+        }
+      });
 
     set({ _roomChannel: roomChannel, _playersChannel: playersChannel });
   },
 
   // Internal: fetch current players
   _fetchPlayers: async (roomId: string) => {
+    const requestId = ++playersFetchSeq;
+
     const { data, error } = await supabase
       .from("room_players")
       .select("id, user_id, username, score, is_host")
       .eq("room_id", roomId)
       .order("joined_at");
+
+    // Concurrent fetches can resolve out of order; only the newest may apply,
+    // otherwise an older snapshot could overwrite a newer one.
+    if (requestId !== playersFetchSeq) return;
 
     if (error || !data) return;
 
@@ -444,11 +478,17 @@ export const useRoomStore = create<RoomState>((set, get) => ({
     if (get().room?.id !== roomId) return;
 
     // If we're still in this room but no longer in its player list, the host kicked us.
-    // Skip while leaving voluntarily (leaveRoom deletes our row before cleaning up).
+    // Skip while leaving voluntarily (leaveRoom deletes our row before cleaning up),
+    // and only once our own join row has been observed in this session so an early
+    // snapshot can never be mistaken for a kick.
     const userId = useAuthStore.getState().user?.id;
-    if (userId && !get()._leaving && !data.some((p) => p.user_id === userId)) {
-      get().cleanup();
-      set({ kicked: true });
+    const selfPresent = !!userId && data.some((p) => p.user_id === userId);
+    if (selfPresent) selfSeenInRoomId = roomId;
+    if (userId && !selfPresent) {
+      if (!get()._leaving && selfSeenInRoomId === roomId) {
+        get().cleanup();
+        set({ kicked: true });
+      }
       return;
     }
 
