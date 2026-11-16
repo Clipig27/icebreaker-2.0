@@ -74,7 +74,7 @@ interface GameState {
 
 export default function PotLuckScreen() {
   const router = useRouter();
-  const { room, players, isHost, updateGameState, mutateGameState, endGame } = useRoomStore();
+  const { room, players, isHost, mutateGameState, endGame } = useRoomStore();
   const user = useAuthStore((s) => s.user);
 
   const gs: GameState | null = room?.game_state?.game === "potLuck" ? room.game_state : null;
@@ -122,7 +122,12 @@ export default function PotLuckScreen() {
       timerEnd: Date.now() + QUESTION_TIME * 1000,
     };
 
-    updateGameState(initialState);
+    // CAS on the fresh state so a late init can never clobber a newer phase.
+    mutateGameState((cur) => {
+      if (cur && cur.game === "potLuck" && cur.questionIds && cur.questionIds.length > 0) return null;
+      if (cur?.phase && cur.phase !== "starting" && cur.phase !== "intro") return null;
+      return initialState;
+    }).then((ok) => console.log("[tapdiag] potLuck host init write:", ok));
   }, [isHost]);
 
   // ── Timer countdown ────────────────────────────────────────────────────
@@ -298,7 +303,9 @@ export default function PotLuckScreen() {
   };
 
   const startFromIntro = useCallback(async () => {
-    await mutateGameState((cur) => {
+    console.log("[tapdiag] potLuck Start onPress fired, local phase:", rawPhase);
+    const t0 = Date.now();
+    const ok = await mutateGameState((cur) => {
       if (!cur || cur.game !== "potLuck") return null;
       if (cur.phase !== "intro" && cur.phase !== "starting") return null;
       return {
@@ -307,7 +314,8 @@ export default function PotLuckScreen() {
         timerEnd: Date.now() + QUESTION_TIME * 1000,
       };
     });
-  }, [mutateGameState]);
+    console.log("[tapdiag] potLuck Start mutateGameState:", ok, `${Date.now() - t0}ms`);
+  }, [mutateGameState, rawPhase]);
 
   // ── Derived state ─────────────────────────────────────────────────────
 
@@ -350,7 +358,11 @@ export default function PotLuckScreen() {
       </View>
 
       {isHost ? (
-        <Pressable style={s.introStartButton} onPress={startFromIntro}>
+        <Pressable
+          style={s.introStartButton}
+          onPressIn={() => console.log("[tapdiag] potLuck Start onPressIn")}
+          onPress={startFromIntro}
+        >
           <Text style={s.introStartButtonText}>Start Game</Text>
         </Pressable>
       ) : (

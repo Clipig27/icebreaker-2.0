@@ -80,7 +80,7 @@ function scoreRanking(playerRanking: string[], consensus: string[]): number {
 
 export default function BlindRankingScreen() {
   const router = useRouter();
-  const { room, players, isHost, updateGameState, mutateGameState, endGame } = useRoomStore();
+  const { room, players, isHost, mutateGameState, endGame } = useRoomStore();
   const user = useAuthStore((s) => s.user);
   const userId = user?.id ?? "";
 
@@ -123,15 +123,20 @@ export default function BlindRankingScreen() {
       players.forEach((p) => {
         initScores[p.user_id] = 0;
       });
-      updateGameState({
-        phase: "intro",
-        round: 1,
-        categoryIndex: 0,
-        rankings: {},
-        roundScores: {},
-        totalScores: initScores,
-        consensus: [],
-      });
+      // CAS on the fresh state: never clobber a newer phase, and never write
+      // into a room endGame() already reset (game_state {} also reads as "starting").
+      mutateGameState((cur) => {
+        if (cur?.phase && cur.phase !== "starting") return null;
+        return {
+          phase: "intro",
+          round: 1,
+          categoryIndex: 0,
+          rankings: {},
+          roundScores: {},
+          totalScores: initScores,
+          consensus: [],
+        };
+      }).then((ok) => console.log("[tapdiag] blindRanking host init write:", ok));
     }
   }, [isHost, phase]);
 
@@ -299,11 +304,14 @@ export default function BlindRankingScreen() {
   };
 
   const startFromIntro = useCallback(async () => {
-    await mutateGameState((cur) => {
+    console.log("[tapdiag] blindRanking Start onPress fired, local phase:", phase);
+    const t0 = Date.now();
+    const ok = await mutateGameState((cur) => {
       if (!cur || cur.phase !== "intro") return null;
       return { ...cur, phase: "ranking" };
     });
-  }, [mutateGameState]);
+    console.log("[tapdiag] blindRanking Start mutateGameState:", ok, `${Date.now() - t0}ms`);
+  }, [mutateGameState, phase]);
 
   // ==================================================================
   // RENDER
@@ -337,7 +345,11 @@ export default function BlindRankingScreen() {
           </View>
 
           {isHost ? (
-            <Pressable style={s.introStartButton} onPress={startFromIntro}>
+            <Pressable
+              style={s.introStartButton}
+              onPressIn={() => console.log("[tapdiag] blindRanking Start onPressIn")}
+              onPress={startFromIntro}
+            >
               <Text style={s.introStartButtonText}>Start Game</Text>
             </Pressable>
           ) : (

@@ -93,7 +93,7 @@ function computeRoundScores(
 
 export default function TalentShowScreen() {
   const router = useRouter();
-  const { room, players, isHost, updateGameState, mutateGameState, endGame } = useRoomStore();
+  const { room, players, isHost, mutateGameState, endGame } = useRoomStore();
   const user = useAuthStore((s) => s.user);
 
   const [answer, setAnswer] = useState("");
@@ -131,7 +131,11 @@ export default function TalentShowScreen() {
       scores: Object.fromEntries(players.map((p) => [p.user_id, 0])),
       duplicates: [],
     };
-    updateGameState(initialState);
+    // CAS on the fresh state so a late init can never clobber a newer phase.
+    mutateGameState((cur) => {
+      if (cur?.phase && cur.phase !== "starting") return null;
+      return initialState;
+    }).then((ok) => console.log("[tapdiag] talentShow host init write:", ok));
   }, [isHost, room?.id]);
 
   // -----------------------------------------------------------------------
@@ -340,11 +344,14 @@ export default function TalentShowScreen() {
   // -----------------------------------------------------------------------
 
   const startFromIntro = useCallback(async () => {
-    await mutateGameState((cur) => {
+    console.log("[tapdiag] talentShow Start onPress fired, local phase:", phase);
+    const t0 = Date.now();
+    const ok = await mutateGameState((cur) => {
       if (!cur || cur.game !== "talentShow" || cur.phase !== "intro") return null;
       return { ...cur, phase: "answering" as Phase };
     });
-  }, [mutateGameState]);
+    console.log("[tapdiag] talentShow Start mutateGameState:", ok, `${Date.now() - t0}ms`);
+  }, [mutateGameState, phase]);
 
   // -----------------------------------------------------------------------
   // Loading state
@@ -399,7 +406,11 @@ export default function TalentShowScreen() {
           </View>
 
           {isHost ? (
-            <TouchableOpacity style={styles.introStartButton} onPress={startFromIntro}>
+            <TouchableOpacity
+              style={styles.introStartButton}
+              onPressIn={() => console.log("[tapdiag] talentShow Start onPressIn")}
+              onPress={startFromIntro}
+            >
               <Text style={styles.introStartButtonText}>Start Game</Text>
             </TouchableOpacity>
           ) : (

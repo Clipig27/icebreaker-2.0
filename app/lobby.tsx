@@ -69,12 +69,14 @@ function GameCard({ game, onPress }: { game: typeof GAMES[number]; onPress: () =
     <AnimatedPressable
       style={[s.gameRow, animStyle]}
       onPressIn={() => {
+        console.log("[tapdiag] lobby card onPressIn", game.id);
         scale.value = withSpring(0.97, { damping: 15, stiffness: 300 });
       }}
       onPressOut={() => {
         scale.value = withSpring(1, { damping: 15, stiffness: 300 });
       }}
       onPress={() => {
+        console.log("[tapdiag] lobby card onPress fired", game.id);
         Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
         onPress();
       }}
@@ -145,7 +147,8 @@ export default function Lobby() {
 
   const handleStartGame = (gameType: GameType) => {
     Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
-    startGame(gameType);
+    console.log("[tapdiag] handleStartGame", gameType, "local status:", room.status, "isHost:", isHost);
+    startGame(gameType).catch((e) => console.log("[tapdiag] startGame threw", gameType, String(e)));
   };
 
   const handleKick = (userId: string, username: string) => {

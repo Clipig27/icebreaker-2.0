@@ -393,13 +393,16 @@ export default function NumberGuessorScreen() {
   // -------------------------------------------------------------------------
 
   const advanceToSetup = useCallback(async () => {
-    await mutateGameState((cur) => {
+    console.log("[tapdiag] numberGuessor Start onPress fired, local phase:", rawPhase);
+    const t0 = Date.now();
+    const ok = await mutateGameState((cur) => {
       // Only from the intro screen (idempotent: no-op if already past intro)
       const curPhase = cur?.phase ?? "starting";
       if (curPhase !== "intro" && curPhase !== "starting") return null;
       return { phase: "setup" };
     });
-  }, [mutateGameState]);
+    console.log("[tapdiag] numberGuessor Start mutateGameState:", ok, `${Date.now() - t0}ms`);
+  }, [mutateGameState, rawPhase]);
 
   const renderIntro = () => (
     <ScrollView contentContainerStyle={styles.introContainer}>
@@ -423,7 +426,11 @@ export default function NumberGuessorScreen() {
       </View>
 
       {isHost ? (
-        <TouchableOpacity style={styles.introStartButton} onPress={advanceToSetup}>
+        <TouchableOpacity
+          style={styles.introStartButton}
+          onPressIn={() => console.log("[tapdiag] numberGuessor Start onPressIn")}
+          onPress={advanceToSetup}
+        >
           <Text style={styles.introStartButtonText}>Start Game</Text>
         </TouchableOpacity>
       ) : (

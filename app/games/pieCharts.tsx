@@ -67,7 +67,7 @@ interface PieChartsGameState {
 
 export default function PieChartsScreen() {
   const router = useRouter();
-  const { room, players, isHost, updateGameState, mutateGameState, endGame } = useRoomStore();
+  const { room, players, isHost, mutateGameState, endGame } = useRoomStore();
   const user = useAuthStore((s) => s.user);
 
   const gs = room?.game_state as PieChartsGameState | undefined;
@@ -103,15 +103,21 @@ export default function PieChartsScreen() {
       players.forEach((p) => {
         initialScores[p.user_id] = 0;
       });
-      updateGameState({
-        game: "pieCharts",
-        phase: "intro",
-        round: 1,
-        prompts: chosen.map((p) => ({ id: p.id, text: p.text })),
-        votes: {},
-        roundWinners: [],
-        scores: initialScores,
-      });
+      // CAS on the fresh state so a late init can never clobber a newer phase
+      // (or write into a room that has already gone back to the lobby).
+      mutateGameState((cur) => {
+        if (cur && cur.game === "pieCharts" && cur.prompts && cur.prompts.length > 0) return null;
+        if (cur?.phase && cur.phase !== "starting" && cur.phase !== "intro") return null;
+        return {
+          game: "pieCharts",
+          phase: "intro",
+          round: 1,
+          prompts: chosen.map((p) => ({ id: p.id, text: p.text })),
+          votes: {},
+          roundWinners: [],
+          scores: initialScores,
+        };
+      }).then((ok) => console.log("[tapdiag] pieCharts host init write:", ok));
     }
   }, [isHost]);
 
@@ -257,11 +263,16 @@ export default function PieChartsScreen() {
   }, [endGame]);
 
   const startFromIntro = useCallback(async () => {
-    await mutateGameState((cur) => {
+    console.log("[tapdiag] pieCharts Start onPress fired, local phase:", rawPhase);
+    const t0 = Date.now();
+    const ok = await mutateGameState((cur) => {
       if (!cur || (cur.phase !== "intro" && cur.phase !== "starting")) return null;
+      // Prompts not initialised yet: starting now would show "Setting up..." forever
+      if (!cur.prompts || cur.prompts.length === 0) return null;
       return { ...cur, phase: "voting" };
     });
-  }, [mutateGameState]);
+    console.log("[tapdiag] pieCharts Start mutateGameState:", ok, `${Date.now() - t0}ms`);
+  }, [mutateGameState, rawPhase]);
 
   // ── Derived data ───────────────────────────────────────────────────────
 
@@ -352,7 +363,11 @@ export default function PieChartsScreen() {
           </View>
 
           {isHost ? (
-            <Pressable style={s.introStartButton} onPress={startFromIntro}>
+            <Pressable
+              style={s.introStartButton}
+              onPressIn={() => console.log("[tapdiag] pieCharts Start onPressIn")}
+              onPress={startFromIntro}
+            >
               <Text style={s.introStartButtonText}>Start Game</Text>
             </Pressable>
           ) : (

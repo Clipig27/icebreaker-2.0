@@ -47,7 +47,7 @@ interface RoomState {
   createRoom: () => Promise<void>;
   joinRoom: (code: string) => Promise<void>;
   leaveRoom: () => Promise<void>;
-  startGame: (gameType: GameType) => Promise<void>;
+  startGame: (gameType: GameType) => Promise<boolean>;
   updateGameState: (gameState: any) => Promise<void>;
   /**
    * Atomically read-modify-write rooms.game_state using optimistic concurrency
@@ -223,9 +223,13 @@ export const useRoomStore = create<RoomState>((set, get) => ({
 
   startGame: async (gameType: GameType) => {
     const { room } = get();
-    if (!room) return;
+    if (!room) {
+      console.log("[tapdiag] startGame: no room in store, write skipped");
+      return false;
+    }
 
-    await supabase
+    const t0 = Date.now();
+    const { data, error } = await supabase
       .from("rooms")
       .update({
         status: "playing",
@@ -233,7 +237,20 @@ export const useRoomStore = create<RoomState>((set, get) => ({
         game_state: { phase: "starting", game: gameType },
         updated_at: new Date().toISOString(),
       })
-      .eq("id", room.id);
+      .eq("id", room.id)
+      .select("id");
+
+    const ms = Date.now() - t0;
+    if (error) {
+      console.log("[tapdiag] startGame FAILED", gameType, `${ms}ms`, error.message);
+      return false;
+    }
+    if (!data || data.length === 0) {
+      console.log("[tapdiag] startGame wrote 0 rows", gameType, `${ms}ms`);
+      return false;
+    }
+    console.log("[tapdiag] startGame ok", gameType, `${ms}ms`);
+    return true;
   },
 
   updateGameState: async (gameState: any) => {
