@@ -555,6 +555,7 @@ export default function NumberGuessorScreen() {
           >
             <View style={styles.inputRow}>
               <TextInput
+                testID="ng-guess-input"
                 style={styles.guessInput}
                 value={guessText}
                 onChangeText={(t) => {
@@ -568,6 +569,9 @@ export default function NumberGuessorScreen() {
                 autoFocus
               />
               <TouchableOpacity
+                testID="ng-submit-guess"
+                accessibilityLabel="Submit guess"
+                accessibilityRole="button"
                 style={[
                   styles.submitButton,
                   (!guessText || guessText === "") && styles.submitButtonDisabled,
