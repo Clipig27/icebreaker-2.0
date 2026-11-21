@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from "react";
-import { View, Text, Pressable, ScrollView, StyleSheet, Alert, Animated as RNAnimated, Easing } from "react-native";
+import { View, Text, Pressable, ScrollView, StyleSheet, Alert, AppState, Animated as RNAnimated, Easing } from "react-native";
 import Animated, {
   useSharedValue,
   useAnimatedStyle,
@@ -132,6 +132,26 @@ export default function Lobby() {
     lastPushedGameRef.current = key;
     router.push(`/games/${room.game_type}`);
   }, [room?.id, room?.status, room?.game_type, isFocused]);
+
+  // Fallback for non-hosts: if a realtime rooms UPDATE (game start) is ever
+  // missed, poll the room row while we sit focused in the lobby, and refetch
+  // whenever the app returns to the foreground. The navigation effect above
+  // (lastPushedGameRef/isFocused) still guarantees a game is pushed only once.
+  const refreshRoom = useRoomStore((st) => st.refreshRoom);
+  const shouldPoll = isFocused && !isHost && room?.status === "lobby";
+  useEffect(() => {
+    if (!shouldPoll) return;
+    const interval = setInterval(() => {
+      refreshRoom();
+    }, 4000);
+    const sub = AppState.addEventListener("change", (next) => {
+      if (next === "active") refreshRoom();
+    });
+    return () => {
+      clearInterval(interval);
+      sub.remove();
+    };
+  }, [shouldPoll, room?.id, refreshRoom]);
 
   // Only let the ScrollView scroll when its content actually overflows. An
   // always-enabled ScrollView can claim the touch responder on a few px of

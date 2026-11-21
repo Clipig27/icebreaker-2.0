@@ -60,12 +60,17 @@ interface RoomState {
   endGame: () => Promise<void>;
   cleanup: () => void;
   clearKicked: () => void;
+  /** Refetch the current room row from the server and apply it (fallback for missed realtime UPDATEs). */
+  refreshRoom: () => Promise<void>;
   _subscribe: (roomId: string) => void;
   _fetchPlayers: (roomId: string) => Promise<void>;
 }
 
 // Monotonic id for _fetchPlayers requests; only the newest response is applied.
 let playersFetchSeq = 0;
+// Bumped by every room fetch and every realtime room UPDATE, so a refetch that
+// was in flight when a newer realtime UPDATE arrived can't overwrite it.
+let roomFetchSeq = 0;
 // Room id in which we've seen our own player row in a fetched list (this session).
 // Kick detection only runs after that, so a snapshot predating our join can't kick us.
 let selfSeenInRoomId: string | null = null;
@@ -411,6 +416,44 @@ export const useRoomStore = create<RoomState>((set, get) => ({
 
   clearKicked: () => set({ kicked: false }),
 
+  refreshRoom: async () => {
+    const roomId = get().room?.id;
+    if (!roomId) return;
+    const requestId = ++roomFetchSeq;
+
+    const { data, error } = await supabase
+      .from("rooms")
+      .select()
+      .eq("id", roomId)
+      .single();
+
+    // A newer fetch or realtime UPDATE superseded this response
+    if (requestId !== roomFetchSeq) return;
+    if (error || !data) {
+      if (error) console.log("[rtdiag] refreshRoom failed:", error.message);
+      return;
+    }
+
+    const current = get().room;
+    // Ignore if we've left (or switched) rooms meanwhile
+    if (!current || current.id !== roomId) return;
+
+    // Never regress to an older row than what we already hold (e.g. an
+    // optimistic local write from mutateGameState/endGame).
+    const curMs = current.updated_at ? Date.parse(current.updated_at) : NaN;
+    const freshMs = data.updated_at ? Date.parse(data.updated_at) : NaN;
+    if (!Number.isNaN(curMs) && !Number.isNaN(freshMs) && freshMs < curMs) return;
+
+    const fresh = data as Room;
+    if (fresh.status !== current.status || fresh.game_type !== current.game_type) {
+      console.log("[rtdiag] refreshRoom picked up change:", current.status, "->", fresh.status, fresh.game_type);
+    }
+    set({
+      room: fresh,
+      isHost: fresh.host_id === useAuthStore.getState().user?.id,
+    });
+  },
+
   // Internal: subscribe to realtime changes
   _subscribe: (roomId: string) => {
     const user = useAuthStore.getState().user;
@@ -423,13 +466,25 @@ export const useRoomStore = create<RoomState>((set, get) => ({
         { event: "UPDATE", schema: "public", table: "rooms", filter: `id=eq.${roomId}` },
         (payload) => {
           const updated = payload.new as Room;
+          // Ignore events for a room we've already left
+          if (get().room?.id !== roomId) return;
+          // Invalidate any in-flight refreshRoom so it can't overwrite this newer row
+          roomFetchSeq++;
           set({
             room: updated,
             isHost: updated.host_id === user?.id,
           });
         }
       )
-      .subscribe();
+      .subscribe((status, err) => {
+        console.log("[rtdiag] room channel", status, err ? String(err) : "");
+        // Any rooms UPDATE emitted before the channel went live (or while it was
+        // reconnecting) is never redelivered, so reconcile from the server on
+        // every SUBSCRIBED (initial join and each reconnect).
+        if (status === "SUBSCRIBED" && get().room?.id === roomId) {
+          get().refreshRoom();
+        }
+      });
 
     // Player changes (join, leave, score updates)
     const playersChannel = supabase
@@ -463,7 +518,8 @@ export const useRoomStore = create<RoomState>((set, get) => ({
           get()._fetchPlayers(roomId);
         }
       )
-      .subscribe((status) => {
+      .subscribe((status, err) => {
+        console.log("[rtdiag] players channel", status, err ? String(err) : "");
         // Changes made between our initial fetch and the channel going live are
         // never delivered, so reconcile once the subscription is actually active
         // (also fires again after a reconnect).
