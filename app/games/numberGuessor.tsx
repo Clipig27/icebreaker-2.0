@@ -12,7 +12,7 @@ import {
   Platform,
   ScrollView,
 } from "react-native";
-import { SafeAreaView } from "react-native-safe-area-context";
+import { SafeAreaView, useSafeAreaInsets } from "react-native-safe-area-context";
 import { useRouter } from "expo-router";
 import { Ionicons } from "@expo/vector-icons";
 import { colors, fonts } from "../../src/theme";
@@ -80,6 +80,7 @@ function formatPenalty(p: number): string {
 
 export default function NumberGuessorScreen() {
   const router = useRouter();
+  const insets = useSafeAreaInsets();
   const { room, players, isHost, mutateGameState } = useRoomStore();
   const { user } = useAuthStore();
 
@@ -517,6 +518,15 @@ export default function NumberGuessorScreen() {
     if (!prompt) return null;
 
     return (
+      // Whole guessing screen avoids the keyboard (not just the input row) so
+      // the layout shrinks and the timer + input row stay above the number pad.
+      // The KAV measures its frame relative to its parent, which sits below the
+      // SafeAreaView top inset, so offset by that inset to get the true overlap.
+      <KeyboardAvoidingView
+        style={styles.keyboardAvoid}
+        behavior={Platform.OS === "ios" ? "padding" : undefined}
+        keyboardVerticalOffset={Platform.OS === "ios" ? insets.top : 0}
+      >
       <Animated.View
         style={[styles.centerContainer, { opacity: fadeAnim, transform: [{ scale: scaleAnim }] }]}
       >
@@ -535,7 +545,16 @@ export default function NumberGuessorScreen() {
         </View>
 
         {/* Question */}
-        <Text style={styles.questionText}>{prompt.text}</Text>
+        {/* Shrinks (and scales its font down) when space is tight, e.g. with
+            the keyboard open on smaller phones, instead of pushing the input
+            row below the keyboard. */}
+        <Text
+          style={[styles.questionText, styles.questionTextShrink]}
+          adjustsFontSizeToFit
+          minimumFontScale={0.6}
+        >
+          {prompt.text}
+        </Text>
 
         {/* Timer bar */}
         <View style={styles.timerBarContainer}>
@@ -564,9 +583,7 @@ export default function NumberGuessorScreen() {
 
         {/* Input */}
         {!hasGuessed ? (
-          <KeyboardAvoidingView
-            behavior={Platform.OS === "ios" ? "padding" : undefined}
-          >
+          <View style={styles.inputRowWrap}>
             <View style={styles.inputRow}>
               <TextInput
                 testID="ng-guess-input"
@@ -596,7 +613,7 @@ export default function NumberGuessorScreen() {
                 <Ionicons name="send" size={20} color={colors.white} />
               </TouchableOpacity>
             </View>
-          </KeyboardAvoidingView>
+          </View>
         ) : myGuessTimedOut ? (
           <View style={styles.submittedCard}>
             <Ionicons name="alert-circle" size={28} color={colors.danger} />
@@ -622,6 +639,7 @@ export default function NumberGuessorScreen() {
           {gs?.guesses?.length ?? 0} / {players.length} guessed
         </Text>
       </Animated.View>
+      </KeyboardAvoidingView>
     );
   };
 
@@ -1087,6 +1105,15 @@ const styles = StyleSheet.create({
     fontSize: 18,
     color: colors.primaryLight,
     marginBottom: 24,
+  },
+  keyboardAvoid: {
+    flex: 1,
+  },
+  questionTextShrink: {
+    flexShrink: 1,
+  },
+  inputRowWrap: {
+    width: "100%",
   },
   inputRow: {
     flexDirection: "row",
