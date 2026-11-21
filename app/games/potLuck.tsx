@@ -502,7 +502,7 @@ export default function PotLuckScreen() {
     const pot = currentQuestion.startingPot;
 
     return (
-      <Animated.View style={[s.content, { opacity: fadeAnim }]}>
+      <Animated.View style={[s.content, s.contentCompact, { opacity: fadeAnim }]}>
         <View style={s.roundHeader}>
           <View style={s.roundBadge}>
             <Text style={s.roundBadgeText}>
@@ -512,13 +512,13 @@ export default function PotLuckScreen() {
           <Text style={s.revealLabel}>Results</Text>
         </View>
 
-        {/* Question recap */}
-        <View style={s.questionCard}>
-          <Text style={s.questionText}>{currentQuestion.text}</Text>
+        {/* Question recap (compact so the whole reveal fits without scrolling) */}
+        <View style={[s.questionCard, s.questionCardCompact]}>
+          <Text style={[s.questionText, s.questionTextCompact]}>{currentQuestion.text}</Text>
         </View>
 
         {/* Choices with correct/incorrect highlighting */}
-        <View style={s.choicesContainer}>
+        <View style={[s.choicesContainer, s.choicesContainerCompact]}>
           {currentQuestion.choices.map((choice, idx) => {
             const isCorrect = idx === currentQuestion.correctIndex;
             const wasMyChoice = myAnswer === idx;
@@ -528,6 +528,7 @@ export default function PotLuckScreen() {
                 key={idx}
                 style={[
                   s.choiceBtn,
+                  s.choiceBtnCompact,
                   isCorrect && s.choiceBtnCorrect,
                   !isCorrect && wasMyChoice && s.choiceBtnWrong,
                 ]}
@@ -535,6 +536,7 @@ export default function PotLuckScreen() {
                 <View
                   style={[
                     s.choiceLetter,
+                    s.choiceLetterCompact,
                     isCorrect && s.choiceLetterCorrect,
                     !isCorrect && wasMyChoice && s.choiceLetterWrong,
                   ]}
@@ -570,7 +572,7 @@ export default function PotLuckScreen() {
         </View>
 
         {/* Player results */}
-        <View style={s.resultsCard}>
+        <View style={[s.resultsCard, s.resultsCardCompact]}>
           <Text style={s.resultsTitle}>Round Results</Text>
           {players.map((p) => {
             const pAnswer = answers[p.user_id];
@@ -585,7 +587,7 @@ export default function PotLuckScreen() {
                     size={20}
                     color={didntAnswer ? colors.gray500 : gotIt ? colors.success : colors.danger}
                   />
-                  <Text style={s.resultName}>{p.username}</Text>
+                  <Text style={s.resultName} numberOfLines={1}>{p.username}</Text>
                 </View>
                 <Text
                   style={[
@@ -640,10 +642,11 @@ export default function PotLuckScreen() {
               style={[s.leaderboardRow, isFirst && s.leaderboardRowFirst]}
             >
               <View style={s.rankContainer}>
-                {rank <= 3 ? (
+                <Text style={s.rankNumber}>#{rank}</Text>
+                {rank <= 3 && (
                   <Ionicons
                     name="medal"
-                    size={22}
+                    size={20}
                     color={
                       rank === 1
                         ? "#FFD700"
@@ -652,8 +655,6 @@ export default function PotLuckScreen() {
                         : "#CD7F32"
                     }
                   />
-                ) : (
-                  <Text style={s.rankNumber}>{rank}</Text>
                 )}
               </View>
               <Text style={[s.leaderboardName, isFirst && s.leaderboardNameFirst]}>
@@ -1128,6 +1129,39 @@ const s = StyleSheet.create({
     flexDirection: "row",
     alignItems: "center",
     gap: 8,
+    flexShrink: 1,
+  },
+  // Reveal-phase compaction: question + 4 options + Round Results must fit
+  // on iPhone 16 (393x852) without scrolling (reveal auto-advances in 4s).
+  contentCompact: {
+    gap: 10,
+  },
+  questionCardCompact: {
+    paddingVertical: 14,
+    paddingHorizontal: 18,
+    borderRadius: 16,
+  },
+  questionTextCompact: {
+    fontSize: 16,
+    lineHeight: 22,
+  },
+  choicesContainerCompact: {
+    gap: 6,
+  },
+  choiceBtnCompact: {
+    paddingVertical: 9,
+    paddingHorizontal: 14,
+    borderRadius: 12,
+  },
+  choiceLetterCompact: {
+    width: 28,
+    height: 28,
+    borderRadius: 8,
+  },
+  resultsCardCompact: {
+    paddingVertical: 12,
+    paddingHorizontal: 16,
+    gap: 6,
   },
   resultName: {
     fontFamily: fonts.semibold,
@@ -1183,8 +1217,10 @@ const s = StyleSheet.create({
     borderColor: colors.warning + "30",
   },
   rankContainer: {
-    width: 30,
+    width: 64,
+    flexDirection: "row",
     alignItems: "center",
+    gap: 4,
   },
   rankNumber: {
     fontFamily: fonts.bold,
