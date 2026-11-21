@@ -628,28 +628,35 @@ export default function PieChartsScreen() {
                   </View>
                 ))}
               </View>
-
-              {/* Back to lobby */}
-              {isHost && (
-                <Pressable style={s.primaryBtn} onPress={handleBackToLobby}>
-                  <Ionicons
-                    name="arrow-back"
-                    size={20}
-                    color={colors.white}
-                  />
-                  <Text style={s.primaryBtnText}>Back to Lobby</Text>
-                </Pressable>
-              )}
-              {!isHost && (
-                <HostWaitingPill
-                  label="Waiting for host to return to lobby..."
-                  style={{ marginTop: 0, marginBottom: 12 }}
-                />
-              )}
             </>
           )}
         </Animated.View>
       </ScrollView>
+
+      {/* Back to lobby — pinned footer so it is never pushed below the fold */}
+      {phase === "game-over" && (
+        <View style={s.footer}>
+          {isHost && (
+            <Pressable
+              style={[s.primaryBtn, { marginBottom: 0 }]}
+              onPress={handleBackToLobby}
+            >
+              <Ionicons
+                name="arrow-back"
+                size={20}
+                color={colors.white}
+              />
+              <Text style={s.primaryBtnText}>Back to Lobby</Text>
+            </Pressable>
+          )}
+          {!isHost && (
+            <HostWaitingPill
+              label="Waiting for host to return to lobby..."
+              style={{ marginTop: 0, marginBottom: 0 }}
+            />
+          )}
+        </View>
+      )}
     </SafeAreaView>
   );
 }
@@ -771,6 +778,12 @@ const s = StyleSheet.create({
     paddingHorizontal: 24,
     paddingTop: 20,
     paddingBottom: 40,
+  },
+  footer: {
+    paddingHorizontal: 24,
+    paddingTop: 12,
+    paddingBottom: 12,
+    backgroundColor: colors.background,
   },
 
   // Timer

@@ -667,23 +667,28 @@ export default function PotLuckScreen() {
             );
           })}
         </View>
-
-        {isHost && (
-          <Pressable style={s.lobbyBtn} onPress={handleBackToLobby}>
-            <Ionicons name="arrow-back" size={20} color={colors.white} />
-            <Text style={s.lobbyBtnText}>Back to Lobby</Text>
-          </Pressable>
-        )}
-
-        {!isHost && (
-          <HostWaitingPill
-            label="Waiting for host to return to lobby..."
-            style={{ marginTop: 8 }}
-          />
-        )}
       </Animated.View>
     );
   };
+
+  // Pinned below the ScrollView so it is never pushed below the fold.
+  const renderGameOverFooter = () => (
+    <View style={s.footer}>
+      {isHost && (
+        <Pressable style={[s.lobbyBtn, { marginTop: 0 }]} onPress={handleBackToLobby}>
+          <Ionicons name="arrow-back" size={20} color={colors.white} />
+          <Text style={s.lobbyBtnText}>Back to Lobby</Text>
+        </Pressable>
+      )}
+
+      {!isHost && (
+        <HostWaitingPill
+          label="Waiting for host to return to lobby..."
+          style={{ marginTop: 0 }}
+        />
+      )}
+    </View>
+  );
 
   // ── Main Render ───────────────────────────────────────────────────────
 
@@ -761,6 +766,7 @@ export default function PotLuckScreen() {
         {phase === "reveal" && renderReveal()}
         {phase === "game-over" && renderGameOver()}
       </ScrollView>
+      {phase === "game-over" && renderGameOverFooter()}
     </SafeAreaView>
   );
 }
@@ -926,6 +932,12 @@ const s = StyleSheet.create({
   },
   content: {
     gap: 16,
+  },
+  footer: {
+    paddingHorizontal: 20,
+    paddingTop: 12,
+    paddingBottom: 12,
+    backgroundColor: colors.background,
   },
 
   // ── Round Header ──
