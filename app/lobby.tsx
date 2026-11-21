@@ -1,4 +1,4 @@
-import { useEffect, useRef } from "react";
+import { useEffect, useRef, useState } from "react";
 import { View, Text, Pressable, ScrollView, StyleSheet, Alert, Animated as RNAnimated, Easing } from "react-native";
 import Animated, {
   useSharedValue,
@@ -14,8 +14,6 @@ import * as Clipboard from "expo-clipboard";
 import { colors, fonts } from "../src/theme";
 import { useRoomStore, GameType } from "../src/stores/roomStore";
 import SkiaBackground from "../src/components/SkiaBackground";
-
-const AnimatedPressable = Animated.createAnimatedComponent(Pressable);
 
 const GAMES: { id: GameType; name: string; icon: string; color: string }[] = [
   { id: "talentShow", name: "Nobody's Got Talent", icon: "star", color: "#F59E0B" },
@@ -58,7 +56,15 @@ function PulsingDot() {
   );
 }
 
-// Game card with press scale animation
+// Generous retention area so a slightly moving finger (or a card that shifts a
+// few px under it) doesn't cancel the press before release.
+const CARD_PRESS_RETENTION = { top: 40, bottom: 40, left: 40, right: 40 };
+const CARD_HIT_SLOP = { top: 4, bottom: 4, left: 4, right: 4 };
+
+// Game card with press scale animation.
+// The scale is applied to an inner Animated.View, not to the Pressable itself,
+// so the touchable's own frame (which Pressability measures on press-in to
+// decide whether the release is still "inside") never shrinks or moves.
 function GameCard({ game, onPress }: { game: typeof GAMES[number]; onPress: () => void }) {
   const scale = useSharedValue(1);
   const animStyle = useAnimatedStyle(() => ({
@@ -66,13 +72,16 @@ function GameCard({ game, onPress }: { game: typeof GAMES[number]; onPress: () =
   }));
 
   return (
-    <AnimatedPressable
-      style={[s.gameRow, animStyle]}
+    <Pressable
+      style={s.gameCardTouch}
+      hitSlop={CARD_HIT_SLOP}
+      pressRetentionOffset={CARD_PRESS_RETENTION}
       onPressIn={() => {
         console.log("[tapdiag] lobby card onPressIn", game.id);
         scale.value = withSpring(0.97, { damping: 15, stiffness: 300 });
       }}
       onPressOut={() => {
+        console.log("[tapdiag] lobby card onPressOut", game.id);
         scale.value = withSpring(1, { damping: 15, stiffness: 300 });
       }}
       onPress={() => {
@@ -81,12 +90,14 @@ function GameCard({ game, onPress }: { game: typeof GAMES[number]; onPress: () =
         onPress();
       }}
     >
-      <View style={[s.gameIcon, { backgroundColor: game.color + "20" }]}>
-        <Ionicons name={game.icon as any} size={20} color={game.color} />
-      </View>
-      <Text style={s.gameName}>{game.name}</Text>
-      <Ionicons name="play" size={18} color={colors.primaryLight} />
-    </AnimatedPressable>
+      <Animated.View style={[s.gameRow, animStyle]}>
+        <View style={[s.gameIcon, { backgroundColor: game.color + "20" }]}>
+          <Ionicons name={game.icon as any} size={20} color={game.color} />
+        </View>
+        <Text style={s.gameName}>{game.name}</Text>
+        <Ionicons name="play" size={18} color={colors.primaryLight} />
+      </Animated.View>
+    </Pressable>
   );
 }
 
@@ -121,6 +132,24 @@ export default function Lobby() {
     lastPushedGameRef.current = key;
     router.push(`/games/${room.game_type}`);
   }, [room?.id, room?.status, room?.game_type, isFocused]);
+
+  // Only let the ScrollView scroll when its content actually overflows. An
+  // always-enabled ScrollView can claim the touch responder on a few px of
+  // finger movement, which cancels a game-card press (onPressIn, no onPress).
+  const [viewportH, setViewportH] = useState(0);
+  const [contentH, setContentH] = useState(0);
+  const canScroll = viewportH > 0 && contentH > viewportH + 1;
+
+  // Player-row entering animation only plays for rows present on the lobby's
+  // first render. Realtime refetches/reconciles (e.g. on returning from a game)
+  // must not remount/replay animations that shift content under a pressing finger.
+  const enteringEnabledRef = useRef(true);
+  useEffect(() => {
+    const t = setTimeout(() => {
+      enteringEnabledRef.current = false;
+    }, 1000);
+    return () => clearTimeout(t);
+  }, []);
 
   if (!room) return null;
 
@@ -190,7 +219,13 @@ export default function Lobby() {
         <View style={{ width: 24 }} />
       </View>
 
-      <ScrollView style={s.scroll} contentContainerStyle={s.scrollContent}>
+      <ScrollView
+        style={s.scroll}
+        contentContainerStyle={s.scrollContent}
+        scrollEnabled={canScroll}
+        onLayout={(e) => setViewportH(e.nativeEvent.layout.height)}
+        onContentSizeChange={(_w, h) => setContentH(h)}
+      >
       <View style={s.section}>
         <Text style={s.sectionTitle}>
           Players ({players.length})
@@ -198,7 +233,11 @@ export default function Lobby() {
         {players.map((item, index) => (
             <Animated.View
               key={item.id}
-              entering={FadeInDown.delay(index * 80).duration(400).springify()}
+              entering={
+                enteringEnabledRef.current
+                  ? FadeInDown.delay(index * 80).duration(400).springify()
+                  : undefined
+              }
               style={s.playerRow}
             >
               <PulsingDot />
@@ -288,13 +327,13 @@ const s = StyleSheet.create({
     borderRadius: 6,
     overflow: "hidden",
   },
+  gameCardTouch: { marginBottom: 8 },
   gameRow: {
     flexDirection: "row",
     alignItems: "center",
     backgroundColor: colors.surface,
     borderRadius: 12,
     padding: 14,
-    marginBottom: 8,
     borderWidth: 1,
     borderColor: colors.border,
   },
