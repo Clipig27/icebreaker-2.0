@@ -19,6 +19,7 @@ import { useRoomStore } from "../../src/stores/roomStore";
 import { useAuthStore } from "../../src/stores/authStore";
 import { TALENT_SHOW_PROMPTS } from "../../src/data/talentShow";
 import { competitionRanks, joinNames } from "../../src/utils/rank";
+import HostWaitingPill from "../../src/components/HostWaitingPill";
 
 // ---------------------------------------------------------------------------
 // Types
@@ -690,9 +691,10 @@ export default function TalentShowScreen() {
         )}
 
         {!isHost && (
-          <View style={styles.waitingFooter}>
-            <Text style={styles.waitingText}>Waiting for host to return to lobby...</Text>
-          </View>
+          <HostWaitingPill
+            label="Waiting for host to return to lobby..."
+            style={{ marginTop: 0, marginBottom: 20 }}
+          />
         )}
       </SafeAreaView>
     );
@@ -1056,8 +1058,4 @@ const styles = StyleSheet.create({
   },
 
   // ---- Footer ----
-  waitingFooter: {
-    paddingVertical: 20,
-    paddingHorizontal: 20,
-  },
 });

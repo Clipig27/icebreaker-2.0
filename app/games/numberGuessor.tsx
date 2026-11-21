@@ -20,6 +20,7 @@ import { useRoomStore } from "../../src/stores/roomStore";
 import { useAuthStore } from "../../src/stores/authStore";
 import { NUMBER_GUESSOR_PROMPTS } from "../../src/data/numberGuessor";
 import { competitionRanks, joinNames, ordinal } from "../../src/utils/rank";
+import HostWaitingPill from "../../src/components/HostWaitingPill";
 
 // ---------------------------------------------------------------------------
 // Types
@@ -824,12 +825,7 @@ export default function NumberGuessorScreen() {
           </TouchableOpacity>
         )}
 
-        {!isHost && (
-          <View style={styles.waitingCard}>
-            <Ionicons name="hourglass-outline" size={20} color={colors.gray400} />
-            <Text style={styles.waitingText}>Waiting for host...</Text>
-          </View>
-        )}
+        {!isHost && <HostWaitingPill />}
       </Animated.View>
     );
   };

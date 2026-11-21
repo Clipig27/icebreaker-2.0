@@ -7,6 +7,7 @@ import { colors, fonts } from "../../src/theme";
 import { useRoomStore } from "../../src/stores/roomStore";
 import { useAuthStore } from "../../src/stores/authStore";
 import { competitionRanks } from "../../src/utils/rank";
+import HostWaitingPill from "../../src/components/HostWaitingPill";
 
 // ---------------------------------------------------------------------------
 // Categories
@@ -669,10 +670,7 @@ export default function BlindRankingScreen() {
               <Text style={s.submitBtnText}>Back to Lobby</Text>
             </Pressable>
           ) : (
-            <View style={s.waitingBox}>
-              <Ionicons name="hourglass-outline" size={20} color={colors.primaryLight} />
-              <Text style={s.waitingText}>Waiting for host...</Text>
-            </View>
+            <HostWaitingPill style={{ marginTop: 0 }} />
           )}
         </View>
       </SafeAreaView>

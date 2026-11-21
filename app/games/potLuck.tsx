@@ -15,6 +15,7 @@ import { useRoomStore } from "../../src/stores/roomStore";
 import { useAuthStore } from "../../src/stores/authStore";
 import { DEFAULT_QUESTIONS, PotLuckQuestion } from "../../src/data/potLuck";
 import { competitionRanks, joinNames } from "../../src/utils/rank";
+import HostWaitingPill from "../../src/components/HostWaitingPill";
 
 // ─── Constants ──────────────────────────────────────────────────────────────
 const TOTAL_ROUNDS = 10;
@@ -675,7 +676,10 @@ export default function PotLuckScreen() {
         )}
 
         {!isHost && (
-          <Text style={s.waitingHostText}>Waiting for host to return to lobby...</Text>
+          <HostWaitingPill
+            label="Waiting for host to return to lobby..."
+            style={{ marginTop: 8 }}
+          />
         )}
       </Animated.View>
     );
@@ -1209,12 +1213,5 @@ const s = StyleSheet.create({
     fontFamily: fonts.semibold,
     fontSize: 16,
     color: colors.white,
-  },
-  waitingHostText: {
-    fontFamily: fonts.medium,
-    fontSize: 14,
-    color: colors.gray500,
-    textAlign: "center",
-    marginTop: 8,
   },
 });

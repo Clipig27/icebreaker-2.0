@@ -16,6 +16,7 @@ import { useRoomStore, Player } from "../../src/stores/roomStore";
 import { useAuthStore } from "../../src/stores/authStore";
 import { PIE_CHARTS_PROMPTS } from "../../src/data/pieCharts";
 import { competitionRanks, joinNames } from "../../src/utils/rank";
+import HostWaitingPill from "../../src/components/HostWaitingPill";
 
 // ─── Constants ───────────────────────────────────────────────────────────────
 
@@ -640,9 +641,10 @@ export default function PieChartsScreen() {
                 </Pressable>
               )}
               {!isHost && (
-                <Text style={s.waitingText}>
-                  Waiting for host to return to lobby...
-                </Text>
+                <HostWaitingPill
+                  label="Waiting for host to return to lobby..."
+                  style={{ marginTop: 0, marginBottom: 12 }}
+                />
               )}
             </>
           )}
