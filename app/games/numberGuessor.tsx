@@ -89,6 +89,8 @@ export default function NumberGuessorScreen() {
   // Local UI state
   const [guessText, setGuessText] = useState("");
   const [hasGuessed, setHasGuessed] = useState(false);
+  // True when this client's hasGuessed came from the timer auto-submit.
+  const [autoTimedOut, setAutoTimedOut] = useState(false);
   const [secondsLeft, setSecondsLeft] = useState(TIMER_SECONDS);
   const [selectedRounds, setSelectedRounds] = useState<number>(10);
 
@@ -122,6 +124,7 @@ export default function NumberGuessorScreen() {
     if (phase === "guessing") {
       setGuessText("");
       setHasGuessed(false);
+      setAutoTimedOut(false);
       setSecondsLeft(TIMER_SECONDS);
       guessStartRef.current = Date.now();
 
@@ -191,6 +194,15 @@ export default function NumberGuessorScreen() {
     }
   }, [gs?.guesses, phase, user]);
 
+  // This player's recorded entry decides the confirmation state; fall back to
+  // the local auto-timeout flag until the server state includes our entry.
+  const myRecordedGuess = user
+    ? (gs?.guesses as Guess[] | undefined)?.find((g) => g.userId === user.id)
+    : undefined;
+  const myGuessTimedOut = myRecordedGuess
+    ? myRecordedGuess.timedOut || myRecordedGuess.value === null
+    : autoTimedOut;
+
   // -------------------------------------------------------------------------
   // Host auto-advance: all guesses in -> move to reveal
   // -------------------------------------------------------------------------
@@ -238,6 +250,7 @@ export default function NumberGuessorScreen() {
       if (!gs || !user || hasGuessed) return;
 
       setHasGuessed(true);
+      if (timedOut) setAutoTimedOut(true);
 
       const elapsed = Date.now() - (gs.roundStartedAt || guessStartRef.current);
       const value = timedOut ? null : Math.max(0, Math.min(100, parseInt(guessText, 10) || 0));
@@ -583,6 +596,16 @@ export default function NumberGuessorScreen() {
               </TouchableOpacity>
             </View>
           </KeyboardAvoidingView>
+        ) : myGuessTimedOut ? (
+          <View style={styles.submittedCard}>
+            <Ionicons name="alert-circle" size={28} color={colors.danger} />
+            <Text style={[styles.submittedText, { color: colors.danger }]}>
+              Time's up - no guess
+            </Text>
+            <Text style={styles.submittedSub}>
+              Waiting for other players...
+            </Text>
+          </View>
         ) : (
           <View style={styles.submittedCard}>
             <Ionicons name="checkmark-circle" size={28} color={colors.success} />
