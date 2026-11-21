@@ -1,5 +1,5 @@
 import { useEffect, useRef } from "react";
-import { View, Text, Pressable, FlatList, StyleSheet, Alert, Animated as RNAnimated, Easing } from "react-native";
+import { View, Text, Pressable, ScrollView, StyleSheet, Alert, Animated as RNAnimated, Easing } from "react-native";
 import Animated, {
   useSharedValue,
   useAnimatedStyle,
@@ -190,15 +190,14 @@ export default function Lobby() {
         <View style={{ width: 24 }} />
       </View>
 
+      <ScrollView style={s.scroll} contentContainerStyle={s.scrollContent}>
       <View style={s.section}>
         <Text style={s.sectionTitle}>
           Players ({players.length})
         </Text>
-        <FlatList
-          data={players}
-          keyExtractor={(p) => p.id}
-          renderItem={({ item, index }) => (
+        {players.map((item, index) => (
             <Animated.View
+              key={item.id}
               entering={FadeInDown.delay(index * 80).duration(400).springify()}
               style={s.playerRow}
             >
@@ -214,9 +213,7 @@ export default function Lobby() {
                 </Pressable>
               )}
             </Animated.View>
-          )}
-          style={s.playerList}
-        />
+        ))}
       </View>
 
       {isHost && (
@@ -237,6 +234,7 @@ export default function Lobby() {
           <Text style={s.waitingText}>Waiting for host to start...</Text>
         </View>
       )}
+      </ScrollView>
     </SafeAreaView>
   );
 }
@@ -257,7 +255,9 @@ const s = StyleSheet.create({
   code: { fontFamily: fonts.extrabold, fontSize: 32, color: colors.primary, letterSpacing: 6 },
   section: { paddingHorizontal: 24, marginBottom: 24 },
   sectionTitle: { fontFamily: fonts.semibold, fontSize: 16, color: colors.gray400, marginBottom: 12 },
-  playerList: { maxHeight: 200 },
+  scroll: { flex: 1 },
+  // flexGrow lets the non-host "waiting" block (flex: 1) still fill the leftover space
+  scrollContent: { flexGrow: 1, paddingBottom: 24 },
   playerRow: {
     flexDirection: "row",
     alignItems: "center",
