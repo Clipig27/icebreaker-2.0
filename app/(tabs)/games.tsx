@@ -6,11 +6,11 @@ import * as Haptics from "expo-haptics";
 import { colors, fonts } from "../../src/theme";
 
 const GAMES = [
-  { id: "talentShow", name: "Nobody's Got Talent", desc: "Write unique answers — duplicates lose!", icon: "star" as const, color: "#F59E0B" },
-  { id: "numberGuessor", name: "1 to 100", desc: "Guess closest to the hidden number", icon: "text" as const, color: "#06B6D4", iconText: "100" },
+  { id: "talentShow", name: "Nobody's Got Talent", desc: "Perform prompts — dodge the buzzers, win the finals!", icon: "star" as const, color: "#F59E0B" },
+  { id: "numberGuessor", name: "1 to 100", desc: "Guess numeric trivia fast — lowest penalty wins", icon: "text" as const, color: "#06B6D4", iconText: "100" },
   { id: "pieCharts", name: "Pie Charts", desc: "Who's most likely to...?", icon: "pie-chart" as const, color: "#EF4444" },
   { id: "potLuck", name: "Pot Luck", desc: "Trivia with risk vs reward", icon: "trophy" as const, color: "#10B981" },
-  { id: "blindRanking", name: "Blind Ranking", desc: "Rank items and match the group", icon: "list" as const, color: "#A78BFA" },
+  { id: "blindRanking", name: "Blind Ranking", desc: "Rank items blind, then vote for the best list", icon: "list" as const, color: "#A78BFA" },
 ];
 
 function FeaturedCard() {

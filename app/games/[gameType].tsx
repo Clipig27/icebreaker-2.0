@@ -11,13 +11,13 @@ const GAME_INFO: Record<string, { name: string; icon: string; color: string; des
     name: "Nobody's Got Talent",
     icon: "star",
     color: "#F59E0B",
-    description: "Write unique answers to the prompt. If someone else writes the same thing, you both lose points!",
+    description: "Everyone performs a prompt while the audience buzzes or golden buzzes. Survive the majority buzz, make the top 2 in the semifinals, then win the vote in the finals!",
   },
   numberGuessor: {
     name: "1 to 100",
     icon: "calculator",
     color: "#06B6D4",
-    description: "A hidden number between 1-100 is chosen. Guess the closest without going over! Speed matters.",
+    description: "Each round is a trivia question with a numeric answer. Your penalty is how far off you are plus seconds taken — lowest total penalty wins!",
   },
   pieCharts: {
     name: "Pie Charts",
@@ -35,7 +35,7 @@ const GAME_INFO: Record<string, { name: string; icon: string; color: string; des
     name: "Blind Ranking",
     icon: "list",
     color: "#A78BFA",
-    description: "Secretly rank items from a category. Score points by matching the group consensus!",
+    description: "Items from a category appear one at a time — lock each into a rank slot without seeing what's next. Compare lists side-by-side, then vote for the best one!",
   },
 };
 
