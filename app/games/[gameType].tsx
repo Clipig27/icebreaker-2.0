@@ -26,10 +26,10 @@ const GAME_INFO: Record<string, { name: string; icon: string; color: string; des
     description: "Vote on 'who's most likely to...' questions. See the results as a pie chart!",
   },
   potLuck: {
-    name: "Pot Luck",
+    name: "Smarty Pot",
     icon: "trophy",
     color: "#10B981",
-    description: "Answer trivia questions. The pot grows each round — risk it all or play it safe!",
+    description: "Take turns answering trivia. Skip to grow the pot, answer to win it — but get it wrong and you lose!",
   },
   blindRanking: {
     name: "Blind Ranking",

@@ -1,79 +1,100 @@
-import { useEffect, useState, useRef, useCallback } from "react";
-import { View, Text, Pressable, StyleSheet, ScrollView, Dimensions } from "react-native";
-import { SafeAreaView } from "react-native-safe-area-context";
+import React, { useState, useEffect, useRef, useCallback } from "react";
+import {
+  View,
+  Text,
+  TouchableOpacity,
+  TextInput,
+  StyleSheet,
+  SafeAreaView,
+  ScrollView,
+  ActivityIndicator,
+  Dimensions,
+  KeyboardAvoidingView,
+  Platform,
+  Alert,
+} from "react-native";
+import AsyncStorage from "@react-native-async-storage/async-storage";
 import { useRouter } from "expo-router";
 import { Ionicons } from "@expo/vector-icons";
 import { colors, fonts } from "../../src/theme";
 import { useRoomStore } from "../../src/stores/roomStore";
 import { useAuthStore } from "../../src/stores/authStore";
-import { competitionRanks } from "../../src/utils/rank";
 import HostWaitingPill from "../../src/components/HostWaitingPill";
+import GameHeader from "../../src/components/GameHeader";
+import { competitionRanks } from "../../src/utils/rank";
 
 // ---------------------------------------------------------------------------
-// Categories
+// Types
 // ---------------------------------------------------------------------------
 
-const CATEGORIES = [
-  {
-    category: "THE FOOD DEBATE",
-    emoji: "\u{1F355}",
-    name: "Best Pizza Toppings",
-    items: ["Pepperoni", "Mushrooms", "Pineapple", "Sausage", "Olives"],
-  },
-  {
-    category: "ANIMAL KINGDOM",
-    emoji: "\u{1F43E}",
-    name: "Scariest Animals",
-    items: ["Shark", "Spider", "Snake", "Bear", "Crocodile"],
-  },
-  {
-    category: "FANTASY POWERS",
-    emoji: "\u{26A1}",
-    name: "Best Superpowers",
-    items: ["Flying", "Invisibility", "Super Strength", "Teleportation", "Time Travel"],
-  },
-];
+type Phase = "intro" | "setup" | "playing" | "reveal" | "voting" | "vote-results" | "game-over";
 
-const TOTAL_ROUNDS = 3;
-const ROUND_SECONDS = 30;
-const ITEM_COUNT = 5;
+type GameState = {
+  phase: Phase;
+  game: "blindRanking";
+  categoryKey: string;
+  categoryLabel: string;
+  categoryEmoji: string;
+  size: 5 | 10;
+  draw: string[]; // items in display order
+  currentRound: number; // 0-indexed, which item is being placed
+  placements: Record<string, (string | null)[]>; // userId -> slot array
+  roundSubmitted: string[]; // who has placed for current round
+  rankings: Record<string, string[]>;
+  // Voting
+  votes: Record<string, string>; // voterId -> voteeId (whose list they liked best)
+  votedPlayerIds: string[];
+  // Series
+  totalGames: number;
+  currentGame: number; // 1-indexed
+  brScores: Record<string, number>;
+};
+
+// ---------------------------------------------------------------------------
+// Constants
+// ---------------------------------------------------------------------------
+
+const ACCENT = "#e8927c";
 const { width: SCREEN_WIDTH } = Dimensions.get("window");
+
+// ---------------------------------------------------------------------------
+// Banks (18 categories, 50 items each)
+// ---------------------------------------------------------------------------
+
+const BANKS: Record<string, { label: string; emoji: string; items: string[] }> = {
+  artists: { label: "Legendary pop artists", emoji: "\u2605", items: ["Michael Jackson","Madonna","Prince","Whitney Houston","Beyonce","Mariah Carey","Elton John","David Bowie","Stevie Wonder","Freddie Mercury","Lady Gaga","Rihanna","Adele","Bruno Mars","Taylor Swift","Janet Jackson","George Michael","Tina Turner","Cher","Diana Ross","Britney Spears","Justin Timberlake","Usher","Katy Perry","Christina Aguilera","Elvis Presley","The Beatles","Stevie Nicks","Dolly Parton","Lionel Richie","Phil Collins","Billy Joel","Paul McCartney","Donna Summer","Aretha Franklin","Marvin Gaye","Sade","Annie Lennox","Kate Bush","Robbie Williams","Shakira","Celine Dion","Barbra Streisand","Gloria Estefan","Sting","Boy George","Cyndi Lauper","Lenny Kravitz","Seal","Sam Smith"] },
+  sports: { label: "Sports to watch live", emoji: "\u25C8", items: ["Soccer","Basketball","American Football","Tennis","Boxing","MMA","Baseball","Ice Hockey","Formula 1","Golf","Cricket","Rugby","Volleyball","Table Tennis","Badminton","Swimming","Track & Field","Gymnastics","Figure Skating","Skiing","Snowboarding","Surfing","Skateboarding","Cycling","Marathon","Wrestling","Fencing","Archery","Rowing","Sailing","Horse Racing","Darts","Snooker","Bowling","Climbing","Beach Volleyball","Handball","Water Polo","Diving","Curling","Lacrosse","Field Hockey","Sumo","Polo","Squash","Triathlon","Motocross","Drag Racing","Esports","Bull Riding"] },
+  fastfood: { label: "Fast food items", emoji: "\u25A3", items: ["Big Mac","Chicken nuggets","French fries","Whopper","Chicken sandwich","Cheeseburger","Tacos","Burrito","Pizza slice","Hot dog","Onion rings","Mozzarella sticks","Chicken wings","Quesadilla","Fish sandwich","Milkshake","Soft serve cone","Apple pie","Curly fries","Loaded nachos","Spicy chicken sandwich","Double cheeseburger","Bacon burger","Chili cheese fries","Breakfast burrito","Hash browns","Egg McMuffin","Pancakes","Waffle fries","Crispy chicken tenders","Sliders","Corn dog","Cheese pizza","Pepperoni pizza","Garlic bread","Cinnamon rolls","Donuts","Frozen lemonade","Iced coffee","Sweet tea","Coleslaw","Mac and cheese","Mashed potatoes","Biscuits","Jalapeno poppers","Cheese curds","Poutine","Churros","Soft pretzel","Fountain soda"] },
+  movies: { label: "Movies to rewatch forever", emoji: "\u25B6", items: ["The Godfather","Pulp Fiction","The Dark Knight","Forrest Gump","Inception","The Matrix","Goodfellas","Fight Club","Shawshank Redemption","Interstellar","Gladiator","Titanic","Jurassic Park","Back to the Future","Star Wars","Lord of the Rings","Harry Potter","The Lion King","Toy Story","Finding Nemo","Avengers","Spider-Man","Joker","Parasite","Whiplash","La La Land","The Departed","Django Unchained","Inglourious Basterds","No Country for Old Men","Mad Max: Fury Road","Blade Runner","Alien","The Shining","Jaws","Rocky","Die Hard","Terminator 2","The Truman Show","Eternal Sunshine","Good Will Hunting","Catch Me If You Can","The Wolf of Wall Street","Scarface","Casino","Heat","Se7en","The Silence of the Lambs","Saving Private Ryan","Schindlers List"] },
+  travel: { label: "Dream travel destinations", emoji: "\u2708", items: ["Tokyo","Paris","Rome","New York","Bali","Santorini","Maldives","Iceland","Kyoto","Barcelona","London","Dubai","Sydney","Cape Town","Rio de Janeiro","Bangkok","Amsterdam","Venice","Prague","Marrakech","Istanbul","Singapore","Hawaii","Swiss Alps","Patagonia","Banff","Machu Picchu","Petra","Great Barrier Reef","Serengeti","Norwegian Fjords","Grand Canyon","Vienna","Lisbon","Seoul","Hong Kong","Queenstown","Reykjavik","Florence","Dubrovnik","Phuket","Maui","Tuscany","Greek Islands","Costa Rica","New Zealand","Scotland Highlands","Kenya Safari","Antarctica","Galapagos"] },
+  snacks: { label: "Best snacks of all time", emoji: "\u25C9", items: ["Doritos","Cheetos","Pringles","Oreos","Lays chips","Goldfish","Pretzels","Popcorn","Trail mix","Cheez-Its","Ruffles","Takis","Sour Patch Kids","Skittles","M&Ms","Reeses","Kit Kat","Snickers","Twix","Gummy bears","Beef jerky","String cheese","Granola bars","Fruit snacks","Pop-Tarts","Rice Krispies Treats","Chips Ahoy","Nutter Butters","Animal crackers","Saltines","Ritz crackers","Wheat Thins","Triscuits","Veggie straws","Pita chips","Hummus","Guacamole","Salsa","Nachos","Ice cream sandwich","Push pop","Fruit Roll-Ups","Dunkaroos","Combos","Bugles","Funyuns","Sun Chips","Tostitos","Chex Mix","Hot Fries"] },
+  superpowers: { label: "Superpowers to have", emoji: "\u26A1", items: ["Flight","Invisibility","Super strength","Telepathy","Teleportation","Time travel","Mind reading","Super speed","Healing factor","Telekinesis","Shapeshifting","Immortality","X-ray vision","Invulnerability","Elemental control","Fire control","Ice control","Weather control","Force fields","Phasing through walls","Duplication","Size changing","Animal communication","Plant control","Electricity control","Magnetism","Gravity control","Dream walking","Memory manipulation","Luck manipulation","Probability control","Super intelligence","Photographic memory","Night vision","Echolocation","Underwater breathing","Regeneration","Energy blasts","Sound manipulation","Light manipulation","Portal creation","Astral projection","Empathy","Precognition","Mind control","Technopathy","Super agility","Wall-crawling","Density control","Time stop"] },
+  pizzas: { label: "Pizza toppings", emoji: "\u25B2", items: ["Pepperoni","Mushroom","Sausage","Extra cheese","Bacon","Onion","Green pepper","Black olives","Pineapple","Ham","Jalapeno","Spinach","Tomato","Garlic","Basil","Anchovies","Chicken","Ground beef","Salami","Prosciutto","Artichoke","Sun-dried tomato","Feta","Goat cheese","Ricotta","Arugula","Red onion","Banana pepper","Pesto drizzle","Hot honey","Buffalo chicken","BBQ chicken","Meatball","Capicola","Pancetta","Roasted red pepper","Caramelized onion","Truffle oil","Fresh mozzarella","Parmesan","Cheddar","Corn","Egg","Shrimp","Clams","Eggplant","Zucchini","Pickles","Pulled pork","Chili flakes"] },
+  candy: { label: "Candy & chocolate", emoji: "\u2726", items: ["Reeses Cups","Snickers","Kit Kat","Twix","M&Ms","Hersheys bar","Milky Way","3 Musketeers","Butterfinger","Skittles","Starburst","Sour Patch Kids","Swedish Fish","Gummy bears","Haribo","Sour Worms","Jolly Ranchers","Twizzlers","Red Vines","Nerds","Warheads","Airheads","Laffy Taffy","Tootsie Roll","Werthers","Lindt truffles","Ferrero Rocher","Toblerone","Kinder Bueno","Crunch bar","100 Grand","Almond Joy","Mounds","Whoppers","Junior Mints","Milk Duds","Hot Tamales","Mike and Ike","Dots","Now and Later","Pixy Stix","Pop Rocks","Ring Pop","Push Pop","Candy corn","Peeps","Cadbury Egg","York Peppermint","Andes Mints","Reeses Pieces"] },
+  hobbies: { label: "Hobbies to pick up", emoji: "\u273F", items: ["Photography","Painting","Cooking","Baking","Gardening","Hiking","Rock climbing","Yoga","Meditation","Reading","Writing","Playing guitar","Playing piano","Singing","Dancing","Pottery","Knitting","Woodworking","Calligraphy","Drawing","Chess","Video games","Board games","Cycling","Running","Swimming","Surfing","Skateboarding","Skiing","Fishing","Camping","Birdwatching","Astronomy","Coding","3D printing","Drone flying","Podcasting","DJing","Music production","Film making","Journaling","Scrapbooking","Coin collecting","Wine tasting","Coffee roasting","Home brewing","Bonsai","Origami","Magic tricks","Stand-up comedy"] },
+};
+
+const BANK_KEYS = Object.keys(BANKS);
 
 // ---------------------------------------------------------------------------
 // Helpers
 // ---------------------------------------------------------------------------
 
-/** Compute group consensus: for each item, average the positions across all players. */
-function computeConsensus(
-  rankings: Record<string, string[]>,
-  items: string[]
-): string[] {
-  const playerIds = Object.keys(rankings);
-  if (playerIds.length === 0) return items;
-
-  const avgPosition: Record<string, number> = {};
-  for (const item of items) {
-    let total = 0;
-    for (const pid of playerIds) {
-      const idx = rankings[pid]?.indexOf(item);
-      total += idx !== undefined && idx !== -1 ? idx : ITEM_COUNT - 1;
-    }
-    avgPosition[item] = total / playerIds.length;
+function shuffle<T>(arr: T[]): T[] {
+  const a = [...arr];
+  for (let i = a.length - 1; i > 0; i--) {
+    const j = Math.floor(Math.random() * (i + 1));
+    [a[i], a[j]] = [a[j], a[i]];
   }
-
-  return [...items].sort((a, b) => avgPosition[a] - avgPosition[b]);
+  return a;
 }
 
-/** Score one player's ranking vs consensus. Each item: 5 - |yourPos - consensusPos|. */
-function scoreRanking(playerRanking: string[], consensus: string[]): number {
-  let total = 0;
-  for (const item of consensus) {
-    const pPos = playerRanking.indexOf(item);
-    const cPos = consensus.indexOf(item);
-    total += ITEM_COUNT - Math.abs(pPos - cPos);
-  }
-  return total;
-}
+// ---------------------------------------------------------------------------
+// Custom categories
+// ---------------------------------------------------------------------------
+
+type CustomCategory = { id: string; label: string; items: string[] };
+const CUSTOM_CATEGORIES_KEY = "br_custom_categories";
 
 // ---------------------------------------------------------------------------
 // Component
@@ -83,28 +104,113 @@ export default function BlindRankingScreen() {
   const router = useRouter();
   const { room, players, isHost, mutateGameState, endGame } = useRoomStore();
   const user = useAuthStore((s) => s.user);
-  const userId = user?.id ?? "";
 
-  // Local ranking state (only used during the "ranking" phase)
-  const [selectedOrder, setSelectedOrder] = useState<string[]>([]);
-  const [hasSubmitted, setHasSubmitted] = useState(false);
-  const [timer, setTimer] = useState(ROUND_SECONDS);
-  const timerRef = useRef<ReturnType<typeof setInterval> | null>(null);
+  const gs: GameState | null = room?.game_state ?? null;
+  const phase = gs?.phase ?? null;
+  const myId = user?.id ?? "";
 
-  const gs = room?.game_state ?? {};
-  const phase: string = gs.phase ?? "starting";
-  const round: number = gs.round ?? 0;
-  const categoryIndex: number = gs.categoryIndex ?? 0;
-  const rankings: Record<string, string[]> = gs.rankings ?? {};
-  const roundScores: Record<string, number> = gs.roundScores ?? {};
-  const totalScores: Record<string, number> = gs.totalScores ?? {};
-  const consensus: string[] = gs.consensus ?? [];
-  const category = CATEGORIES[categoryIndex] ?? CATEGORIES[0];
+  // Local setup state (host only)
+  const [selectedCategory, setSelectedCategory] = useState<string | null>(null);
+  const [selectedSize, setSelectedSize] = useState<5 | 10 | null>(null);
+  const [hasPlacedThisRound, setHasPlacedThisRound] = useState(false);
+  const [myVote, setMyVote] = useState<string | null>(null);
 
-  // ------------------------------------------------------------------
-  // Navigate away if room goes back to lobby
-  // ------------------------------------------------------------------
-  // Single place that returns to the lobby (host + players); fires once.
+  // Custom categories (persisted locally)
+  const [customCategories, setCustomCategories] = useState<CustomCategory[]>([]);
+  const [showCustomEditor, setShowCustomEditor] = useState(false);
+  const [editingCategory, setEditingCategory] = useState<CustomCategory | null>(null);
+  const [customName, setCustomName] = useState("");
+  const [customItems, setCustomItems] = useState("");
+
+  useEffect(() => {
+    AsyncStorage.getItem(CUSTOM_CATEGORIES_KEY).then((raw) => {
+      if (raw) setCustomCategories(JSON.parse(raw));
+    }).catch(() => {});
+  }, []);
+
+  const saveCustomCategory = async () => {
+    const items = customItems.split("\n").map((s) => s.trim()).filter(Boolean);
+    if (!customName.trim() || items.length < 5) return;
+    let next: CustomCategory[];
+    if (editingCategory) {
+      next = customCategories.map((c) =>
+        c.id === editingCategory.id ? { ...c, label: customName.trim(), items } : c
+      );
+    } else {
+      const cat: CustomCategory = { id: `c${Date.now()}`, label: customName.trim(), items };
+      next = [...customCategories, cat];
+    }
+    setCustomCategories(next);
+    await AsyncStorage.setItem(CUSTOM_CATEGORIES_KEY, JSON.stringify(next));
+    setCustomName("");
+    setCustomItems("");
+    setEditingCategory(null);
+    setShowCustomEditor(false);
+  };
+
+  const deleteCustomCategory = async (id: string) => {
+    Alert.alert("Delete Category", "Are you sure?", [
+      { text: "Cancel", style: "cancel" },
+      {
+        text: "Delete",
+        style: "destructive",
+        onPress: async () => {
+          const next = customCategories.filter((c) => c.id !== id);
+          setCustomCategories(next);
+          await AsyncStorage.setItem(CUSTOM_CATEGORIES_KEY, JSON.stringify(next));
+        },
+      },
+    ]);
+  };
+
+  const startEditCategory = (cat: CustomCategory) => {
+    setEditingCategory(cat);
+    setCustomName(cat.label);
+    setCustomItems(cat.items.join("\n"));
+    setShowCustomEditor(true);
+  };
+
+  // Reset placed flag when round advances
+  useEffect(() => {
+    if (!gs || gs.phase !== "playing") return;
+    setHasPlacedThisRound((gs.roundSubmitted ?? []).includes(myId));
+  }, [gs?.currentRound, gs?.roundSubmitted?.length, gs?.phase]);
+
+  // Reset vote when phase changes
+  useEffect(() => {
+    if (gs?.phase !== "voting") setMyVote(null);
+  }, [gs?.phase]);
+
+  // Host: initialise game on mount
+  useEffect(() => {
+    if (!isHost || !room) return;
+    if (gs && gs.game === "blindRanking" && gs.phase && (gs.phase as string) !== "starting") return;
+
+    const initialState: GameState = {
+      phase: "intro",
+      game: "blindRanking",
+      categoryKey: "",
+      categoryLabel: "",
+      categoryEmoji: "",
+      size: 5,
+      draw: [],
+      currentRound: 0,
+      placements: {},
+      roundSubmitted: [],
+      rankings: {},
+      votes: {},
+      votedPlayerIds: [],
+      totalGames: 1,
+      currentGame: 1,
+      brScores: Object.fromEntries(players.map((p) => [p.user_id, 0])),
+    };
+    mutateGameState((cur) => {
+      if (cur?.phase && cur.phase !== "starting") return null;
+      return initialState;
+    });
+  }, [isHost, room?.id]);
+
+  // Navigate away if room returns to lobby
   const navigatedBackRef = useRef(false);
   useEffect(() => {
     if (navigatedBackRef.current) return;
@@ -115,1061 +221,880 @@ export default function BlindRankingScreen() {
     }
   }, [room?.status]);
 
-  // ------------------------------------------------------------------
-  // Host: initialize game on mount if phase is "starting"
-  // ------------------------------------------------------------------
+  // Only players still in the room count (a leaver's submission is ignored).
+  const countInRoom = (ids: string[] | undefined) =>
+    (ids ?? []).filter((id) => players.some((p) => p.user_id === id)).length;
+
+  // Host: auto-advance round when all placed
   useEffect(() => {
-    if (isHost && phase === "starting") {
-      const initScores: Record<string, number> = {};
-      players.forEach((p) => {
-        initScores[p.user_id] = 0;
-      });
-      // CAS on the fresh state: never clobber a newer phase, and never write
-      // into a room endGame() already reset (game_state {} also reads as "starting").
-      mutateGameState((cur) => {
-        if (cur?.phase && cur.phase !== "starting") return null;
-        return {
-          phase: "intro",
-          round: 1,
-          categoryIndex: 0,
-          rankings: {},
-          roundScores: {},
-          totalScores: initScores,
-          consensus: [],
-        };
-      }).then((ok) => console.log("[tapdiag] blindRanking host init write:", ok));
-    }
-  }, [isHost, phase]);
-
-  // ------------------------------------------------------------------
-  // Reset local state when a new ranking phase begins
-  // ------------------------------------------------------------------
-  useEffect(() => {
-    if (phase === "ranking") {
-      setSelectedOrder([]);
-      setHasSubmitted(false);
-      setTimer(ROUND_SECONDS);
-    }
-  }, [phase, round]);
-
-  // ------------------------------------------------------------------
-  // Countdown timer during ranking phase
-  // ------------------------------------------------------------------
-  useEffect(() => {
-    if (phase !== "ranking") {
-      if (timerRef.current) clearInterval(timerRef.current);
-      return;
-    }
-
-    timerRef.current = setInterval(() => {
-      setTimer((prev) => {
-        if (prev <= 1) {
-          if (timerRef.current) clearInterval(timerRef.current);
-          // Auto-submit if not yet submitted
-          return 0;
-        }
-        return prev - 1;
-      });
-    }, 1000);
-
-    return () => {
-      if (timerRef.current) clearInterval(timerRef.current);
-    };
-  }, [phase, round]);
-
-  // ------------------------------------------------------------------
-  // Auto-submit when timer hits 0
-  // ------------------------------------------------------------------
-  useEffect(() => {
-    if (timer === 0 && phase === "ranking" && !hasSubmitted) {
-      handleSubmitRanking(true);
-    }
-  }, [timer, phase, hasSubmitted]);
-
-  // ------------------------------------------------------------------
-  // Host: check if all players have submitted
-  // ------------------------------------------------------------------
-  useEffect(() => {
-    if (!isHost || phase !== "ranking") return;
-
-    const submittedIds = Object.keys(rankings);
-    const allSubmitted = players.length > 0 && players.every((p) => submittedIds.includes(p.user_id));
-
-    if (allSubmitted) {
-      const forRound = round;
-      // Calculate consensus and scores from the FRESH server state (idempotent)
-      mutateGameState((cur) => {
-        if (!cur || cur.phase !== "ranking" || cur.round !== forRound) return null;
-        const curRankings: Record<string, string[]> = cur.rankings ?? {};
-        const cat = CATEGORIES[cur.categoryIndex ?? 0] ?? CATEGORIES[0];
-        const cons = computeConsensus(curRankings, cat.items);
-        const rScores: Record<string, number> = {};
-        const tScores: Record<string, number> = { ...(cur.totalScores ?? {}) };
-
-        for (const pid of Object.keys(curRankings)) {
-          const s = scoreRanking(curRankings[pid], cons);
-          rScores[pid] = s;
-          tScores[pid] = (tScores[pid] ?? 0) + s;
-        }
-
-        return {
-          ...cur,
-          phase: "reveal",
-          consensus: cons,
-          roundScores: rScores,
-          totalScores: tScores,
-        };
-      });
-    }
-  }, [rankings, players, isHost, phase]);
-
-  // ------------------------------------------------------------------
-  // Tap an item to rank it (or un-rank)
-  // ------------------------------------------------------------------
-  const handleTapItem = useCallback(
-    (item: string) => {
-      if (hasSubmitted) return;
-
-      setSelectedOrder((prev) => {
-        if (prev.includes(item)) {
-          // Remove this item and everything after it
-          return prev.slice(0, prev.indexOf(item));
-        }
-        if (prev.length >= ITEM_COUNT) return prev;
-        return [...prev, item];
-      });
-    },
-    [hasSubmitted]
-  );
-
-  // ------------------------------------------------------------------
-  // Submit ranking
-  // ------------------------------------------------------------------
-  const handleSubmitRanking = useCallback(
-    (auto = false) => {
-      if (hasSubmitted) return;
-      setHasSubmitted(true);
-
-      let ranking = [...selectedOrder];
-      // Fill unranked items in their original order
-      const cat = CATEGORIES[categoryIndex] ?? CATEGORIES[0];
-      for (const item of cat.items) {
-        if (!ranking.includes(item)) {
-          ranking.push(item);
-        }
+    if (!isHost || phase !== "playing" || !gs) return;
+    const totalPlayers = players.length;
+    const totalSubmitted = countInRoom(gs.roundSubmitted);
+    if (totalPlayers > 0 && totalSubmitted >= totalPlayers) {
+      // All placed for this round — advance
+      if (gs.currentRound >= gs.size - 1) {
+        // Last item placed — go to reveal
+        mutateGameState((cur) => {
+          if (!cur || cur.phase !== "playing") return null;
+          if (countInRoom(cur.roundSubmitted) < totalPlayers) return null;
+          return { ...cur, phase: "reveal" as Phase };
+        });
+      } else {
+        // Next item
+        mutateGameState((cur) => {
+          if (!cur || cur.phase !== "playing") return null;
+          if (countInRoom(cur.roundSubmitted) < totalPlayers) return null;
+          return { ...cur, currentRound: cur.currentRound + 1, roundSubmitted: [] };
+        });
       }
+    }
+  }, [gs?.roundSubmitted?.length, players, phase, isHost, gs?.currentRound]);
 
-      if (!userId) return;
-      // Merge only our own ranking into the fresh server state (no lost updates)
+  // Host: auto-advance voting when all voted
+  useEffect(() => {
+    if (!isHost || phase !== "voting" || !gs) return;
+    const totalPlayers = players.length;
+    const totalVoted = countInRoom(gs.votedPlayerIds);
+    if (totalPlayers > 0 && totalVoted >= totalPlayers) {
+      // Tally votes
       mutateGameState((cur) => {
-        if (!cur || cur.phase !== "ranking" || cur.round !== round) return null;
-        const curRankings = cur.rankings ?? {};
-        if (curRankings[userId]) return null;
-        return { ...cur, rankings: { ...curRankings, [userId]: ranking } };
+        if (!cur || cur.phase !== "voting") return null;
+        if (countInRoom(cur.votedPlayerIds) < totalPlayers) return null;
+        // Find winner(s) of this round's vote
+        const voteCounts: Record<string, number> = {};
+        for (const voteeId of Object.values(cur.votes ?? {})) {
+          voteCounts[voteeId] = (voteCounts[voteeId] ?? 0) + 1;
+        }
+        const maxVotes = Math.max(...Object.values(voteCounts), 0);
+        const roundWinners = Object.entries(voteCounts).filter(([_, c]) => c === maxVotes).map(([id]) => id);
+        // Award points
+        const newScores = { ...(cur.brScores ?? {}) };
+        for (const wid of roundWinners) {
+          newScores[wid] = (newScores[wid] ?? 0) + 1;
+        }
+        return { ...cur, phase: "vote-results" as Phase, brScores: newScores };
       });
-    },
-    [hasSubmitted, selectedOrder, categoryIndex, round, userId, mutateGameState]
-  );
+    }
+  }, [gs?.votedPlayerIds?.length, players, phase, isHost]);
 
-  // ------------------------------------------------------------------
-  // Host: next round or game over
-  // ------------------------------------------------------------------
-  const handleNextRound = () => {
-    if (!isHost) return;
-    const forRound = round;
+  // Derived
+  const playerMap: Record<string, { username: string }> = {};
+  players.forEach((p) => {
+    playerMap[p.user_id] = { username: p.username };
+  });
 
-    mutateGameState((cur) => {
-      if (!cur || cur.phase !== "reveal" || cur.round !== forRound) return null;
-      const nextRound = forRound + 1;
-      if (nextRound > TOTAL_ROUNDS) {
-        return { ...cur, phase: "game-over" };
-      }
-      return {
-        ...cur,
-        phase: "ranking",
-        round: nextRound,
-        categoryIndex: nextRound - 1,
-        rankings: {},
-        roundScores: {},
-        consensus: [],
-      };
-    });
-  };
-
-  // ------------------------------------------------------------------
-  // Back to lobby
-  // ------------------------------------------------------------------
-  const handleBackToLobby = async () => {
-    // Navigation happens in the room-status effect above once status is "lobby".
-    await endGame();
-  };
+  // -----------------------------------------------------------------------
+  // Handlers
+  // -----------------------------------------------------------------------
 
   const startFromIntro = useCallback(async () => {
-    console.log("[tapdiag] blindRanking Start onPress fired, local phase:", phase);
-    const t0 = Date.now();
-    const ok = await mutateGameState((cur) => {
+    await mutateGameState((cur) => {
       if (!cur || cur.phase !== "intro") return null;
-      return { ...cur, phase: "ranking" };
+      return { ...cur, phase: "setup" as Phase };
     });
-    console.log("[tapdiag] blindRanking Start mutateGameState:", ok, `${Date.now() - t0}ms`);
-  }, [mutateGameState, phase]);
+  }, [mutateGameState]);
 
-  // ==================================================================
-  // RENDER
-  // ==================================================================
+  const launchGame = useCallback(async (totalGames: number, currentGame: number, sizeOverride?: number) => {
+    const size = sizeOverride ?? selectedSize;
+    if (!selectedCategory || !size) return;
+    const isCustom = selectedCategory.startsWith("custom:");
+    let pool: string[], label: string, emoji: string;
+    if (isCustom) {
+      const cat = customCategories.find((c) => c.id === selectedCategory.replace("custom:", ""));
+      if (!cat || cat.items.length < size) return;
+      pool = cat.items; label = cat.label; emoji = "\u270E";
+    } else {
+      const bank = BANKS[selectedCategory];
+      if (!bank || bank.items.length < size) return;
+      pool = bank.items; label = bank.label; emoji = bank.emoji;
+    }
+    const draw = shuffle(pool).slice(0, size);
+    const placements: Record<string, (string | null)[]> = {};
+    for (const p of players) {
+      placements[p.user_id] = new Array(size).fill(null);
+    }
+    await mutateGameState((cur) => {
+      if (!cur || cur.phase !== "setup") return null;
+      return {
+        ...cur,
+        phase: "playing" as Phase,
+        categoryKey: selectedCategory,
+        categoryLabel: label,
+        categoryEmoji: emoji,
+        size,
+        draw,
+        currentRound: 0,
+        placements,
+        roundSubmitted: [],
+        rankings: {},
+        votes: {},
+        votedPlayerIds: [],
+        // Rounds are picked once (game 1); later games keep the series length.
+        totalGames: currentGame > 1 ? cur.totalGames : totalGames,
+        currentGame,
+      };
+    });
+  }, [selectedCategory, selectedSize, players, customCategories, mutateGameState]);
 
-  // ----- INTRO PHASE -----
+  const handlePlaceItem = useCallback(async (slotIndex: number) => {
+    if (!gs || gs.phase !== "playing" || hasPlacedThisRound) return;
+    const currentItem = gs.draw[gs.currentRound];
+    if (!currentItem) return;
+    const mySlots = gs.placements?.[myId];
+    if (!mySlots || mySlots[slotIndex] !== null) return;
+
+    setHasPlacedThisRound(true);
+    await mutateGameState((cur) => {
+      if (!cur || cur.phase !== "playing") return null;
+      if ((cur.roundSubmitted ?? []).includes(myId)) return null;
+      const item = cur.draw[cur.currentRound];
+      const curSlots = cur.placements?.[myId];
+      if (!curSlots || curSlots[slotIndex] !== null) return null;
+      const newSlots = [...curSlots];
+      newSlots[slotIndex] = item;
+      return {
+        ...cur,
+        placements: { ...cur.placements, [myId]: newSlots },
+        roundSubmitted: [...(cur.roundSubmitted ?? []), myId],
+      };
+    });
+  }, [gs, myId, hasPlacedThisRound, mutateGameState]);
+
+  const advanceToVoting = useCallback(async () => {
+    await mutateGameState((cur) => {
+      if (!cur || cur.phase !== "reveal") return null;
+      return { ...cur, phase: "voting" as Phase, votes: {}, votedPlayerIds: [] };
+    });
+  }, [mutateGameState]);
+
+  const handleVote = useCallback(async (voteeId: string) => {
+    if (!gs || myVote) return;
+    setMyVote(voteeId);
+    await mutateGameState((cur) => {
+      if (!cur || cur.phase !== "voting") return null;
+      if ((cur.votedPlayerIds ?? []).includes(myId)) return null;
+      return {
+        ...cur,
+        votes: { ...(cur.votes ?? {}), [myId]: voteeId },
+        votedPlayerIds: [...(cur.votedPlayerIds ?? []), myId],
+      };
+    });
+  }, [gs, myId, myVote, mutateGameState]);
+
+  const handleNextGameOrEnd = useCallback(async () => {
+    if (!gs) return;
+    if (gs.currentGame >= gs.totalGames) {
+      // Series over
+      await mutateGameState((cur) => {
+        if (!cur) return null;
+        return { ...cur, phase: "game-over" as Phase };
+      });
+    } else {
+      // Next game in series — go back to setup
+      setSelectedCategory(null);
+      setSelectedSize(null);
+      await mutateGameState((cur) => {
+        if (!cur) return null;
+        return { ...cur, phase: "setup" as Phase, currentGame: cur.currentGame + 1 };
+      });
+    }
+  }, [gs, mutateGameState]);
+
+  const handleBackToLobby = useCallback(async () => {
+    await endGame();
+  }, [endGame]);
+
+  // -----------------------------------------------------------------------
+  // Loading
+  // -----------------------------------------------------------------------
+  if (!gs || (gs.game as string) !== "blindRanking" || !phase || (phase as string) === "starting") {
+    return (
+      <SafeAreaView style={st.container}><GameHeader />
+        <View style={st.centered}>
+          <ActivityIndicator size="large" color={colors.primary} />
+          <Text style={st.loadingText}>Setting up the game...</Text>
+        </View>
+      </SafeAreaView>
+    );
+  }
+
+  // === INTRO ===
   if (phase === "intro") {
     return (
-      <SafeAreaView style={s.safe}>
-        <ScrollView contentContainerStyle={s.introContainer}>
-          <Text style={s.introEmoji}>{"\uD83D\uDCCB"}</Text>
-          <Text style={s.introTitle}>Blind Ranking</Text>
-          <Text style={s.introTagline}>Rank items and match the group.</Text>
-
-          <View style={s.introRulesContainer}>
-            <View style={s.introRuleCard}>
-              <Text style={s.introRuleText}>{"\uD83D\uDCDD"}  Each round shows a category with 5 items</Text>
-            </View>
-            <View style={s.introRuleCard}>
-              <Text style={s.introRuleText}>{"\uD83D\uDC46"}  Tap items in order from best to worst</Text>
-            </View>
-            <View style={s.introRuleCard}>
-              <Text style={s.introRuleText}>{"\u23F1\uFE0F"}  30 seconds to submit your ranking</Text>
-            </View>
-            <View style={s.introRuleCard}>
-              <Text style={s.introRuleText}>{"\uD83E\uDD1D"}  Score based on how closely you match the group consensus</Text>
-            </View>
-            <View style={s.introRuleCard}>
-              <Text style={s.introRuleText}>{"\uD83C\uDFC6"}  Highest score after 3 rounds wins!</Text>
-            </View>
-          </View>
-
-          {isHost ? (
-            <Pressable
-              style={s.introStartButton}
-              onPressIn={() => console.log("[tapdiag] blindRanking Start onPressIn")}
-              onPress={startFromIntro}
-            >
-              <Text style={s.introStartButtonText}>Start Game</Text>
-            </Pressable>
-          ) : (
-            <Text style={s.introWaitingText}>Waiting for host to start...</Text>
-          )}
-        </ScrollView>
-      </SafeAreaView>
-    );
-  }
-
-  // ----- RANKING PHASE -----
-  if (phase === "ranking") {
-    const allRanked = selectedOrder.length >= ITEM_COUNT;
-
-    return (
-      <SafeAreaView style={s.safe}>
-        {/* Top bar */}
-        <View style={s.topBar}>
-          <Pressable onPress={() => router.back()} hitSlop={12}>
-            <Ionicons name="chevron-back" size={24} color={colors.white} />
-          </Pressable>
-          <Text style={s.topBarTitle}>BLIND RANKING</Text>
-          <Text style={s.topBarRound}>Round {round} / {TOTAL_ROUNDS}</Text>
-        </View>
-
-        {/* Category label */}
-        <View style={s.headerSection}>
-          <Text style={s.categoryLabel}>{category.emoji} {category.category}</Text>
-          <Text style={s.title}>{category.name}</Text>
-          <Text style={s.instruction}>Tap items in order from best to worst</Text>
-        </View>
-
-        {/* Timer */}
-        <View style={s.timerRow}>
-          <View style={s.timerLeft}>
-            <Ionicons name="time-outline" size={16} color={colors.primary} />
-            <Text style={s.timerText}>{timer}s</Text>
-          </View>
-          <View style={s.timerBarOuter}>
-            <View
-              style={[
-                s.timerBarInner,
-                { width: `${(timer / ROUND_SECONDS) * 100}%` },
-              ]}
-            />
-          </View>
-        </View>
-
-        {/* Items */}
-        <ScrollView style={s.body} contentContainerStyle={s.bodyContent}>
-          {category.items.map((item) => {
-            const rankIndex = selectedOrder.indexOf(item);
-            const isSelected = rankIndex !== -1;
-
-            return (
-              <Pressable
-                key={item}
-                style={[
-                  s.itemCard,
-                  isSelected && s.itemCardSelected,
-                  hasSubmitted && s.itemCardDisabled,
-                ]}
-                onPress={() => handleTapItem(item)}
-                disabled={hasSubmitted}
-              >
-                <View style={s.itemLeft}>
-                  {isSelected ? (
-                    <View style={s.rankCircleActive}>
-                      <Text style={s.rankCircleActiveText}>{rankIndex + 1}</Text>
-                    </View>
-                  ) : (
-                    <View style={s.rankCircle}>
-                      <Ionicons name="add" size={18} color={colors.gray400} />
-                    </View>
-                  )}
-                  <Text style={s.itemText}>{item}</Text>
-                </View>
-                <Ionicons name="ellipsis-horizontal" size={20} color={colors.gray500} />
-              </Pressable>
-            );
-          })}
-        </ScrollView>
-
-        {/* Bottom text */}
-        <Text style={s.bottomQuip}>Your taste. No wrong answers. (Probably.)</Text>
-
-        {/* Bottom button */}
-        <View style={s.footer}>
-          {hasSubmitted ? (
-            <View style={s.waitingBox}>
-              <Ionicons name="hourglass-outline" size={20} color={colors.primaryLight} />
-              <Text style={s.waitingText}>
-                Waiting for others... ({Object.keys(rankings).length}/{players.length})
-              </Text>
-            </View>
-          ) : (
-            <Pressable
-              style={[s.submitBtn, !allRanked && s.submitBtnDisabled]}
-              onPress={() => handleSubmitRanking(false)}
-              disabled={!allRanked}
-            >
-              <Text style={s.submitBtnText}>
-                {allRanked
-                  ? "Submit Ranking"
-                  : `Rank all items (${selectedOrder.length}/${ITEM_COUNT})`}
-              </Text>
-            </Pressable>
-          )}
-        </View>
-      </SafeAreaView>
-    );
-  }
-
-  // ----- REVEAL PHASE -----
-  if (phase === "reveal") {
-    const cat = CATEGORIES[categoryIndex] ?? CATEGORIES[0];
-    const myRanking = rankings[userId] ?? cat.items;
-    const myScore = roundScores[userId] ?? 0;
-
-    return (
-      <SafeAreaView style={s.safe}>
-        {/* Top bar */}
-        <View style={s.topBar}>
-          <View style={{ width: 24 }} />
-          <Text style={s.topBarTitle}>BLIND RANKING</Text>
-          <Text style={s.topBarRound}>Round {round} / {TOTAL_ROUNDS}</Text>
-        </View>
-
-        <ScrollView style={s.body} contentContainerStyle={s.bodyContent}>
-          {/* Header */}
-          <View style={s.revealHeader}>
-            <Text style={s.categoryLabel}>{cat.emoji} {cat.category}</Text>
-            <Text style={s.title}>{cat.name}</Text>
-            <Text style={s.revealSubtitle}>Round {round} Results</Text>
-          </View>
-
-          {/* Consensus */}
-          <View style={s.card}>
-            <View style={s.cardHeader}>
-              <Ionicons name="people" size={18} color={colors.primaryLight} />
-              <Text style={s.cardTitle}>Group Consensus</Text>
-            </View>
-            {consensus.map((item, i) => (
-              <View key={item} style={s.consensusRow}>
-                <View style={s.consensusRank}>
-                  <Text style={s.consensusRankText}>{i + 1}</Text>
-                </View>
-                <Text style={s.consensusItem}>{item}</Text>
+      <SafeAreaView style={st.container}><GameHeader />
+        <ScrollView contentContainerStyle={st.introScroll}>
+          <Text style={st.bigEmoji}>{"\u2263"}</Text>
+          <Text style={st.title}>Blind Ranking</Text>
+          <Text style={st.tagline}>Rank items blind {"\u2014"} lock each one in as it appears. No take-backs.</Text>
+          <View style={st.rulesBox}>
+            {[
+              ["\uD83C\uDFB2", "Items from a category appear one at a time in random order."],
+              ["\uD83D\uDCCC", "Place each item into a rank slot. Once placed, it's locked."],
+              ["\uD83D\uDC40", "You can't see what's coming next \u2014 trust your gut!"],
+              ["\uD83D\uDCCA", "After everyone finishes, rankings are compared side-by-side."],
+            ].map(([icon, text], i) => (
+              <View key={i} style={st.ruleCard}>
+                <Text style={st.ruleText}>{icon}  {text}</Text>
               </View>
             ))}
           </View>
-
-          {/* Your ranking vs consensus */}
-          <View style={s.card}>
-            <View style={s.cardHeader}>
-              <Ionicons name="person" size={18} color={colors.lime} />
-              <Text style={s.cardTitle}>Your Ranking</Text>
-              <View style={s.scorePill}>
-                <Text style={s.scorePillText}>+{myScore} pts</Text>
-              </View>
-            </View>
-            {myRanking.map((item, i) => {
-              const consensusPos = consensus.indexOf(item);
-              const diff = Math.abs(i - consensusPos);
-              const isExact = diff === 0;
-
-              return (
-                <View key={item} style={s.compareRow}>
-                  <View style={s.compareLeft}>
-                    <View style={[s.compareBadge, isExact ? s.compareBadgeExact : s.compareBadgeOff]}>
-                      <Text style={s.compareBadgeText}>{i + 1}</Text>
-                    </View>
-                    <Text style={s.compareItem}>{item}</Text>
-                  </View>
-                  <Text style={[s.compareDiff, isExact && { color: colors.success }]}>
-                    {isExact ? "Exact!" : `Off by ${diff}`}
-                  </Text>
-                </View>
-              );
-            })}
-          </View>
-
-          {/* Round scores */}
-          <View style={s.card}>
-            <View style={s.cardHeader}>
-              <Ionicons name="trophy" size={18} color={colors.gold} />
-              <Text style={s.cardTitle}>Round Scores</Text>
-            </View>
-            {players
-              .slice()
-              .sort((a, b) => (roundScores[b.user_id] ?? 0) - (roundScores[a.user_id] ?? 0))
-              .map((p, i, arr) => (
-                <View key={p.user_id} style={s.scoreRow}>
-                  <View style={s.scoreLeft}>
-                    <Text style={s.scoreRank}>
-                      #{competitionRanks(arr, (x) => roundScores[x.user_id] ?? 0)[i]}
-                    </Text>
-                    <Text style={s.scoreName}>
-                      {p.username}
-                      {p.user_id === userId ? " (you)" : ""}
-                    </Text>
-                  </View>
-                  <Text style={s.scoreValue}>+{roundScores[p.user_id] ?? 0}</Text>
-                </View>
-              ))}
-          </View>
+          {isHost ? (
+            <TouchableOpacity style={st.primaryBtn} onPress={startFromIntro}>
+              <Text style={st.primaryBtnText}>Continue</Text>
+              <Ionicons name="arrow-forward" size={20} color={colors.white} />
+            </TouchableOpacity>
+          ) : (
+            <Text style={st.wait}>Waiting for host to start...</Text>
+          )}
         </ScrollView>
-
-        {/* Next round / game over */}
-        {isHost && (
-          <View style={s.footer}>
-            <Pressable style={s.submitBtn} onPress={handleNextRound}>
-              <Text style={s.submitBtnText}>
-                {round >= TOTAL_ROUNDS ? "See Final Results" : "Next Round"}
-              </Text>
-            </Pressable>
-          </View>
-        )}
-
-        {!isHost && (
-          <View style={s.footer}>
-            <View style={s.waitingBox}>
-              <Ionicons name="hourglass-outline" size={20} color={colors.primaryLight} />
-              <Text style={s.waitingText}>Waiting for host...</Text>
-            </View>
-          </View>
-        )}
       </SafeAreaView>
     );
   }
 
-  // ----- GAME OVER PHASE -----
-  if (phase === "game-over") {
-    const sorted = players
-      .slice()
-      .sort((a, b) => (totalScores[b.user_id] ?? 0) - (totalScores[a.user_id] ?? 0));
+  // === SETUP ===
+  if (phase === "setup") {
+    if (!isHost) {
+      return (
+        <SafeAreaView style={st.container}><GameHeader />
+          <View style={st.centered}>
+            <Text style={st.bigEmoji}>{"\u2263"}</Text>
+            <Text style={st.title}>Blind Ranking</Text>
+            <Text style={st.wait}>Host is choosing the category and size.</Text>
+          </View>
+        </SafeAreaView>
+      );
+    }
 
-    const maxScore = totalScores[sorted[0]?.user_id] ?? 0;
-    const ranks = competitionRanks(sorted, (p) => totalScores[p.user_id] ?? 0);
+    // Custom category editor
+    if (showCustomEditor) {
+      const itemCount = customItems.split("\n").map((s) => s.trim()).filter(Boolean).length;
+      const canSave = customName.trim().length > 0 && itemCount >= 5;
+      return (
+        <SafeAreaView style={st.container}><GameHeader />
+          <KeyboardAvoidingView style={{ flex: 1 }} behavior={Platform.OS === "ios" ? "padding" : undefined}>
+            <ScrollView contentContainerStyle={st.editorScroll} keyboardShouldPersistTaps="handled">
+              <Text style={st.setupTitle}>{editingCategory ? "Edit Category" : "New Category"}</Text>
+              <Text style={st.setupSub}>Create your own ranking category.</Text>
+              <Text style={st.editorLabel}>CATEGORY NAME</Text>
+              <TextInput
+                style={st.editorInput}
+                placeholder="e.g. Best Marvel movies"
+                placeholderTextColor={colors.gray500}
+                value={customName}
+                onChangeText={setCustomName}
+              />
+              <Text style={st.editorLabel}>ITEMS (one per line, min 5)</Text>
+              <TextInput
+                style={[st.editorInput, { height: 180, textAlignVertical: "top" }]}
+                placeholder={"Iron Man\nEndgame\nSpider-Man\n..."}
+                placeholderTextColor={colors.gray500}
+                value={customItems}
+                onChangeText={setCustomItems}
+                multiline
+              />
+              <Text style={st.editorCount}>{itemCount} items</Text>
+              <TouchableOpacity
+                style={[st.primaryBtn, !canSave && { opacity: 0.4 }]}
+                onPress={saveCustomCategory}
+                disabled={!canSave}
+              >
+                <Text style={st.primaryBtnText}>{editingCategory ? "Save Changes" : "Save Category"}</Text>
+              </TouchableOpacity>
+              <TouchableOpacity
+                onPress={() => { setShowCustomEditor(false); setEditingCategory(null); setCustomName(""); setCustomItems(""); }}
+                style={{ marginTop: 8, alignSelf: "center" }}
+              >
+                <Text style={st.backLink}>Cancel</Text>
+              </TouchableOpacity>
+            </ScrollView>
+          </KeyboardAvoidingView>
+        </SafeAreaView>
+      );
+    }
+
+    // Step 1: pick category
+    if (!selectedCategory) {
+      return (
+        <SafeAreaView style={st.container}><GameHeader />
+          <ScrollView contentContainerStyle={st.setupScroll}>
+            <Text style={st.bigEmoji}>{"\u2263"}</Text>
+            <Text style={st.setupTitle}>Pick a Category</Text>
+            <Text style={st.setupSub}>
+              {(gs.totalGames ?? 1) > 1
+                ? `Round ${gs.currentGame ?? 1} of ${gs.totalGames} \u2014 pick a category.`
+                : "Choose what everyone will rank."}
+            </Text>
+            <View style={st.catGrid}>
+              {BANK_KEYS.map((key) => {
+                const bank = BANKS[key];
+                return (
+                  <TouchableOpacity
+                    key={key}
+                    style={st.catCard}
+                    onPress={() => setSelectedCategory(key)}
+                    activeOpacity={0.7}
+                  >
+                    <Text style={st.catEmoji}>{bank.emoji}</Text>
+                    <Text style={st.catLabel} numberOfLines={2}>{bank.label}</Text>
+                  </TouchableOpacity>
+                );
+              })}
+            </View>
+
+            {customCategories.length > 0 && (
+              <>
+                <Text style={st.customSectionTitle}>Your Categories</Text>
+                <View style={st.catGrid}>
+                  {customCategories.map((cat) => (
+                    <TouchableOpacity
+                      key={cat.id}
+                      style={[st.catCard, { borderColor: ACCENT + "66" }]}
+                      onPress={() => setSelectedCategory(`custom:${cat.id}`)}
+                      onLongPress={() => {
+                        Alert.alert(cat.label, `${cat.items.length} items`, [
+                          { text: "Play", onPress: () => setSelectedCategory(`custom:${cat.id}`) },
+                          { text: "Edit", onPress: () => startEditCategory(cat) },
+                          { text: "Delete", style: "destructive", onPress: () => deleteCustomCategory(cat.id) },
+                          { text: "Cancel", style: "cancel" },
+                        ]);
+                      }}
+                      activeOpacity={0.7}
+                    >
+                      <Text style={st.catEmoji}>{"\u270E"}</Text>
+                      <Text style={st.catLabel} numberOfLines={2}>{cat.label}</Text>
+                      <Text style={st.catItemCount}>{cat.items.length} items</Text>
+                    </TouchableOpacity>
+                  ))}
+                </View>
+              </>
+            )}
+
+            <TouchableOpacity
+              style={st.makeOwnBtn}
+              onPress={() => { setEditingCategory(null); setCustomName(""); setCustomItems(""); setShowCustomEditor(true); }}
+              activeOpacity={0.7}
+            >
+              <Ionicons name="add-circle-outline" size={20} color={colors.primaryLight} />
+              <Text style={st.makeOwnText}>Make Your Own</Text>
+            </TouchableOpacity>
+          </ScrollView>
+        </SafeAreaView>
+      );
+    }
+
+    // Step 2: pick size
+    const isCustomCat = selectedCategory.startsWith("custom:");
+    const bank = isCustomCat ? null : BANKS[selectedCategory];
+    const customCat = isCustomCat ? customCategories.find((c) => c.id === selectedCategory.replace("custom:", "")) : null;
+    const catLabel = customCat?.label ?? bank?.label ?? "";
+    const catEmoji = customCat ? "\u270E" : (bank?.emoji ?? "");
+    const catItemCount = customCat?.items.length ?? bank?.items.length ?? 0;
+    if (!selectedSize) {
+      // Filter size options based on available items
+      const sizeOptions = ([5, 10] as const).filter((s) => catItemCount >= s);
+      return (
+        <SafeAreaView style={st.container}><GameHeader />
+          <View style={st.centered}>
+            <Text style={st.bigEmoji}>{catEmoji}</Text>
+            <Text style={st.setupTitle}>{catLabel}</Text>
+            <Text style={st.setupSub}>How many items to rank?</Text>
+            <View style={st.sizeRow}>
+              {sizeOptions.map((size) => (
+                <TouchableOpacity
+                  key={size}
+                  style={st.sizeCard}
+                  onPress={() => {
+                    setSelectedSize(size);
+                    // Rounds are only picked for game 1; later games launch straight away.
+                    if ((gs.currentGame ?? 1) > 1) launchGame(gs.totalGames, gs.currentGame, size);
+                  }}
+                  activeOpacity={0.7}
+                >
+                  <Text style={st.sizeNum}>{size}</Text>
+                  <Text style={st.sizeLabel}>Top {size}</Text>
+                </TouchableOpacity>
+              ))}
+            </View>
+            <TouchableOpacity onPress={() => setSelectedCategory(null)} style={{ marginTop: 12 }}>
+              <Text style={st.backLink}>Change category</Text>
+            </TouchableOpacity>
+          </View>
+        </SafeAreaView>
+      );
+    }
+
+    // Games 2..N: rounds were already chosen in game 1 — launching (fallback button if it didn't).
+    if ((gs.currentGame ?? 1) > 1) {
+      return (
+        <SafeAreaView style={st.container}><GameHeader />
+          <View style={st.centered}>
+            <Text style={st.bigEmoji}>{catEmoji}</Text>
+            <Text style={st.setupTitle}>{catLabel}</Text>
+            <Text style={st.setupSub}>Top {selectedSize} {"·"} Game {gs.currentGame}/{gs.totalGames}</Text>
+            <View style={st.sizeRow}>
+              <TouchableOpacity style={st.sizeCard} onPress={() => launchGame(gs.totalGames, gs.currentGame)} activeOpacity={0.7}>
+                <Text style={st.sizeLabel}>Start</Text>
+              </TouchableOpacity>
+            </View>
+            <TouchableOpacity onPress={() => setSelectedSize(null)} style={{ marginTop: 12 }}>
+              <Text style={st.backLink}>Change size</Text>
+            </TouchableOpacity>
+          </View>
+        </SafeAreaView>
+      );
+    }
+
+    // Step 3: pick rounds
+    return (
+      <SafeAreaView style={st.container}><GameHeader />
+        <View style={st.centered}>
+          <Text style={st.bigEmoji}>{catEmoji}</Text>
+          <Text style={st.setupTitle}>{catLabel}</Text>
+          <Text style={st.setupSub}>Top {selectedSize} {"\u00B7"} How many rounds?</Text>
+          <View style={st.sizeRow}>
+            {([1, 3, 5] as const).map((n) => (
+              <TouchableOpacity key={n} style={st.sizeCard} onPress={() => launchGame(n, gs.currentGame ?? 1)} activeOpacity={0.7}>
+                <Text style={st.sizeNum}>{n}</Text>
+                <Text style={st.sizeLabel}>{n === 1 ? "Round" : "Rounds"}</Text>
+              </TouchableOpacity>
+            ))}
+          </View>
+          <TouchableOpacity onPress={() => setSelectedSize(null)} style={{ marginTop: 12 }}>
+            <Text style={st.backLink}>Change size</Text>
+          </TouchableOpacity>
+        </View>
+      </SafeAreaView>
+    );
+  }
+
+  // === PLAYING ===
+  if (phase === "playing") {
+    const currentItem = gs.draw[gs.currentRound];
+    const mySlots = gs.placements?.[myId] ?? new Array(gs.size).fill(null);
+    const submittedCount = countInRoom(gs.roundSubmitted);
+    const totalPlayers = players.length;
 
     return (
-      <SafeAreaView style={s.safe}>
-        {/* Top bar */}
-        <View style={s.topBar}>
-          <View style={{ width: 24 }} />
-          <Text style={s.topBarTitle}>BLIND RANKING</Text>
-          <View style={{ width: 60 }} />
-        </View>
+      <SafeAreaView style={st.container}><GameHeader />
+        <ScrollView contentContainerStyle={st.playScroll}>
+          <Text style={st.playCatLabel}>
+            {gs.categoryEmoji} {gs.categoryLabel}
+            {gs.totalGames > 1 ? ` \u00B7 Game ${gs.currentGame}/${gs.totalGames}` : ""}
+          </Text>
+          <Text style={st.playProgress}>
+            Round {gs.currentRound + 1} / {gs.size} {"\u00B7"} {submittedCount}/{totalPlayers} placed
+          </Text>
 
-        <ScrollView style={s.body} contentContainerStyle={[s.bodyContent, { alignItems: "center" }]}>
-          {/* Trophy */}
-          <View style={s.trophyContainer}>
-            <Ionicons name="trophy" size={64} color={colors.gold} />
-          </View>
-          <Text style={s.gameOverTitle}>Game Over!</Text>
-          <Text style={s.gameOverSub}>Blind Ranking - {TOTAL_ROUNDS} Rounds</Text>
+          {/* Current item card */}
+          {hasPlacedThisRound ? (
+            <View style={[st.nowPlacing, { borderColor: colors.success + "66" }]}>
+              <Text style={[st.nowPlacingLabel, { color: colors.success }]}>PLACED!</Text>
+              <Text style={st.nowPlacingItem}>{currentItem}</Text>
+              <Text style={st.nowPlacingHint}>Waiting for others... {submittedCount}/{totalPlayers}</Text>
+            </View>
+          ) : (
+            <View style={st.nowPlacing}>
+              <Text style={st.nowPlacingLabel}>NOW PLACING</Text>
+              <Text style={st.nowPlacingItem}>{currentItem}</Text>
+              <Text style={st.nowPlacingHint}>Tap a slot below {"\u00B7"} {gs.size - gs.currentRound} items left</Text>
+            </View>
+          )}
 
-          {/* Leaderboard */}
-          <View style={[s.card, { width: "100%", marginTop: 24 }]}>
-            {sorted.map((p, i) => {
-              const score = totalScores[p.user_id] ?? 0;
-              const isWinner = score === maxScore;
-              const barWidth = maxScore > 0 ? (score / maxScore) * 100 : 0;
-              const medals = ["gold", "silver", "#CD7F32"];
-              const rank = ranks[i] ?? i + 1;
-
+          {/* Slots */}
+          <Text style={st.slotsHeader}>Your Top {gs.size} Ranking</Text>
+          <View style={{ gap: 6 }}>
+            {mySlots.map((slotItem: string | null, idx: number) => {
+              const isFilled = slotItem !== null;
+              const canPlace = !isFilled && !hasPlacedThisRound;
               return (
-                <View key={p.user_id} style={s.leaderRow}>
-                  <View style={s.leaderLeft}>
-                    <View
-                      style={[
-                        s.leaderRank,
-                        rank <= 3 && { backgroundColor: (medals[rank - 1] ?? colors.gray500) + "30" },
-                      ]}
-                    >
-                      {rank === 1 ? (
-                        <Ionicons name="medal" size={20} color="gold" />
-                      ) : rank === 2 ? (
-                        <Ionicons name="medal" size={20} color="silver" />
-                      ) : rank === 3 ? (
-                        <Ionicons name="medal" size={20} color="#CD7F32" />
-                      ) : (
-                        <Text style={s.leaderRankText}>{rank}</Text>
-                      )}
-                    </View>
-                    <View style={s.leaderInfo}>
-                      <Text style={[s.leaderName, isWinner && { color: colors.gold }]}>
-                        {p.username}
-                        {p.user_id === userId ? " (you)" : ""}
-                      </Text>
-                      <View style={s.leaderBarOuter}>
-                        <View
-                          style={[
-                            s.leaderBarInner,
-                            {
-                              width: `${barWidth}%`,
-                              backgroundColor: rank === 1 ? colors.gold : rank === 2 ? colors.gray400 : colors.primary,
-                            },
-                          ]}
-                        />
-                      </View>
-                    </View>
-                  </View>
-                  <Text style={[s.leaderScore, isWinner && { color: colors.gold }]}>
-                    {score}/{TOTAL_ROUNDS * 25}
-                  </Text>
-                </View>
+                <TouchableOpacity
+                  key={idx}
+                  style={[st.slot, isFilled && st.slotFilled, canPlace && st.slotOpen]}
+                  onPress={() => canPlace && handlePlaceItem(idx)}
+                  activeOpacity={canPlace ? 0.6 : 1}
+                  disabled={!canPlace}
+                >
+                  <Text style={[st.slotRank, isFilled && st.slotRankFilled]}>#{idx + 1}</Text>
+                  {isFilled ? (
+                    <Text style={st.slotItemText} numberOfLines={1}>{slotItem}</Text>
+                  ) : (
+                    <Text style={st.slotEmpty}>{canPlace ? "Tap to place here" : "\u2014"}</Text>
+                  )}
+                </TouchableOpacity>
               );
             })}
           </View>
         </ScrollView>
-
-        {/* Back to lobby (host only; players follow room status) */}
-        <View style={s.footer}>
-          {isHost ? (
-            <Pressable style={s.submitBtn} onPress={handleBackToLobby}>
-              <Text style={s.submitBtnText}>Back to Lobby</Text>
-            </Pressable>
-          ) : (
-            <HostWaitingPill style={{ marginTop: 0 }} />
-          )}
-        </View>
       </SafeAreaView>
     );
   }
 
-  // ----- FALLBACK / LOADING -----
+  // === REVEAL (side-by-side comparison) ===
+  if (phase === "reveal") {
+    const rankings = gs.placements ?? {};
+    const pids = Object.keys(rankings);
+    const colWidth = Math.max(100, (SCREEN_WIDTH - 60) / pids.length);
+
+    // Compute divisive & agreed
+    const items = gs.draw ?? [];
+    const threshold = gs.size === 10 ? 4 : 2;
+    const itemStats = items.map((item) => {
+      const ranks: number[] = [];
+      for (const pid of pids) {
+        const idx = (rankings[pid] ?? []).indexOf(item);
+        if (idx >= 0) ranks.push(idx + 1);
+      }
+      const spread = ranks.length > 0 ? Math.max(...ranks) - Math.min(...ranks) : 0;
+      return { item, spread };
+    });
+    const divisive = itemStats.filter((s) => s.spread >= threshold).sort((a, b) => b.spread - a.spread).slice(0, 3);
+    const agreed = itemStats.filter((s) => s.spread <= 1).sort((a, b) => a.spread - b.spread).slice(0, 3);
+
+    return (
+      <SafeAreaView style={st.container}><GameHeader />
+        <ScrollView contentContainerStyle={st.revealScroll}>
+          <Text style={st.revealTitle}>Results</Text>
+          <Text style={st.revealCatLabel}>{gs.categoryEmoji} {gs.categoryLabel} {"\u2014"} Top {gs.size}</Text>
+
+          {divisive.length > 0 && (
+            <View style={st.callout}>
+              <Text style={st.calloutTitle}>Most Divisive</Text>
+              {divisive.map((s, i) => (
+                <Text key={i} style={st.calloutItem}>{i + 1}. {s.item} (spread: {s.spread})</Text>
+              ))}
+            </View>
+          )}
+          {agreed.length > 0 && (
+            <View style={[st.callout, { borderColor: colors.success + "44" }]}>
+              <Text style={[st.calloutTitle, { color: colors.success }]}>Everyone Agrees</Text>
+              {agreed.map((s, i) => (
+                <Text key={i} style={st.calloutItem}>{i + 1}. {s.item}</Text>
+              ))}
+            </View>
+          )}
+
+          {/* Side-by-side table */}
+          <Text style={st.compTitle}>Side-by-Side</Text>
+          <ScrollView horizontal showsHorizontalScrollIndicator={false}>
+            <View>
+              <View style={st.compHeaderRow}>
+                <View style={st.compRankCol}><Text style={st.compHeaderText}>#</Text></View>
+                {pids.map((pid) => (
+                  <View key={pid} style={[st.compPlayerCol, { width: colWidth }]}>
+                    <Text style={[st.compHeaderText, pid === myId && { color: ACCENT }]} numberOfLines={1}>
+                      {playerMap[pid]?.username ?? "Player"}
+                    </Text>
+                  </View>
+                ))}
+              </View>
+              {Array.from({ length: gs.size }).map((_, rowIdx) => (
+                <View key={rowIdx} style={[st.compDataRow, rowIdx % 2 === 0 && st.compDataRowAlt]}>
+                  <View style={st.compRankCol}><Text style={st.compRankNum}>{rowIdx + 1}</Text></View>
+                  {pids.map((pid) => (
+                    <View key={pid} style={[st.compPlayerCol, { width: colWidth }]}>
+                      <Text style={st.compItemText} numberOfLines={1}>{(rankings[pid] ?? [])[rowIdx] ?? "\u2014"}</Text>
+                    </View>
+                  ))}
+                </View>
+              ))}
+            </View>
+          </ScrollView>
+
+          {isHost ? (
+            <TouchableOpacity style={st.primaryBtn} onPress={advanceToVoting} activeOpacity={0.7}>
+              <Text style={st.primaryBtnText}>Vote for Best List</Text>
+              <Ionicons name="arrow-forward" size={20} color={colors.white} />
+            </TouchableOpacity>
+          ) : (
+            <Text style={st.wait}>Waiting for host to continue...</Text>
+          )}
+        </ScrollView>
+      </SafeAreaView>
+    );
+  }
+
+  // === VOTING ===
+  if (phase === "voting") {
+    const iHaveVoted = (gs.votedPlayerIds ?? []).includes(myId);
+    const votesIn = countInRoom(gs.votedPlayerIds);
+
+    if (iHaveVoted) {
+      return (
+        <SafeAreaView style={st.container}><GameHeader />
+          <View style={st.centered}>
+            <Ionicons name="checkmark-circle" size={48} color={colors.success} />
+            <Text style={st.title}>Vote submitted!</Text>
+            <Text style={st.wait}>{votesIn} / {players.length} voted</Text>
+          </View>
+        </SafeAreaView>
+      );
+    }
+
+    return (
+      <SafeAreaView style={st.container}><GameHeader />
+        <ScrollView contentContainerStyle={st.voteScroll}>
+          <Text style={st.voteTitle}>Vote for the Best List</Text>
+          <Text style={st.voteSub}>Whose ranking do you think is best?</Text>
+          {players
+            .filter((p) => p.user_id !== myId)
+            .map((p) => (
+              <TouchableOpacity
+                key={p.user_id}
+                style={st.voteBtn}
+                onPress={() => handleVote(p.user_id)}
+                activeOpacity={0.75}
+              >
+                <Text style={st.voteBtnText}>{p.username}</Text>
+                <Ionicons name="arrow-forward" size={16} color={colors.gray400} />
+              </TouchableOpacity>
+            ))}
+          <Text style={st.voteProg}>{votesIn} / {players.length} voted</Text>
+        </ScrollView>
+      </SafeAreaView>
+    );
+  }
+
+  // === VOTE RESULTS ===
+  if (phase === "vote-results") {
+    const voteCounts: Record<string, number> = {};
+    for (const voteeId of Object.values(gs.votes ?? {})) {
+      voteCounts[voteeId] = (voteCounts[voteeId] ?? 0) + 1;
+    }
+    const sorted = players
+      .map((p) => ({ uid: p.user_id, username: p.username, votes: voteCounts[p.user_id] ?? 0 }))
+      .sort((a, b) => b.votes - a.votes || a.username.localeCompare(b.username));
+    const voteRanks = competitionRanks(sorted, (p) => p.votes);
+
+    const scores = gs.brScores ?? {};
+    const scoreSorted = Object.entries(scores)
+      .map(([uid, score]) => ({ uid, username: playerMap[uid]?.username ?? "?", score }))
+      .sort((a, b) => b.score - a.score || a.username.localeCompare(b.username));
+    const scoreRanks = competitionRanks(scoreSorted, (p) => p.score);
+
+    return (
+      <SafeAreaView style={st.container}><GameHeader />
+        <ScrollView contentContainerStyle={st.voteResultScroll}>
+          <Text style={st.voteResultTitle}>Vote Results</Text>
+          {sorted.map((p, i) => (
+            <View key={p.uid} style={st.voteResultRow}>
+              <Text style={[st.voteResultRank, voteRanks[i] === 1 && { color: colors.gold }]}>#{voteRanks[i]}</Text>
+              <Text style={st.voteResultName}>{p.username}</Text>
+              <Text style={st.voteResultVotes}>{p.votes} vote{p.votes !== 1 ? "s" : ""}</Text>
+            </View>
+          ))}
+
+          {gs.totalGames > 1 && (
+            <>
+              <Text style={st.seriesHeader}>SERIES SCORES</Text>
+              {scoreSorted.map((p, i) => (
+                <View key={p.uid} style={st.voteResultRow}>
+                  <Text style={[st.voteResultRank, scoreRanks[i] === 1 && { color: colors.gold }]}>{scoreRanks[i]}</Text>
+                  <Text style={st.voteResultName}>{p.username}</Text>
+                  <Text style={st.voteResultVotes}>{p.score} pt{p.score !== 1 ? "s" : ""}</Text>
+                </View>
+              ))}
+            </>
+          )}
+
+          {isHost ? (
+            <TouchableOpacity style={st.primaryBtn} onPress={handleNextGameOrEnd} activeOpacity={0.7}>
+              <Text style={st.primaryBtnText}>
+                {gs.currentGame >= gs.totalGames ? "See Final Results" : "Next Round"}
+              </Text>
+              <Ionicons name="arrow-forward" size={20} color={colors.white} />
+            </TouchableOpacity>
+          ) : (
+            <Text style={st.wait}>Waiting for host...</Text>
+          )}
+        </ScrollView>
+      </SafeAreaView>
+    );
+  }
+
+  // === GAME OVER ===
+  if (phase === "game-over") {
+    const scores = gs.brScores ?? {};
+    const sorted = Object.entries(scores)
+      .map(([uid, score]) => ({ uid, username: playerMap[uid]?.username ?? "?", score }))
+      .sort((a, b) => b.score - a.score || a.username.localeCompare(b.username));
+    const ranks = competitionRanks(sorted, (p) => p.score);
+    const winner = sorted[0];
+
+    return (
+      <SafeAreaView style={st.container}><GameHeader />
+        <ScrollView contentContainerStyle={st.gameOverScroll}>
+          <Ionicons name="trophy" size={48} color={colors.warning} />
+          <Text style={st.gameOverTitle}>
+            {winner?.uid === myId ? "You Win!" : `${winner?.username ?? "?"} Wins!`}
+          </Text>
+          {winner && <Text style={st.gameOverScore}>{winner.score} point{winner.score !== 1 ? "s" : ""}</Text>}
+
+          {sorted.map((p, i) => (
+            <View key={p.uid} style={[st.standingRow, p.uid === myId && st.standingRowMe]}>
+              <Text style={[st.standingRank, ranks[i] === 1 && { color: colors.gold }]}>#{ranks[i]}</Text>
+              <Text style={st.standingName}>{p.username}{p.uid === myId ? " (You)" : ""}</Text>
+              <Text style={st.standingScore}>{p.score} pts</Text>
+            </View>
+          ))}
+
+          {isHost ? (
+            <TouchableOpacity style={st.primaryBtn} onPress={handleBackToLobby} activeOpacity={0.7}>
+              <Text style={st.primaryBtnText}>Back to Lobby</Text>
+              <Ionicons name="arrow-back" size={20} color={colors.white} />
+            </TouchableOpacity>
+          ) : (
+            <HostWaitingPill label="Waiting for host to return to lobby..." style={{ marginTop: 0, marginBottom: 20 }} />
+          )}
+        </ScrollView>
+      </SafeAreaView>
+    );
+  }
+
   return (
-    <SafeAreaView style={s.safe}>
-      <View style={s.centerContainer}>
-        <Ionicons name="hourglass-outline" size={48} color={colors.primaryLight} />
-        <Text style={s.loadingText}>Setting up game...</Text>
+    <SafeAreaView style={st.container}><GameHeader />
+      <View style={st.centered}>
+        <Text style={st.loadingText}>Unknown phase: {phase}</Text>
       </View>
     </SafeAreaView>
   );
 }
 
-// ==================================================================
-// STYLES
-// ==================================================================
+// ---------------------------------------------------------------------------
+// Styles
+// ---------------------------------------------------------------------------
 
-const s = StyleSheet.create({
-  safe: {
-    flex: 1,
-    backgroundColor: colors.background,
-  },
+const st = StyleSheet.create({
+  container: { flex: 1, backgroundColor: colors.background },
+  centered: { flex: 1, justifyContent: "center", alignItems: "center", padding: 24, gap: 12 },
+  loadingText: { fontFamily: fonts.medium, fontSize: 16, color: colors.gray400, marginTop: 16 },
+  bigEmoji: { fontSize: 64, marginBottom: 16 },
+  title: { fontFamily: fonts.extrabold, fontSize: 28, color: colors.white, marginBottom: 8 },
+  tagline: { fontFamily: fonts.regular, fontSize: 15, color: colors.gray400, marginBottom: 32, textAlign: "center" },
+  wait: { fontFamily: fonts.regular, fontSize: 15, color: colors.gray400, textAlign: "center" },
 
-  // --- Intro ---
-  introContainer: {
-    flexGrow: 1,
-    alignItems: "center",
-    justifyContent: "center",
-    paddingVertical: 40,
-    paddingHorizontal: 24,
-  },
-  introEmoji: {
-    fontSize: 64,
-    marginBottom: 16,
-  },
-  introTitle: {
-    fontFamily: fonts.extrabold,
-    fontSize: 28,
-    color: colors.white,
-    marginBottom: 8,
-  },
-  introTagline: {
-    fontFamily: fonts.regular,
-    fontSize: 15,
-    color: colors.gray400,
-    marginBottom: 32,
-  },
-  introRulesContainer: {
-    width: "100%",
-    marginBottom: 32,
-  },
-  introRuleCard: {
-    backgroundColor: colors.surface,
-    borderRadius: 12,
-    padding: 14,
-    marginBottom: 8,
-  },
-  introRuleText: {
-    fontFamily: fonts.regular,
-    fontSize: 14,
-    color: colors.white,
-    lineHeight: 20,
-  },
-  introStartButton: {
-    backgroundColor: colors.primary,
-    borderRadius: 14,
-    paddingVertical: 16,
-    width: "100%",
-    alignItems: "center",
-  },
-  introStartButtonText: {
-    fontFamily: fonts.bold,
-    fontSize: 16,
-    color: colors.white,
-  },
-  introWaitingText: {
-    fontFamily: fonts.regular,
-    fontSize: 15,
-    color: colors.gray400,
-    marginTop: 8,
-  },
+  introScroll: { flexGrow: 1, alignItems: "center", justifyContent: "center", paddingVertical: 40, paddingHorizontal: 24 },
+  rulesBox: { width: "100%", marginBottom: 32 },
+  ruleCard: { backgroundColor: colors.surface, borderRadius: 12, padding: 14, marginBottom: 8 },
+  ruleText: { fontFamily: fonts.regular, fontSize: 14, color: colors.white, lineHeight: 20 },
 
-  // --- Top bar ---
-  topBar: {
-    flexDirection: "row",
-    alignItems: "center",
-    justifyContent: "space-between",
-    paddingHorizontal: 20,
-    paddingVertical: 14,
+  // Setup
+  setupScroll: { flexGrow: 1, paddingHorizontal: 20, paddingTop: 24, paddingBottom: 40, alignItems: "center", gap: 12 },
+  setupTitle: { fontFamily: fonts.extrabold, fontSize: 24, color: colors.white },
+  setupSub: { fontFamily: fonts.regular, fontSize: 14, color: colors.gray400, textAlign: "center", marginBottom: 8 },
+  catGrid: { flexDirection: "row", flexWrap: "wrap", gap: 10, justifyContent: "center" },
+  catCard: {
+    width: "30%", backgroundColor: colors.surface, borderRadius: 12, borderWidth: 1, borderColor: colors.surfaceLight,
+    padding: 14, alignItems: "center", gap: 6,
   },
-  topBarTitle: {
-    fontFamily: fonts.bold,
-    fontSize: 13,
-    color: colors.gray400,
-    letterSpacing: 1.5,
-    textTransform: "uppercase",
+  catEmoji: { fontSize: 24 },
+  catLabel: { fontFamily: fonts.semibold, fontSize: 11, color: colors.white, textAlign: "center" },
+  sizeRow: { flexDirection: "row", gap: 16, marginTop: 16 },
+  sizeCard: {
+    width: 80, backgroundColor: colors.surface, borderRadius: 14, borderWidth: 1, borderColor: colors.surfaceLight,
+    padding: 16, alignItems: "center", gap: 4,
   },
-  topBarRound: {
-    fontFamily: fonts.regular,
-    fontSize: 13,
-    color: colors.gray400,
+  sizeNum: { fontFamily: fonts.extrabold, fontSize: 28, color: colors.white },
+  sizeLabel: { fontFamily: fonts.medium, fontSize: 12, color: colors.gray400 },
+  backLink: { fontFamily: fonts.medium, fontSize: 14, color: colors.primaryLight, textDecorationLine: "underline" },
+  customSectionTitle: { fontFamily: fonts.extrabold, fontSize: 13, color: ACCENT, letterSpacing: 1.5, marginTop: 16 },
+  catItemCount: { fontFamily: fonts.regular, fontSize: 10, color: colors.gray500 },
+  makeOwnBtn: {
+    flexDirection: "row", alignItems: "center", justifyContent: "center", gap: 8,
+    backgroundColor: colors.primary + "18", borderRadius: 12, borderWidth: 1, borderColor: colors.primary + "44",
+    paddingVertical: 14, marginTop: 12, width: "100%",
   },
+  makeOwnText: { fontFamily: fonts.bold, fontSize: 14, color: colors.primaryLight },
+  editorScroll: { flexGrow: 1, paddingHorizontal: 20, paddingTop: 24, paddingBottom: 40, gap: 12 },
+  editorLabel: { fontFamily: fonts.extrabold, fontSize: 11, color: colors.gray500, letterSpacing: 1.5 },
+  editorInput: {
+    backgroundColor: colors.surface, borderWidth: 1, borderColor: colors.surfaceLight, borderRadius: 12,
+    paddingHorizontal: 14, paddingVertical: 12, fontSize: 14, color: colors.white, fontFamily: fonts.regular,
+  },
+  editorCount: { fontFamily: fonts.medium, fontSize: 12, color: colors.gray400, alignSelf: "flex-end" },
 
-  // --- Header section ---
-  headerSection: {
-    paddingHorizontal: 24,
-    paddingBottom: 16,
+  // Playing
+  playScroll: { flexGrow: 1, paddingHorizontal: 20, paddingTop: 16, paddingBottom: 40, gap: 12 },
+  playCatLabel: { fontFamily: fonts.bold, fontSize: 14, color: colors.primaryLight },
+  playProgress: { fontFamily: fonts.medium, fontSize: 13, color: colors.gray400 },
+  nowPlacing: {
+    backgroundColor: colors.surface, borderRadius: 16, borderWidth: 1.5, borderColor: ACCENT,
+    padding: 20, alignItems: "center", gap: 6,
   },
-  categoryLabel: {
-    fontFamily: fonts.bold,
-    fontSize: 12,
-    color: colors.lime,
-    letterSpacing: 1.5,
-    textTransform: "uppercase",
-    marginBottom: 6,
+  nowPlacingLabel: { fontFamily: fonts.extrabold, fontSize: 11, color: ACCENT, letterSpacing: 2 },
+  nowPlacingItem: { fontFamily: fonts.extrabold, fontSize: 24, color: colors.white },
+  nowPlacingHint: { fontFamily: fonts.regular, fontSize: 13, color: colors.gray400 },
+  slotsHeader: { fontFamily: fonts.bold, fontSize: 14, color: colors.gray400, marginTop: 4 },
+  slot: {
+    flexDirection: "row", alignItems: "center", gap: 12, backgroundColor: colors.surface,
+    borderRadius: 12, borderWidth: 1, borderColor: colors.surfaceLight, paddingHorizontal: 14, paddingVertical: 14,
   },
-  title: {
-    fontFamily: fonts.extrabold,
-    fontSize: 32,
-    color: colors.white,
-    marginBottom: 6,
-  },
-  instruction: {
-    fontFamily: fonts.regular,
-    fontSize: 14,
-    color: colors.gray400,
-  },
+  slotFilled: { borderColor: colors.surfaceLight, backgroundColor: colors.surface },
+  slotOpen: { borderColor: ACCENT + "66", borderStyle: "dashed" },
+  slotRank: { fontFamily: fonts.bold, fontSize: 14, color: colors.gray500, width: 30 },
+  slotRankFilled: { color: colors.gray400 },
+  slotItemText: { flex: 1, fontFamily: fonts.semibold, fontSize: 15, color: colors.white },
+  slotEmpty: { flex: 1, fontFamily: fonts.regular, fontSize: 14, color: colors.gray500 },
 
-  // --- Timer ---
-  timerRow: {
-    flexDirection: "row",
-    alignItems: "center",
-    paddingHorizontal: 24,
-    marginBottom: 16,
-    gap: 12,
+  // Reveal
+  revealScroll: { flexGrow: 1, paddingHorizontal: 20, paddingTop: 24, paddingBottom: 40, gap: 16 },
+  revealTitle: { fontFamily: fonts.extrabold, fontSize: 24, color: colors.white },
+  revealCatLabel: { fontFamily: fonts.medium, fontSize: 14, color: colors.gray400 },
+  callout: {
+    backgroundColor: colors.surface, borderRadius: 12, borderWidth: 1, borderColor: colors.warning + "44",
+    padding: 14, gap: 4,
   },
-  timerLeft: {
-    flexDirection: "row",
-    alignItems: "center",
-    gap: 4,
-  },
-  timerText: {
-    fontFamily: fonts.bold,
-    fontSize: 14,
-    color: colors.primaryLight,
-  },
-  timerBarOuter: {
-    flex: 1,
-    height: 6,
-    backgroundColor: colors.gray500,
-    borderRadius: 3,
-    overflow: "hidden",
-  },
-  timerBarInner: {
-    height: "100%",
-    borderRadius: 3,
-    backgroundColor: colors.primary,
-  },
+  calloutTitle: { fontFamily: fonts.extrabold, fontSize: 14, color: colors.warning },
+  calloutItem: { fontFamily: fonts.regular, fontSize: 13, color: colors.gray300 },
+  compTitle: { fontFamily: fonts.bold, fontSize: 14, color: colors.gray400, marginTop: 4 },
+  compHeaderRow: { flexDirection: "row", paddingBottom: 8, borderBottomWidth: 1, borderBottomColor: colors.surfaceLight },
+  compRankCol: { width: 32, alignItems: "center" },
+  compPlayerCol: { alignItems: "center" },
+  compHeaderText: { fontFamily: fonts.bold, fontSize: 12, color: colors.gray400 },
+  compDataRow: { flexDirection: "row", paddingVertical: 8 },
+  compDataRowAlt: { backgroundColor: colors.surface },
+  compRankNum: { fontFamily: fonts.bold, fontSize: 13, color: colors.gray500 },
+  compItemText: { fontFamily: fonts.regular, fontSize: 12, color: colors.white, textAlign: "center" },
 
-  // --- Body ---
-  body: {
-    flex: 1,
+  // Voting
+  voteScroll: { flexGrow: 1, paddingHorizontal: 20, paddingTop: 24, paddingBottom: 40, gap: 12 },
+  voteTitle: { fontFamily: fonts.extrabold, fontSize: 22, color: colors.white },
+  voteSub: { fontFamily: fonts.regular, fontSize: 14, color: colors.gray400 },
+  voteBtn: {
+    flexDirection: "row", alignItems: "center", justifyContent: "space-between",
+    backgroundColor: colors.surface, borderRadius: 12, borderWidth: 1, borderColor: colors.surfaceLight,
+    paddingHorizontal: 16, paddingVertical: 14,
   },
-  bodyContent: {
-    paddingHorizontal: 24,
-    paddingBottom: 24,
-  },
+  voteBtnText: { fontFamily: fonts.bold, fontSize: 16, color: colors.white },
+  voteProg: { fontFamily: fonts.medium, fontSize: 14, color: colors.gray400, textAlign: "center" },
 
-  // --- Item cards (ranking phase) ---
-  itemCard: {
-    flexDirection: "row",
-    alignItems: "center",
-    justifyContent: "space-between",
-    backgroundColor: colors.surface,
-    borderRadius: 14,
-    padding: 16,
-    marginBottom: 10,
-    borderWidth: 1,
-    borderColor: colors.border,
+  // Vote results
+  voteResultScroll: { flexGrow: 1, paddingHorizontal: 20, paddingTop: 24, paddingBottom: 40, gap: 12 },
+  voteResultTitle: { fontFamily: fonts.extrabold, fontSize: 22, color: colors.white },
+  voteResultRow: {
+    flexDirection: "row", alignItems: "center", gap: 10, backgroundColor: colors.surface,
+    borderRadius: 12, paddingHorizontal: 14, paddingVertical: 12, borderWidth: 1, borderColor: colors.surfaceLight,
   },
-  itemCardSelected: {
-    borderLeftWidth: 3,
-    borderLeftColor: colors.lime,
-  },
-  itemCardDisabled: {
-    opacity: 0.6,
-  },
-  itemLeft: {
-    flexDirection: "row",
-    alignItems: "center",
-    gap: 12,
-  },
-  rankCircle: {
-    width: 36,
-    height: 36,
-    borderRadius: 18,
-    backgroundColor: colors.surface,
-    borderWidth: 1,
-    borderColor: colors.border,
-    alignItems: "center",
-    justifyContent: "center",
-  },
-  rankCircleActive: {
-    width: 36,
-    height: 36,
-    borderRadius: 18,
-    backgroundColor: colors.surface,
-    borderWidth: 1,
-    borderColor: colors.lime,
-    alignItems: "center",
-    justifyContent: "center",
-  },
-  rankCircleActiveText: {
-    fontFamily: fonts.bold,
-    fontSize: 14,
-    color: colors.lime,
-  },
-  itemText: {
-    fontFamily: fonts.semibold,
-    fontSize: 16,
-    color: colors.white,
-  },
+  voteResultRank: { fontFamily: fonts.bold, fontSize: 14, color: colors.gray500, width: 28 },
+  voteResultName: { flex: 1, fontFamily: fonts.semibold, fontSize: 15, color: colors.white },
+  voteResultVotes: { fontFamily: fonts.bold, fontSize: 14, color: colors.gray400 },
+  seriesHeader: { fontFamily: fonts.extrabold, fontSize: 11, color: colors.gray500, letterSpacing: 2, marginTop: 12 },
 
-  // --- Bottom quip ---
-  bottomQuip: {
-    fontFamily: fonts.regular,
-    fontSize: 13,
-    color: colors.gray500,
-    textAlign: "center",
-    fontStyle: "italic",
-    paddingHorizontal: 24,
-    marginBottom: 8,
+  // Game over
+  gameOverScroll: { flexGrow: 1, alignItems: "center", paddingHorizontal: 20, paddingTop: 40, paddingBottom: 40, gap: 12 },
+  gameOverTitle: { fontFamily: fonts.extrabold, fontSize: 32, color: colors.white },
+  gameOverScore: { fontFamily: fonts.medium, fontSize: 16, color: colors.gray400 },
+  standingRow: {
+    flexDirection: "row", alignItems: "center", gap: 10, backgroundColor: colors.surface,
+    borderRadius: 12, paddingHorizontal: 14, paddingVertical: 12, borderWidth: 1, borderColor: colors.surfaceLight, width: "100%",
   },
+  standingRowMe: { borderColor: colors.primary },
+  standingRank: { fontFamily: fonts.bold, fontSize: 14, color: colors.gray500, width: 28 },
+  standingName: { flex: 1, fontFamily: fonts.semibold, fontSize: 15, color: colors.white },
+  standingScore: { fontFamily: fonts.bold, fontSize: 16, color: colors.white },
 
-  // --- Footer ---
-  footer: {
-    paddingHorizontal: 24,
-    paddingBottom: 32,
-    paddingTop: 12,
+  primaryBtn: {
+    flexDirection: "row", alignItems: "center", justifyContent: "center", gap: 8,
+    backgroundColor: colors.primary, borderRadius: 14, paddingVertical: 16, width: "100%",
   },
-  submitBtn: {
-    alignItems: "center",
-    justifyContent: "center",
-    backgroundColor: colors.primary,
-    paddingVertical: 18,
-    borderRadius: 14,
-  },
-  submitBtnDisabled: {
-    opacity: 0.5,
-  },
-  submitBtnText: {
-    fontFamily: fonts.bold,
-    fontSize: 16,
-    color: colors.white,
-  },
-  waitingBox: {
-    flexDirection: "row",
-    alignItems: "center",
-    justifyContent: "center",
-    backgroundColor: colors.surface,
-    paddingVertical: 18,
-    borderRadius: 14,
-    gap: 10,
-  },
-  waitingText: {
-    fontFamily: fonts.semibold,
-    fontSize: 15,
-    color: colors.primaryLight,
-  },
-
-  // --- Reveal phase ---
-  revealHeader: {
-    paddingVertical: 16,
-  },
-  revealSubtitle: {
-    fontFamily: fonts.semibold,
-    fontSize: 14,
-    color: colors.primaryLight,
-    marginTop: 8,
-  },
-  card: {
-    backgroundColor: colors.surface,
-    borderRadius: 14,
-    padding: 20,
-    marginBottom: 16,
-    borderWidth: 1,
-    borderColor: colors.border,
-  },
-  cardHeader: {
-    flexDirection: "row",
-    alignItems: "center",
-    marginBottom: 16,
-    gap: 8,
-  },
-  cardTitle: {
-    fontFamily: fonts.bold,
-    fontSize: 17,
-    color: colors.white,
-    flex: 1,
-  },
-  scorePill: {
-    backgroundColor: colors.success + "20",
-    paddingHorizontal: 12,
-    paddingVertical: 4,
-    borderRadius: 12,
-  },
-  scorePillText: {
-    fontFamily: fonts.bold,
-    fontSize: 14,
-    color: colors.success,
-  },
-
-  // Consensus rows
-  consensusRow: {
-    flexDirection: "row",
-    alignItems: "center",
-    marginBottom: 10,
-    gap: 12,
-  },
-  consensusRank: {
-    width: 32,
-    height: 32,
-    borderRadius: 8,
-    backgroundColor: colors.primaryLight + "20",
-    alignItems: "center",
-    justifyContent: "center",
-  },
-  consensusRankText: {
-    fontFamily: fonts.bold,
-    fontSize: 15,
-    color: colors.primaryLight,
-  },
-  consensusItem: {
-    fontFamily: fonts.semibold,
-    fontSize: 16,
-    color: colors.white,
-  },
-
-  // Compare rows (your ranking)
-  compareRow: {
-    flexDirection: "row",
-    alignItems: "center",
-    justifyContent: "space-between",
-    marginBottom: 10,
-  },
-  compareLeft: {
-    flexDirection: "row",
-    alignItems: "center",
-    gap: 12,
-  },
-  compareBadge: {
-    width: 32,
-    height: 32,
-    borderRadius: 8,
-    alignItems: "center",
-    justifyContent: "center",
-  },
-  compareBadgeExact: {
-    backgroundColor: colors.success + "20",
-  },
-  compareBadgeOff: {
-    backgroundColor: colors.gold + "20",
-  },
-  compareBadgeText: {
-    fontFamily: fonts.bold,
-    fontSize: 15,
-    color: colors.white,
-  },
-  compareItem: {
-    fontFamily: fonts.semibold,
-    fontSize: 15,
-    color: colors.white,
-  },
-  compareDiff: {
-    fontFamily: fonts.medium,
-    fontSize: 13,
-    color: colors.gold,
-  },
-
-  // Score rows
-  scoreRow: {
-    flexDirection: "row",
-    alignItems: "center",
-    justifyContent: "space-between",
-    paddingVertical: 8,
-    borderBottomWidth: 1,
-    borderBottomColor: colors.border,
-  },
-  scoreLeft: {
-    flexDirection: "row",
-    alignItems: "center",
-    gap: 10,
-  },
-  scoreRank: {
-    fontFamily: fonts.bold,
-    fontSize: 14,
-    color: colors.gray500,
-    width: 28,
-  },
-  scoreName: {
-    fontFamily: fonts.semibold,
-    fontSize: 15,
-    color: colors.white,
-  },
-  scoreValue: {
-    fontFamily: fonts.bold,
-    fontSize: 16,
-    color: colors.success,
-  },
-
-  // --- Game over ---
-  trophyContainer: {
-    width: 100,
-    height: 100,
-    borderRadius: 50,
-    backgroundColor: colors.gold + "15",
-    alignItems: "center",
-    justifyContent: "center",
-    marginTop: 24,
-    marginBottom: 16,
-  },
-  gameOverTitle: {
-    fontFamily: fonts.extrabold,
-    fontSize: 32,
-    color: colors.white,
-  },
-  gameOverSub: {
-    fontFamily: fonts.regular,
-    fontSize: 15,
-    color: colors.gray400,
-    marginTop: 4,
-  },
-  leaderRow: {
-    flexDirection: "row",
-    alignItems: "center",
-    justifyContent: "space-between",
-    paddingVertical: 12,
-    borderBottomWidth: 1,
-    borderBottomColor: colors.border,
-  },
-  leaderLeft: {
-    flexDirection: "row",
-    alignItems: "center",
-    flex: 1,
-    gap: 12,
-  },
-  leaderRank: {
-    width: 40,
-    height: 40,
-    borderRadius: 12,
-    backgroundColor: colors.surfaceLight,
-    alignItems: "center",
-    justifyContent: "center",
-  },
-  leaderRankText: {
-    fontFamily: fonts.bold,
-    fontSize: 16,
-    color: colors.gray400,
-  },
-  leaderInfo: {
-    flex: 1,
-  },
-  leaderName: {
-    fontFamily: fonts.bold,
-    fontSize: 16,
-    color: colors.white,
-    marginBottom: 4,
-  },
-  leaderBarOuter: {
-    height: 4,
-    backgroundColor: colors.surfaceLight,
-    borderRadius: 2,
-    overflow: "hidden",
-  },
-  leaderBarInner: {
-    height: "100%",
-    borderRadius: 2,
-  },
-  leaderScore: {
-    fontFamily: fonts.extrabold,
-    fontSize: 18,
-    color: colors.white,
-    marginLeft: 12,
-  },
-
-  // --- Loading ---
-  centerContainer: {
-    flex: 1,
-    alignItems: "center",
-    justifyContent: "center",
-    gap: 16,
-  },
-  loadingText: {
-    fontFamily: fonts.semibold,
-    fontSize: 18,
-    color: colors.primaryLight,
-  },
+  primaryBtnText: { fontFamily: fonts.bold, fontSize: 16, color: colors.white },
 });

@@ -21,6 +21,7 @@ import { useAuthStore } from "../../src/stores/authStore";
 import { NUMBER_GUESSOR_PROMPTS } from "../../src/data/numberGuessor";
 import { competitionRanks, joinNames, ordinal } from "../../src/utils/rank";
 import HostWaitingPill from "../../src/components/HostWaitingPill";
+import GameHeader from "../../src/components/GameHeader";
 
 // ---------------------------------------------------------------------------
 // Types
@@ -205,20 +206,29 @@ export default function NumberGuessorScreen() {
     ? myRecordedGuess.timedOut || myRecordedGuess.value === null
     : autoTimedOut;
 
+  // Only guesses from players still in the room count (a leaver's entry is ignored).
+  const activeGuesses: Guess[] = React.useMemo(
+    () =>
+      ((gs?.guesses as Guess[] | undefined) ?? []).filter((g) =>
+        players.some((p) => p.user_id === g.userId)
+      ),
+    [gs?.guesses, players]
+  );
+
   // -------------------------------------------------------------------------
   // Host auto-advance: all guesses in -> move to reveal
   // -------------------------------------------------------------------------
   useEffect(() => {
     if (!isHost || phase !== "guessing" || !gs) return;
     const totalPlayers = players.length;
-    const totalGuesses = gs.guesses?.length ?? 0;
+    const totalGuesses = activeGuesses.length;
     if (totalPlayers > 0 && totalGuesses >= totalPlayers) {
       // Small delay so last guesser sees their submission
       const forRound = gs.currentRound;
       const t = setTimeout(() => advanceToReveal(forRound), 800);
       return () => clearTimeout(t);
     }
-  }, [gs?.guesses?.length, phase, isHost, players.length]);
+  }, [activeGuesses.length, phase, isHost, players.length]);
 
   // -------------------------------------------------------------------------
   // Actions
@@ -288,7 +298,11 @@ export default function NumberGuessorScreen() {
         if (!cur || cur.phase !== "guessing" || cur.currentRound !== forRound) return null;
 
         const correctAnswer = cur.currentPrompt?.correctAnswer ?? 0;
-        const guesses: Guess[] = cur.guesses || [];
+        // Ignore guesses from players who have left the room
+        const roomPlayers = useRoomStore.getState().players;
+        const guesses: Guess[] = (cur.guesses || []).filter((g: Guess) =>
+          roomPlayers.some((p) => p.user_id === g.userId)
+        );
 
         // Calculate penalties for this round
         const newPenalties: Record<string, number> = { ...(cur.penalties || {}) };
@@ -300,7 +314,7 @@ export default function NumberGuessorScreen() {
         }
 
         // Also penalize players who didn't submit at all
-        for (const p of useRoomStore.getState().players) {
+        for (const p of roomPlayers) {
           if (!guesses.some((g) => g.userId === p.user_id)) {
             newPenalties[p.user_id] = (newPenalties[p.user_id] || 0) + NO_GUESS_PENALTY;
           }
@@ -382,13 +396,14 @@ export default function NumberGuessorScreen() {
   const currentRoundGuesses = React.useMemo(() => {
     if (!gs?.guesses || !gs.currentPrompt) return [];
     const correct = gs.currentPrompt.correctAnswer;
+    const inRoom = (g: Guess) => players.some((p) => p.user_id === g.userId);
     const dist = (g: Guess) =>
       g.timedOut || g.value === null ? NO_GUESS_PENALTY : Math.abs(g.value - correct);
     // Rank by the round penalty actually shown (distance + time); distance breaks display order only.
     const roundPen = (g: Guess) =>
       dist(g) + (g.timedOut ? 0 : Math.round(g.timeMs / 1000));
-    return [...gs.guesses].sort((a, b) => roundPen(a) - roundPen(b) || dist(a) - dist(b));
-  }, [gs?.guesses, gs?.currentPrompt]);
+    return [...gs.guesses].filter(inRoom).sort((a, b) => roundPen(a) - roundPen(b) || dist(a) - dist(b));
+  }, [gs?.guesses, gs?.currentPrompt, players]);
 
   const leaderboardRanks = React.useMemo(
     () => competitionRanks(leaderboard, (p) => p.penalty),
@@ -636,7 +651,7 @@ export default function NumberGuessorScreen() {
 
         {/* Guess count */}
         <Text style={styles.guessCount}>
-          {gs?.guesses?.length ?? 0} / {players.length} guessed
+          {activeGuesses.length} / {players.length} guessed
         </Text>
       </Animated.View>
       </KeyboardAvoidingView>
@@ -854,6 +869,7 @@ export default function NumberGuessorScreen() {
 
   return (
     <SafeAreaView style={styles.safeArea}>
+      <GameHeader />
       <View style={styles.container}>
         {phase === "intro" && renderIntro()}
         {phase === "setup" && renderSetup()}

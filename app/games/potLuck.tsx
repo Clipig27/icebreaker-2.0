@@ -1,31 +1,83 @@
-import { useEffect, useRef, useState, useCallback } from "react";
+import React, { useState, useEffect, useRef, useCallback } from "react";
 import {
   View,
   Text,
-  Pressable,
+  TouchableOpacity,
   StyleSheet,
-  Animated,
+  SafeAreaView,
   ScrollView,
+  ActivityIndicator,
+  Animated,
 } from "react-native";
-import { SafeAreaView } from "react-native-safe-area-context";
 import { useRouter } from "expo-router";
 import { Ionicons } from "@expo/vector-icons";
 import { colors, fonts } from "../../src/theme";
 import { useRoomStore } from "../../src/stores/roomStore";
 import { useAuthStore } from "../../src/stores/authStore";
 import { DEFAULT_QUESTIONS, PotLuckQuestion } from "../../src/data/potLuck";
-import { competitionRanks, joinNames } from "../../src/utils/rank";
 import HostWaitingPill from "../../src/components/HostWaitingPill";
+import GameHeader from "../../src/components/GameHeader";
+import { competitionRanks } from "../../src/utils/rank";
 
-// ─── Constants ──────────────────────────────────────────────────────────────
-const TOTAL_ROUNDS = 10;
-const QUESTION_TIME = 15; // seconds
-const REVEAL_DURATION = 4000; // ms before auto-advancing from reveal
+// ---------------------------------------------------------------------------
+// Types
+// ---------------------------------------------------------------------------
 
-// ─── Helpers ────────────────────────────────────────────────────────────────
+type Phase = "intro" | "rolling" | "live" | "reveal" | "gameover";
 
-/** Shuffle an array (Fisher-Yates) and return a new copy */
-function shuffle<T>(arr: T[]): T[] {
+type LastResult = {
+  playerId: string;
+  kind: "correct" | "wrong" | "skip";
+  delta: number;
+  total: number;
+  potAt: number;
+};
+
+type GameState = {
+  phase: Phase;
+  game: "potLuck";
+  // Turn order
+  order: string[]; // userIds in seat order
+  seatPtr: number; // index into order for current turn
+  // Question
+  currentQuestion: PotLuckQuestion | null;
+  usedQuestionIds: string[];
+  // Pot
+  pot: number;
+  potCap: number;
+  consecutiveSkips: number;
+  // Scores & target
+  scores: Record<string, number>;
+  target: number;
+  // Turn action
+  turnAction: { playerId: string; choiceIdx: number } | null;
+  turnSkip: string | null; // playerId who skipped
+  // Reveal info
+  revealInfo: {
+    answer: string;
+    scored: boolean;
+    by: string;
+  } | null;
+  lastResult: LastResult | null;
+  winnerId: string | null;
+};
+
+// ---------------------------------------------------------------------------
+// Constants
+// ---------------------------------------------------------------------------
+
+const TIMER_SECONDS = 15;
+const DEFAULT_TARGET = 10;
+const DEFAULT_POT_CAP = 7;
+
+const DIFF_COLOR = { easy: "#22C55E", medium: "#F59E0B", hard: "#EF4444" } as const;
+const DIFF_LABEL = { easy: "EASY", medium: "MEDIUM", hard: "HARD" } as const;
+
+// ---------------------------------------------------------------------------
+// Helpers
+// ---------------------------------------------------------------------------
+
+function shuffleArray<T>(arr: T[]): T[] {
   const a = [...arr];
   for (let i = a.length - 1; i > 0; i--) {
     const j = Math.floor(Math.random() * (i + 1));
@@ -34,164 +86,74 @@ function shuffle<T>(arr: T[]): T[] {
   return a;
 }
 
-/** Pick `count` questions with a balanced difficulty spread */
-function pickQuestions(count: number): PotLuckQuestion[] {
-  const easy = shuffle(DEFAULT_QUESTIONS.filter((q) => q.difficulty === "easy"));
-  const med = shuffle(DEFAULT_QUESTIONS.filter((q) => q.difficulty === "medium"));
-  const hard = shuffle(DEFAULT_QUESTIONS.filter((q) => q.difficulty === "hard"));
-
-  // 4 easy, 3 medium, 3 hard (or fill as available)
-  const picked: PotLuckQuestion[] = [
-    ...easy.slice(0, 4),
-    ...med.slice(0, 3),
-    ...hard.slice(0, 3),
-  ];
-
-  // If we somehow don't have enough, pad from the full pool
-  if (picked.length < count) {
-    const ids = new Set(picked.map((q) => q.id));
-    const remaining = shuffle(DEFAULT_QUESTIONS.filter((q) => !ids.has(q.id)));
-    picked.push(...remaining.slice(0, count - picked.length));
-  }
-
-  return shuffle(picked).slice(0, count);
+function pickQuestion(usedIds: string[]): PotLuckQuestion | null {
+  const available = DEFAULT_QUESTIONS.filter((q) => !usedIds.includes(q.id));
+  if (available.length === 0) return DEFAULT_QUESTIONS[Math.floor(Math.random() * DEFAULT_QUESTIONS.length)];
+  return available[Math.floor(Math.random() * available.length)];
 }
 
-// ─── Types ──────────────────────────────────────────────────────────────────
-
-type Phase = "intro" | "question" | "reveal" | "game-over";
-
-interface GameState {
-  phase: Phase;
-  game: "potLuck";
-  round: number; // 0-indexed
-  questionIds: string[]; // ids for all rounds
-  answers: Record<string, number>; // userId -> choiceIndex
-  scores: Record<string, number>; // userId -> cumulative score
-  timerEnd: number; // unix ms when timer expires
-}
-
-// ─── Component ──────────────────────────────────────────────────────────────
+// ---------------------------------------------------------------------------
+// Component
+// ---------------------------------------------------------------------------
 
 export default function PotLuckScreen() {
   const router = useRouter();
   const { room, players, isHost, mutateGameState, endGame } = useRoomStore();
   const user = useAuthStore((s) => s.user);
 
-  const gs: GameState | null = room?.game_state?.game === "potLuck" ? room.game_state : null;
-  const rawPhase: string = gs?.phase ?? "intro";
-  const phase = rawPhase === "starting" ? "intro" : rawPhase;
-  const round = gs?.round ?? 0;
-  const answers = gs?.answers ?? {};
-  const scores = gs?.scores ?? {};
-
-  // Resolve question for current round
-  const currentQuestion: PotLuckQuestion | null =
-    gs && gs.questionIds
-      ? DEFAULT_QUESTIONS.find((q) => q.id === gs.questionIds[round]) ?? null
-      : null;
-
-  // Local timer state
-  const [timeLeft, setTimeLeft] = useState(QUESTION_TIME);
+  const [actionSent, setActionSent] = useState(false);
+  const [timeLeft, setTimeLeft] = useState(TIMER_SECONDS);
   const timerRef = useRef<ReturnType<typeof setInterval> | null>(null);
-  const revealTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
-  // Round for which the host already requested question -> reveal (avoids
-  // re-firing every 250ms tick while remaining <= 0)
-  const revealRequestedRoundRef = useRef<number | null>(null);
 
-  // Fade anim for question card
-  const fadeAnim = useRef(new Animated.Value(1)).current;
+  // Delta animation (flashes +N or -N next to score)
+  const [deltaText, setDeltaText] = useState<string | null>(null);
+  const [deltaColor, setDeltaColor] = useState(colors.success);
+  const deltaOpacity = useRef(new Animated.Value(0)).current;
+  const deltaTranslateY = useRef(new Animated.Value(0)).current;
+  const prevLastResultRef = useRef<string | null>(null);
 
-  // ── Initialize game (host only, once) ──────────────────────────────────
+  const gs: GameState | null = room?.game_state ?? null;
+  const phase = gs?.phase ?? null;
+  const myId = user?.id ?? "";
+
+  const isMyTurn = phase === "live" && gs?.order?.[gs.seatPtr] === myId;
+
+  // -----------------------------------------------------------------------
+  // Host: initialise game on mount
+  // -----------------------------------------------------------------------
   useEffect(() => {
-    if (!isHost) return;
-    if (gs && gs.questionIds && gs.questionIds.length > 0) return; // already initialized
+    if (!isHost || !room) return;
+    if (gs && gs.game === "potLuck" && gs.phase && (gs.phase as string) !== "starting") return;
 
-    const questions = pickQuestions(TOTAL_ROUNDS);
-    const initialScores: Record<string, number> = {};
-    players.forEach((p) => {
-      initialScores[p.user_id] = 0;
-    });
-
+    const order = shuffleArray(players.map((p) => p.user_id));
+    const question = pickQuestion([]);
     const initialState: GameState = {
       phase: "intro",
       game: "potLuck",
-      round: 0,
-      questionIds: questions.map((q) => q.id),
-      answers: {},
-      scores: initialScores,
-      timerEnd: Date.now() + QUESTION_TIME * 1000,
+      order,
+      seatPtr: 0,
+      currentQuestion: question,
+      usedQuestionIds: question ? [question.id] : [],
+      pot: question?.startingPot ?? 1,
+      potCap: DEFAULT_POT_CAP,
+      consecutiveSkips: 0,
+      scores: Object.fromEntries(players.map((p) => [p.user_id, 0])),
+      target: DEFAULT_TARGET,
+      turnAction: null,
+      turnSkip: null,
+      revealInfo: null,
+      lastResult: null,
+      winnerId: null,
     };
-
-    // CAS on the fresh state so a late init can never clobber a newer phase.
     mutateGameState((cur) => {
-      if (cur && cur.game === "potLuck" && cur.questionIds && cur.questionIds.length > 0) return null;
-      if (cur?.phase && cur.phase !== "starting" && cur.phase !== "intro") return null;
+      if (cur?.phase && cur.phase !== "starting") return null;
       return initialState;
-    }).then((ok) => console.log("[tapdiag] potLuck host init write:", ok));
-  }, [isHost]);
+    });
+  }, [isHost, room?.id]);
 
-  // ── Timer countdown ────────────────────────────────────────────────────
-  useEffect(() => {
-    if (phase !== "question" || !gs?.timerEnd) {
-      setTimeLeft(QUESTION_TIME);
-      return;
-    }
-
-    const timerEnd = gs.timerEnd;
-    const tickRound = gs.round;
-    const tick = () => {
-      const remaining = Math.max(0, Math.ceil((timerEnd - Date.now()) / 1000));
-      setTimeLeft(remaining);
-
-      if (remaining <= 0 && useRoomStore.getState().isHost) {
-        // Time's up — force reveal (at most once per round)
-        requestReveal(tickRound);
-      }
-    };
-
-    tick(); // run immediately
-    timerRef.current = setInterval(tick, 250);
-    return () => {
-      if (timerRef.current) clearInterval(timerRef.current);
-    };
-  }, [phase, gs?.timerEnd, gs?.round]);
-
-  // ── Auto-advance when all players answered ────────────────────────────
-  useEffect(() => {
-    if (phase !== "question" || !isHost || !gs) return;
-    const answered = Object.keys(answers).length;
-    if (answered >= players.length && players.length > 0) {
-      requestReveal(round);
-    }
-  }, [Object.keys(answers).length, players.length, phase]);
-
-  // ── Auto-advance from reveal after delay ──────────────────────────────
-  useEffect(() => {
-    if (phase !== "reveal" || !isHost) return;
-
-    const revealRound = round;
-    revealTimerRef.current = setTimeout(() => {
-      if (useRoomStore.getState().isHost) advanceFromReveal(revealRound);
-    }, REVEAL_DURATION);
-
-    return () => {
-      if (revealTimerRef.current) clearTimeout(revealTimerRef.current);
-    };
-  }, [phase, gs?.round]);
-
-  // ── Fade animation on new round ───────────────────────────────────────
-  useEffect(() => {
-    fadeAnim.setValue(0);
-    Animated.timing(fadeAnim, {
-      toValue: 1,
-      duration: 350,
-      useNativeDriver: true,
-    }).start();
-  }, [round, phase]);
-
-  // ── Navigate back if room goes to lobby ───────────────────────────────
-  // Single place that returns to the lobby (host + players); fires once.
+  // -----------------------------------------------------------------------
+  // Navigate away if room returns to lobby
+  // -----------------------------------------------------------------------
   const navigatedBackRef = useRef(false);
   useEffect(() => {
     if (navigatedBackRef.current) return;
@@ -202,1064 +164,687 @@ export default function PotLuckScreen() {
     }
   }, [room?.status]);
 
-  // ── Actions ───────────────────────────────────────────────────────────
+  // -----------------------------------------------------------------------
+  // Show delta animation when lastResult changes and it's about me
+  useEffect(() => {
+    if (!gs?.lastResult) return;
+    const lr = gs.lastResult;
+    const key = `${lr.playerId}-${lr.kind}-${lr.delta}-${lr.total}`;
+    if (key === prevLastResultRef.current) return;
+    prevLastResultRef.current = key;
+    if (lr.playerId !== myId || lr.kind === "skip") return;
 
-  const submitAnswer = useCallback(
-    async (choiceIndex: number) => {
-      if (!gs || !user || phase !== "question") return;
-      if (answers[user.id] !== undefined) return; // already answered
+    const isPositive = lr.delta > 0;
+    setDeltaText(`${isPositive ? "+" : ""}${lr.delta}`);
+    setDeltaColor(isPositive ? colors.success : colors.danger);
+    deltaOpacity.setValue(1);
+    deltaTranslateY.setValue(0);
+    Animated.parallel([
+      Animated.timing(deltaOpacity, { toValue: 0, duration: 1500, useNativeDriver: true }),
+      Animated.timing(deltaTranslateY, { toValue: -30, duration: 1500, useNativeDriver: true }),
+    ]).start(() => setDeltaText(null));
+  }, [gs?.lastResult]);
 
-      const answerRound = round;
-      // Merge only our own answer into the fresh server state (no lost updates)
-      await mutateGameState((cur) => {
-        if (!cur || cur.game !== "potLuck" || cur.phase !== "question" || cur.round !== answerRound) {
-          return null;
-        }
-        const curAnswers = cur.answers ?? {};
-        if (curAnswers[user.id] !== undefined) return null;
-        return { ...cur, answers: { ...curAnswers, [user.id]: choiceIndex } };
-      });
-    },
-    [gs, user, phase, round, answers, mutateGameState]
-  );
+  // Reset actionSent when turn changes
+  // -----------------------------------------------------------------------
+  useEffect(() => {
+    setActionSent(false);
+  }, [gs?.seatPtr, gs?.phase]);
 
-  // Host transition question -> reveal for `forRound`. Scores are computed from
-  // the FRESH server state; idempotent (no-op if already revealed).
-  const advanceToReveal = useCallback(
-    async (forRound: number) => {
-      await mutateGameState((cur) => {
-        if (!cur || cur.game !== "potLuck" || cur.phase !== "question" || cur.round !== forRound) {
-          return null;
-        }
-        const question = DEFAULT_QUESTIONS.find(
-          (q) => q.id === (cur.questionIds ?? [])[forRound]
-        );
-        if (!question) return null;
+  // -----------------------------------------------------------------------
+  // Timer for live phase
+  // -----------------------------------------------------------------------
+  useEffect(() => {
+    if (phase !== "live") {
+      if (timerRef.current) clearInterval(timerRef.current);
+      return;
+    }
+    setTimeLeft(TIMER_SECONDS);
+    let remaining = TIMER_SECONDS;
+    timerRef.current = setInterval(() => {
+      remaining -= 1;
+      if (remaining <= 0) {
+        if (timerRef.current) clearInterval(timerRef.current);
+        setTimeLeft(0);
+        return;
+      }
+      setTimeLeft(remaining);
+    }, 1000);
+    return () => {
+      if (timerRef.current) clearInterval(timerRef.current);
+    };
+  }, [phase, gs?.seatPtr]);
 
-        // Calculate new scores
-        const newScores: Record<string, number> = { ...(cur.scores ?? {}) };
-        const pot = question.startingPot;
+  // Auto-skip when timer expires (only the active player)
+  useEffect(() => {
+    if (timeLeft === 0 && isMyTurn && !actionSent) {
+      handleSkip();
+    }
+  }, [timeLeft, isMyTurn, actionSent]);
 
-        Object.entries((cur.answers ?? {}) as Record<string, number>).forEach(([uid, choice]) => {
-          if (choice === question.correctIndex) {
-            newScores[uid] = (newScores[uid] ?? 0) + pot;
-          }
+  // -----------------------------------------------------------------------
+  // Host: process turn actions
+  // -----------------------------------------------------------------------
+  useEffect(() => {
+    if (!isHost || phase !== "live" || !gs) return;
+
+    // Handle answer
+    if (gs.turnAction) {
+      const { playerId, choiceIdx } = gs.turnAction;
+      const q = gs.currentQuestion;
+      if (!q) return;
+
+      const isCorrect = choiceIdx === q.correctIndex;
+      const pot = gs.pot;
+      const currentScore = gs.scores[playerId] ?? 0;
+      const delta = isCorrect ? pot : -Math.min(pot, currentScore);
+      const newScore = Math.max(0, currentScore + delta);
+      const newScores = { ...gs.scores, [playerId]: newScore };
+      const correctAnswer = q.choices[q.correctIndex];
+
+      const result: LastResult = {
+        playerId,
+        kind: isCorrect ? "correct" : "wrong",
+        delta,
+        total: newScore,
+        potAt: pot,
+      };
+
+      if (isCorrect) {
+        // Correct: win pot, check for game win, go to reveal
+        const winner = newScore >= gs.target ? playerId : null;
+        mutateGameState((cur) => {
+          if (!cur || cur.phase !== "live" || !cur.turnAction) return null;
+          return {
+            ...cur,
+            phase: winner ? ("gameover" as Phase) : ("reveal" as Phase),
+            scores: newScores,
+            turnAction: null,
+            lastResult: result,
+            revealInfo: { answer: correctAnswer, scored: true, by: playerMap[playerId]?.username ?? "Player" },
+            winnerId: winner,
+            consecutiveSkips: 0,
+          };
         });
-
-        // Also make sure players who didn't answer get 0 added (keep their score)
-        useRoomStore.getState().players.forEach((p) => {
-          if (newScores[p.user_id] === undefined) {
-            newScores[p.user_id] = 0;
-          }
+      } else {
+        // Wrong: lose pot value, pot grows, pass to next player (stay in live)
+        const newPot = Math.min(pot + 1, gs.potCap);
+        const nextSeat = (gs.seatPtr + 1) % gs.order.length;
+        mutateGameState((cur) => {
+          if (!cur || cur.phase !== "live" || !cur.turnAction) return null;
+          return {
+            ...cur,
+            scores: newScores,
+            turnAction: null,
+            lastResult: result,
+            pot: newPot,
+            seatPtr: nextSeat,
+            consecutiveSkips: 0,
+          };
         });
-
-        return { ...cur, phase: "reveal" as Phase, scores: newScores };
-      });
-    },
-    [mutateGameState]
-  );
-
-  const requestReveal = (forRound: number) => {
-    if (revealRequestedRoundRef.current === forRound) return;
-    revealRequestedRoundRef.current = forRound;
-    advanceToReveal(forRound);
-  };
-
-  // Host transition reveal -> next question / game-over for `forRound`. Idempotent.
-  const advanceFromReveal = useCallback(
-    async (forRound: number) => {
-      await mutateGameState((cur) => {
-        if (!cur || cur.game !== "potLuck" || cur.phase !== "reveal" || cur.round !== forRound) {
-          return null;
-        }
-        const nextRound = forRound + 1;
-        if (nextRound >= TOTAL_ROUNDS || nextRound >= (cur.questionIds ?? []).length) {
-          // Game over
-          return { ...cur, phase: "game-over" as Phase };
-        }
-        return {
-          ...cur,
-          phase: "question" as Phase,
-          round: nextRound,
-          answers: {},
-          timerEnd: Date.now() + QUESTION_TIME * 1000,
-        };
-      });
-    },
-    [mutateGameState]
-  );
-
-  const handleBackToLobby = async () => {
-    // Sync scores to room_players before ending
-    if (isHost && gs) {
-      for (const p of players) {
-        const gameScore = scores[p.user_id] ?? 0;
-        if (gameScore !== p.score) {
-          await useRoomStore.getState().updateScore(p.user_id, gameScore - p.score);
-        }
       }
     }
-    // Navigation happens in the room-status effect above once status is "lobby".
-    await endGame();
-  };
 
+    // Handle skip
+    if (gs.turnSkip) {
+      const playerId = gs.turnSkip;
+      const newPot = Math.min(gs.pot + 1, gs.potCap);
+      const nextSeat = (gs.seatPtr + 1) % gs.order.length;
+      const newConsecutive = gs.consecutiveSkips + 1;
+
+      const result: LastResult = {
+        playerId,
+        kind: "skip",
+        delta: 0,
+        total: gs.scores[playerId] ?? 0,
+        potAt: gs.pot,
+      };
+
+      // If everyone skipped, void the pot and go to next question
+      if (newConsecutive >= gs.order.length) {
+        const q = pickQuestion(gs.usedQuestionIds);
+        mutateGameState((cur) => {
+          if (!cur || cur.phase !== "live" || !cur.turnSkip) return null;
+          return {
+            ...cur,
+            phase: "reveal" as Phase,
+            turnSkip: null,
+            lastResult: result,
+            consecutiveSkips: 0,
+            revealInfo: { answer: cur.currentQuestion?.choices[cur.currentQuestion.correctIndex] ?? "", scored: false, by: "" },
+          };
+        });
+      } else {
+        mutateGameState((cur) => {
+          if (!cur || cur.phase !== "live" || !cur.turnSkip) return null;
+          return {
+            ...cur,
+            seatPtr: nextSeat,
+            pot: newPot,
+            consecutiveSkips: newConsecutive,
+            turnSkip: null,
+            lastResult: result,
+          };
+        });
+      }
+    }
+  }, [gs?.turnAction, gs?.turnSkip, phase, isHost]);
+
+  // -----------------------------------------------------------------------
+  // Derived data
+  // -----------------------------------------------------------------------
+  const playerMap: Record<string, { username: string }> = {};
+  players.forEach((p) => {
+    playerMap[p.user_id] = { username: p.username };
+  });
+
+  const currentActorId = gs?.order?.[gs?.seatPtr ?? 0];
+  const currentActor = currentActorId ? playerMap[currentActorId]?.username : "...";
+  const mySeat = (gs?.order ?? []).indexOf(myId);
+  const curSeat = gs?.seatPtr ?? 0;
+  const orderLen = (gs?.order ?? []).length;
+  const turnsAway = mySeat === -1 ? -1 : (mySeat - curSeat + orderLen) % orderLen;
+
+  // -----------------------------------------------------------------------
+  // Handlers
+  // -----------------------------------------------------------------------
+
+  const handleAnswer = useCallback(async (choiceIdx: number) => {
+    if (!isMyTurn || actionSent || !gs) return;
+    setActionSent(true);
+    await mutateGameState((cur) => {
+      if (!cur || cur.phase !== "live") return null;
+      if (cur.order[cur.seatPtr] !== myId) return null;
+      if (cur.turnAction || cur.turnSkip) return null;
+      return { ...cur, turnAction: { playerId: myId, choiceIdx } };
+    });
+  }, [isMyTurn, actionSent, gs, myId, mutateGameState]);
+
+  const handleSkip = useCallback(async () => {
+    if (!isMyTurn || actionSent || !gs) return;
+    setActionSent(true);
+    await mutateGameState((cur) => {
+      if (!cur || cur.phase !== "live") return null;
+      if (cur.order[cur.seatPtr] !== myId) return null;
+      if (cur.turnAction || cur.turnSkip) return null;
+      return { ...cur, turnSkip: myId };
+    });
+  }, [isMyTurn, actionSent, gs, myId, mutateGameState]);
+
+  // Host: start from intro
   const startFromIntro = useCallback(async () => {
-    console.log("[tapdiag] potLuck Start onPress fired, local phase:", rawPhase);
-    const t0 = Date.now();
-    const ok = await mutateGameState((cur) => {
-      if (!cur || cur.game !== "potLuck") return null;
-      if (cur.phase !== "intro" && cur.phase !== "starting") return null;
+    await mutateGameState((cur) => {
+      if (!cur || cur.phase !== "intro") return null;
+      return { ...cur, phase: "rolling" as Phase };
+    });
+    // Auto-advance to live after a brief delay for the rolling animation
+    setTimeout(async () => {
+      await mutateGameState((cur) => {
+        if (!cur || cur.phase !== "rolling") return null;
+        return { ...cur, phase: "live" as Phase };
+      });
+    }, 3000);
+  }, [mutateGameState]);
+
+  // Host: next question from reveal
+  const handleNextQuestion = useCallback(async () => {
+    await mutateGameState((cur) => {
+      if (!cur || cur.phase !== "reveal") return null;
+      const q = pickQuestion(cur.usedQuestionIds);
+      if (!q) return null;
       return {
         ...cur,
-        phase: "question" as Phase,
-        timerEnd: Date.now() + QUESTION_TIME * 1000,
+        phase: "live" as Phase,
+        currentQuestion: q,
+        usedQuestionIds: [...cur.usedQuestionIds, q.id],
+        pot: q.startingPot,
+        seatPtr: (cur.seatPtr + 1) % cur.order.length,
+        consecutiveSkips: 0,
+        turnAction: null,
+        turnSkip: null,
+        revealInfo: null,
+        lastResult: null,
       };
     });
-    console.log("[tapdiag] potLuck Start mutateGameState:", ok, `${Date.now() - t0}ms`);
-  }, [mutateGameState, rawPhase]);
+  }, [mutateGameState]);
 
-  // ── Derived state ─────────────────────────────────────────────────────
+  const handleBackToLobby = useCallback(async () => {
+    await endGame();
+  }, [endGame]);
 
-  const myAnswer = user ? answers[user.id] : undefined;
-  const hasAnswered = myAnswer !== undefined;
-
-  // Sorted leaderboard
-  const leaderboard = [...players]
-    .map((p) => ({
-      ...p,
-      gameScore: scores[p.user_id] ?? 0,
-    }))
-    .sort((a, b) => b.gameScore - a.gameScore);
-  const leaderboardRanks = competitionRanks(leaderboard, (p) => p.gameScore);
-
-  // ── Render: Intro Phase ──────────────────────────────────────────────
-
-  const renderIntro = () => (
-    <ScrollView contentContainerStyle={s.introContainer}>
-      <Text style={s.introEmoji}>{"\uD83C\uDF40"}</Text>
-      <Text style={s.introTitle}>Pot Luck</Text>
-      <Text style={s.introTagline}>Trivia with a twist.</Text>
-
-      <View style={s.introRulesContainer}>
-        <View style={s.introRuleCard}>
-          <Text style={s.introRuleText}>{"\u2753"}  Each round shows a multiple choice trivia question</Text>
-        </View>
-        <View style={s.introRuleCard}>
-          <Text style={s.introRuleText}>{"\u23F1\uFE0F"}  15 seconds to pick your answer</Text>
-        </View>
-        <View style={s.introRuleCard}>
-          <Text style={s.introRuleText}>{"\uD83D\uDCB0"}  Correct answers earn the pot value (1-3 points based on difficulty)</Text>
-        </View>
-        <View style={s.introRuleCard}>
-          <Text style={s.introRuleText}>{"\u274C"}  Wrong answers earn nothing</Text>
-        </View>
-        <View style={s.introRuleCard}>
-          <Text style={s.introRuleText}>{"\uD83C\uDFC6"}  Highest score after 10 rounds wins!</Text>
-        </View>
-      </View>
-
-      {isHost ? (
-        <Pressable
-          style={s.introStartButton}
-          onPressIn={() => console.log("[tapdiag] potLuck Start onPressIn")}
-          onPress={startFromIntro}
-        >
-          <Text style={s.introStartButtonText}>Start Game</Text>
-        </Pressable>
-      ) : (
-        <Text style={s.introWaitingText}>Waiting for host to start...</Text>
-      )}
-    </ScrollView>
-  );
-
-  // ── Render: Question Phase ────────────────────────────────────────────
-
-  const renderQuestion = () => {
-    if (!currentQuestion) return null;
-
-    const timerColor =
-      timeLeft <= 3 ? colors.danger : timeLeft <= 7 ? colors.warning : colors.primary;
-    const timerTextColor =
-      timeLeft <= 3 ? colors.danger : timeLeft <= 7 ? colors.warning : colors.primaryLight;
-
-    const timerProgress = timeLeft / QUESTION_TIME;
-
+  // -----------------------------------------------------------------------
+  // Loading
+  // -----------------------------------------------------------------------
+  if (!gs || (gs.game as string) !== "potLuck" || !phase || (phase as string) === "starting") {
     return (
-      <Animated.View style={[s.content, { opacity: fadeAnim }]}>
-        {/* Round + Timer Header */}
-        <View style={s.roundHeader}>
-          <View style={s.roundBadge}>
-            <Text style={s.roundBadgeText}>
-              Round {round + 1}/{TOTAL_ROUNDS}
-            </Text>
-          </View>
-          <View style={s.potBadge}>
-            <Ionicons name="trophy" size={16} color={colors.warning} />
-            <Text style={s.potText}>
-              {currentQuestion.startingPot} {currentQuestion.startingPot === 1 ? "pt" : "pts"}
-            </Text>
-          </View>
+      <SafeAreaView style={st.container}><GameHeader />
+        <View style={st.centered}>
+          <ActivityIndicator size="large" color={colors.primary} />
+          <Text style={st.loadingText}>Setting up the game...</Text>
         </View>
-
-        {/* Timer Bar */}
-        <View style={s.timerBarOuter}>
-          <View
-            style={[
-              s.timerBarInner,
-              {
-                width: `${timerProgress * 100}%`,
-                backgroundColor: timerColor,
-              },
-            ]}
-          />
-        </View>
-        <Text style={[s.timerText, { color: timerTextColor }]}>{timeLeft}s</Text>
-
-        {/* Difficulty Indicator */}
-        <View style={s.difficultyRow}>
-          <View
-            style={[
-              s.difficultyDot,
-              {
-                backgroundColor:
-                  currentQuestion.difficulty === "easy"
-                    ? colors.success
-                    : currentQuestion.difficulty === "medium"
-                    ? colors.warning
-                    : colors.danger,
-              },
-            ]}
-          />
-          <Text style={s.difficultyLabel}>
-            {currentQuestion.difficulty.charAt(0).toUpperCase() +
-              currentQuestion.difficulty.slice(1)}
-          </Text>
-        </View>
-
-        {/* Question Card */}
-        <View style={s.questionCard}>
-          <Text style={s.questionText}>{currentQuestion.text}</Text>
-        </View>
-
-        {/* Choices */}
-        <View style={s.choicesContainer}>
-          {currentQuestion.choices.map((choice, idx) => {
-            const isSelected = myAnswer === idx;
-            return (
-              <Pressable
-                key={idx}
-                style={[
-                  s.choiceBtn,
-                  isSelected && s.choiceBtnSelected,
-                  hasAnswered && !isSelected && s.choiceBtnDisabled,
-                ]}
-                onPress={() => submitAnswer(idx)}
-                disabled={hasAnswered}
-              >
-                <View style={[s.choiceLetter, isSelected && s.choiceLetterSelected]}>
-                  <Text
-                    style={[s.choiceLetterText, isSelected && s.choiceLetterTextSelected]}
-                  >
-                    {String.fromCharCode(65 + idx)}
-                  </Text>
-                </View>
-                <Text
-                  style={[s.choiceText, isSelected && s.choiceTextSelected]}
-                  numberOfLines={2}
-                >
-                  {choice}
-                </Text>
-                {isSelected && (
-                  <Ionicons
-                    name="checkmark-circle"
-                    size={22}
-                    color={colors.primary}
-                    style={{ marginLeft: "auto" }}
-                  />
-                )}
-              </Pressable>
-            );
-          })}
-        </View>
-
-        {hasAnswered && (
-          <Text style={s.waitingText}>Waiting for others...</Text>
-        )}
-
-        {/* Answer count */}
-        <Text style={s.answeredCount}>
-          {Object.keys(answers).length}/{players.length} answered
-        </Text>
-      </Animated.View>
+      </SafeAreaView>
     );
-  };
+  }
 
-  // ── Render: Reveal Phase ──────────────────────────────────────────────
-
-  const renderReveal = () => {
-    if (!currentQuestion) return null;
-
-    const pot = currentQuestion.startingPot;
-
-    return (
-      <Animated.View style={[s.content, s.contentCompact, { opacity: fadeAnim }]}>
-        <View style={s.roundHeader}>
-          <View style={s.roundBadge}>
-            <Text style={s.roundBadgeText}>
-              Round {round + 1}/{TOTAL_ROUNDS}
-            </Text>
-          </View>
-          <Text style={s.revealLabel}>Results</Text>
-        </View>
-
-        {/* Question recap (compact so the whole reveal fits without scrolling) */}
-        <View style={[s.questionCard, s.questionCardCompact]}>
-          <Text style={[s.questionText, s.questionTextCompact]}>{currentQuestion.text}</Text>
-        </View>
-
-        {/* Choices with correct/incorrect highlighting */}
-        <View style={[s.choicesContainer, s.choicesContainerCompact]}>
-          {currentQuestion.choices.map((choice, idx) => {
-            const isCorrect = idx === currentQuestion.correctIndex;
-            const wasMyChoice = myAnswer === idx;
-
-            return (
-              <View
-                key={idx}
-                style={[
-                  s.choiceBtn,
-                  s.choiceBtnCompact,
-                  isCorrect && s.choiceBtnCorrect,
-                  !isCorrect && wasMyChoice && s.choiceBtnWrong,
-                ]}
-              >
-                <View
-                  style={[
-                    s.choiceLetter,
-                    s.choiceLetterCompact,
-                    isCorrect && s.choiceLetterCorrect,
-                    !isCorrect && wasMyChoice && s.choiceLetterWrong,
-                  ]}
-                >
-                  <Text
-                    style={[
-                      s.choiceLetterText,
-                      (isCorrect || wasMyChoice) && s.choiceLetterTextSelected,
-                    ]}
-                  >
-                    {isCorrect ? (
-                      <Ionicons name="checkmark" size={14} color={colors.white} />
-                    ) : wasMyChoice ? (
-                      <Ionicons name="close" size={14} color={colors.white} />
-                    ) : (
-                      String.fromCharCode(65 + idx)
-                    )}
-                  </Text>
-                </View>
-                <Text
-                  style={[
-                    s.choiceText,
-                    isCorrect && { color: colors.success },
-                    !isCorrect && wasMyChoice && { color: colors.danger },
-                  ]}
-                  numberOfLines={2}
-                >
-                  {choice}
-                </Text>
-              </View>
-            );
-          })}
-        </View>
-
-        {/* Player results */}
-        <View style={[s.resultsCard, s.resultsCardCompact]}>
-          <Text style={s.resultsTitle}>Round Results</Text>
-          {players.map((p) => {
-            const pAnswer = answers[p.user_id];
-            const gotIt = pAnswer === currentQuestion.correctIndex;
-            const didntAnswer = pAnswer === undefined;
-
-            return (
-              <View key={p.user_id} style={s.resultRow}>
-                <View style={s.resultLeft}>
-                  <Ionicons
-                    name={didntAnswer ? "time-outline" : gotIt ? "checkmark-circle" : "close-circle"}
-                    size={20}
-                    color={didntAnswer ? colors.gray500 : gotIt ? colors.success : colors.danger}
-                  />
-                  <Text style={s.resultName} numberOfLines={1}>{p.username}</Text>
-                </View>
-                <Text
-                  style={[
-                    s.resultPoints,
-                    {
-                      color: didntAnswer
-                        ? colors.gray500
-                        : gotIt
-                        ? colors.success
-                        : colors.danger,
-                    },
-                  ]}
-                >
-                  {didntAnswer ? "No answer" : gotIt ? `+${pot}` : "+0"}
-                </Text>
-              </View>
-            );
-          })}
-        </View>
-      </Animated.View>
-    );
-  };
-
-  // ── Render: Game Over ─────────────────────────────────────────────────
-
-  const renderGameOver = () => {
-    const winner = leaderboard[0];
-    const coWinners = leaderboard.filter((_, i) => leaderboardRanks[i] === 1);
-
-    return (
-      <Animated.View style={[s.content, { opacity: fadeAnim }]}>
-        <View style={s.gameOverHeader}>
-          <Ionicons name="trophy" size={48} color={colors.warning} />
-          <Text style={s.gameOverTitle}>Game Over!</Text>
-          {winner && (
-            <Text style={s.winnerText}>
-              {coWinners.length > 1
-                ? `${joinNames(coWinners.map((p) => p.username))} tie with ${winner.gameScore} pts!`
-                : `${winner.username} wins with ${winner.gameScore} pts!`}
-            </Text>
-          )}
-        </View>
-
-        <View style={s.leaderboardCard}>
-          <Text style={s.leaderboardTitle}>Final Standings</Text>
-          {leaderboard.map((p, idx) => {
-            const rank = leaderboardRanks[idx] ?? idx + 1;
-            const isFirst = rank === 1;
-            return (
-            <View
-              key={p.user_id}
-              style={[s.leaderboardRow, isFirst && s.leaderboardRowFirst]}
-            >
-              <View style={s.rankContainer}>
-                <Text style={s.rankNumber}>#{rank}</Text>
-                {rank <= 3 && (
-                  <Ionicons
-                    name="medal"
-                    size={20}
-                    color={
-                      rank === 1
-                        ? "#FFD700"
-                        : rank === 2
-                        ? "#C0C0C0"
-                        : "#CD7F32"
-                    }
-                  />
-                )}
-              </View>
-              <Text style={[s.leaderboardName, isFirst && s.leaderboardNameFirst]}>
-                {p.username}
-                {p.user_id === user?.id ? " (You)" : ""}
-              </Text>
-              <Text style={[s.leaderboardScore, isFirst && s.leaderboardScoreFirst]}>
-                {p.gameScore} pts
-              </Text>
-            </View>
-            );
-          })}
-        </View>
-      </Animated.View>
-    );
-  };
-
-  // Pinned below the ScrollView so it is never pushed below the fold.
-  const renderGameOverFooter = () => (
-    <View style={s.footer}>
-      {isHost && (
-        <Pressable style={[s.lobbyBtn, { marginTop: 0 }]} onPress={handleBackToLobby}>
-          <Ionicons name="arrow-back" size={20} color={colors.white} />
-          <Text style={s.lobbyBtnText}>Back to Lobby</Text>
-        </Pressable>
-      )}
-
-      {!isHost && (
-        <HostWaitingPill
-          label="Waiting for host to return to lobby..."
-          style={{ marginTop: 0 }}
-        />
-      )}
-    </View>
-  );
-
-  // ── Main Render ───────────────────────────────────────────────────────
-
+  // === INTRO ===
   if (phase === "intro") {
     return (
-      <SafeAreaView style={s.safe}>
-        {renderIntro()}
+      <SafeAreaView style={st.container}><GameHeader />
+        <ScrollView contentContainerStyle={st.introScroll}>
+          <Text style={st.bigEmoji}>{"\uD83E\uDDE0"}</Text>
+          <Text style={st.title}>Smarty Pot</Text>
+          <Text style={st.tagline}>Risk the growing pot or pass it on.</Text>
+          <View style={st.rulesBox}>
+            {[
+              ["\uD83D\uDCDA", "Each question has a difficulty: Easy, Medium, or Hard. Harder = bigger starting pot."],
+              ["\u23F1\uFE0F", "On your turn you have 15 seconds \u2014 answer or skip."],
+              ["\u2705", "Answer correctly = win the pot. Wrong = lose points equal to the pot."],
+              ["\u23ED\uFE0F", "Skip = pot grows by 1 and passes on. First to the target score wins!"],
+            ].map(([icon, text], i) => (
+              <View key={i} style={st.ruleCard}>
+                <Text style={st.ruleText}>{icon}  {text}</Text>
+              </View>
+            ))}
+          </View>
+          {isHost ? (
+            <TouchableOpacity style={st.primaryBtn} onPress={startFromIntro}>
+              <Text style={st.primaryBtnText}>Start Game</Text>
+            </TouchableOpacity>
+          ) : (
+            <Text style={st.wait}>Waiting for host to start...</Text>
+          )}
+        </ScrollView>
+      </SafeAreaView>
+    );
+  }
+
+  // === ROLLING (turn order reveal) ===
+  if (phase === "rolling") {
+    const order = gs.order ?? [];
+    return (
+      <SafeAreaView style={st.container}><GameHeader />
+        <View style={st.rollingContainer}>
+          <Text style={st.rollingHeader}>SMARTY POT</Text>
+          <Text style={st.rollingSubHeader}>TURN ORDER</Text>
+          <View style={{ gap: 8, width: "100%" }}>
+            {order.map((pid, seat) => {
+              const isMe = pid === myId;
+              return (
+                <View key={pid} style={[st.rollItem, isMe && st.rollItemMe]}>
+                  <View style={[st.rollAvatar, isMe && { backgroundColor: colors.gold + "33" }]}>
+                    <Text style={[st.rollAvatarLetter, isMe && { color: colors.gold }]}>
+                      {(playerMap[pid]?.username ?? "?")[0].toUpperCase()}
+                    </Text>
+                  </View>
+                  <Text style={[st.rollSeat, isMe && { color: colors.gold }]}>{seat + 1}</Text>
+                  <Text style={[st.rollName, isMe && { color: colors.white }]}>
+                    {playerMap[pid]?.username ?? "Player"}
+                  </Text>
+                  {isMe && <Text style={st.rollYouTag}>YOU</Text>}
+                </View>
+              );
+            })}
+          </View>
+          <Text style={st.rollHint}>Starting in a moment...</Text>
+        </View>
+      </SafeAreaView>
+    );
+  }
+
+  // === LIVE (active turn) ===
+  if (phase === "live") {
+    const q = gs.currentQuestion;
+    const difficulty = q?.difficulty ?? "easy";
+    const diffColor = DIFF_COLOR[difficulty];
+    const diffLabel = DIFF_LABEL[difficulty];
+    const atCap = gs.pot >= gs.potCap;
+    const timerColor = timeLeft > 7 ? colors.success : timeLeft > 3 ? colors.warning : colors.danger;
+
+    return (
+      <SafeAreaView style={st.container}><GameHeader />
+        <ScrollView contentContainerStyle={st.liveScroll}>
+          {/* Turn banner */}
+          <View style={[st.turnBanner, isMyTurn && st.turnBannerMe]}>
+            <View style={[st.turnAvatar, isMyTurn && { backgroundColor: colors.gold + "28" }]}>
+              <Text style={[st.turnAvatarLetter, isMyTurn && { color: colors.gold }]}>
+                {(currentActor ?? "?")[0].toUpperCase()}
+              </Text>
+            </View>
+            <View style={{ flex: 1, gap: 4 }}>
+              <Text style={[st.turnName, isMyTurn && { color: colors.gold }]}>
+                {isMyTurn ? "YOUR TURN" : `${currentActor}'s turn`}
+              </Text>
+              <View style={st.timerTrack}>
+                <View style={[st.timerFill, { width: `${(timeLeft / TIMER_SECONDS) * 100}%`, backgroundColor: timerColor }]} />
+              </View>
+            </View>
+            <View style={st.timerBubble}>
+              <Text style={[st.timerNum, { color: timerColor }]}>{timeLeft}</Text>
+              <Text style={[st.timerSec, { color: timerColor }]}>s</Text>
+            </View>
+          </View>
+
+          {/* My score bar */}
+          <View style={st.scoreBar}>
+            <Text style={st.scoreLabel}>YOU</Text>
+            <Text style={st.scoreNum}>{gs.scores[myId] ?? 0}<Text style={st.scoreTarget}>/{gs.target}</Text></Text>
+            {deltaText && (
+              <Animated.Text
+                style={[
+                  st.deltaAnim,
+                  { color: deltaColor, opacity: deltaOpacity, transform: [{ translateY: deltaTranslateY }] },
+                ]}
+              >
+                {deltaText}
+              </Animated.Text>
+            )}
+          </View>
+
+          {/* Pot meter */}
+          <View style={[st.potMeter, atCap && st.potMax]}>
+            <Text style={[st.potLabel, atCap && { color: colors.danger }]}>
+              {atCap ? "MAX POT" : "POT"}
+            </Text>
+            <Text style={[st.potNum, atCap && { color: colors.danger }]}>{gs.pot}</Text>
+            <View style={st.potTrack}>
+              {Array.from({ length: gs.potCap }).map((_, i) => (
+                <View
+                  key={i}
+                  style={[
+                    st.potDot,
+                    i < gs.pot && (atCap ? st.potDotMax : st.potDotOn),
+                  ]}
+                />
+              ))}
+            </View>
+          </View>
+
+          {/* Difficulty badge */}
+          <View style={[st.diffBadge, { backgroundColor: diffColor + "1A", borderColor: diffColor + "55" }]}>
+            <View style={[st.diffDot, { backgroundColor: diffColor }]} />
+            <Text style={[st.diffText, { color: diffColor }]}>{diffLabel}</Text>
+            <Text style={[st.diffPots, { color: diffColor + "AA" }]}>starts at {q?.startingPot ?? 1}pt</Text>
+          </View>
+
+          {/* Question */}
+          <View style={st.qCard}>
+            <Text style={st.qText}>{q?.text ?? ""}</Text>
+          </View>
+
+          {/* Choices / spectate */}
+          {isMyTurn ? (
+            <>
+              <Text style={st.actionHint}>
+                {actionSent ? "Locking in..." : `Answer for ${gs.pot} pt${gs.pot !== 1 ? "s" : ""} \u00B7 or skip`}
+              </Text>
+              <View style={st.choicesGrid}>
+                {(q?.choices ?? []).map((choice, i) => (
+                  <TouchableOpacity
+                    key={i}
+                    style={[st.choiceBtn, actionSent && st.choiceBtnOff]}
+                    onPress={() => handleAnswer(i)}
+                    disabled={actionSent}
+                    activeOpacity={0.65}
+                  >
+                    <View style={st.choiceLetterWrap}>
+                      <Text style={st.choiceLetter}>{String.fromCharCode(65 + i)}</Text>
+                    </View>
+                    <Text style={st.choiceText} numberOfLines={2}>{choice}</Text>
+                  </TouchableOpacity>
+                ))}
+              </View>
+              {!actionSent && (
+                <TouchableOpacity style={st.skipBtn} onPress={handleSkip} activeOpacity={0.7}>
+                  <Text style={st.skipBtnText}>SKIP — pass to next player</Text>
+                </TouchableOpacity>
+              )}
+            </>
+          ) : (
+            <View style={st.spectate}>
+              <Text style={st.spectateText}>
+                <Text style={{ color: colors.gold }}>{currentActor}</Text> is deciding
+              </Text>
+              <Text style={st.upNext}>
+                {turnsAway <= 0 ? "you're up" : turnsAway === 1 ? "you're NEXT" : `${turnsAway} turns away`}
+              </Text>
+            </View>
+          )}
+        </ScrollView>
+      </SafeAreaView>
+    );
+  }
+
+  // === REVEAL ===
+  if (phase === "reveal") {
+    const sorted = Object.entries(gs.scores)
+      .map(([uid, score]) => ({ uid, username: playerMap[uid]?.username ?? "Unknown", score }))
+      .sort((a, b) => b.score - a.score || a.username.localeCompare(b.username));
+    const ranks = competitionRanks(sorted, (p) => p.score);
+
+    return (
+      <SafeAreaView style={st.container}><GameHeader />
+        <ScrollView contentContainerStyle={st.revealScroll}>
+          <View style={st.revealCard}>
+            <Text style={st.revealLabel}>ANSWER</Text>
+            <Text style={st.revealAnswer}>{gs.revealInfo?.answer ?? "\u2014"}</Text>
+            <Text style={st.revealNote}>
+              {gs.revealInfo?.scored ? `${gs.revealInfo.by} took the pot!` : "Everyone skipped \u2014 pot voided"}
+            </Text>
+          </View>
+
+          <View style={st.standingsCard}>
+            <Text style={st.standingsHeader}>STANDINGS</Text>
+            {sorted.map((p, i) => (
+              <View key={p.uid} style={[st.standingRow, ranks[i] === 1 && st.standingRowFirst]}>
+                <Text style={[st.standingRank, ranks[i] === 1 && { color: colors.gold }]}>#{ranks[i]}</Text>
+                <Text style={st.standingName} numberOfLines={1}>{p.username}</Text>
+                <Text style={[st.standingScore, ranks[i] === 1 && { color: colors.gold }]}>{p.score}</Text>
+              </View>
+            ))}
+            <Text style={st.targetNote}>First to {gs.target} wins</Text>
+          </View>
+
+          {isHost ? (
+            <TouchableOpacity style={st.primaryBtn} onPress={handleNextQuestion} activeOpacity={0.8}>
+              <Text style={st.primaryBtnText}>NEXT QUESTION</Text>
+              <Ionicons name="arrow-forward" size={20} color={colors.white} />
+            </TouchableOpacity>
+          ) : (
+            <Text style={st.wait}>Waiting for host to continue...</Text>
+          )}
+        </ScrollView>
+      </SafeAreaView>
+    );
+  }
+
+  // === GAME OVER ===
+  if (phase === "gameover") {
+    const winnerId = gs.winnerId;
+    const winnerName = winnerId ? playerMap[winnerId]?.username : "???";
+    const iWon = winnerId === myId;
+    const sorted = Object.entries(gs.scores)
+      .map(([uid, score]) => ({ uid, username: playerMap[uid]?.username ?? "Unknown", score }))
+      .sort((a, b) => b.score - a.score || a.username.localeCompare(b.username));
+    const ranks = competitionRanks(sorted, (p) => p.score);
+
+    return (
+      <SafeAreaView style={st.container}><GameHeader />
+        <ScrollView contentContainerStyle={st.gameOverScroll}>
+          <Ionicons name="trophy" size={48} color={colors.warning} />
+          <Text style={st.gameOverTitle}>{iWon ? "YOU WIN!" : `${winnerName} WINS!`}</Text>
+
+          <View style={[st.standingsCard, st.gameOverStandings]}>
+            {sorted.map((p, i) => (
+              <View key={p.uid} style={[st.standingRow, ranks[i] === 1 && st.standingRowFirst]}>
+                <Text style={[st.standingRank, ranks[i] === 1 && { color: colors.gold }]}>{ranks[i]}</Text>
+                <Text style={st.standingName} numberOfLines={1}>{p.username}</Text>
+                <Text style={[st.standingScore, ranks[i] === 1 && { color: colors.gold }]}>{p.score}</Text>
+              </View>
+            ))}
+          </View>
+
+          {isHost ? (
+            <TouchableOpacity style={st.primaryBtn} onPress={handleBackToLobby} activeOpacity={0.7}>
+              <Text style={st.primaryBtnText}>Back to Lobby</Text>
+              <Ionicons name="arrow-back" size={20} color={colors.white} />
+            </TouchableOpacity>
+          ) : (
+            <HostWaitingPill label="Waiting for host to return to lobby..." style={{ marginTop: 0, marginBottom: 20 }} />
+          )}
+        </ScrollView>
       </SafeAreaView>
     );
   }
 
   return (
-    <SafeAreaView style={s.safe}>
-      {/* Top Bar */}
-      <View style={s.topBar}>
-        <View style={s.topBarLeft}>
-          <View style={s.gameIconBox}>
-            <Ionicons name="trophy" size={22} color={colors.success} />
-          </View>
-          <Text style={s.topBarTitle}>Pot Luck</Text>
-        </View>
-        {phase !== "game-over" && (
-          <View style={s.miniScoreboard}>
-            <Ionicons name="people" size={16} color={colors.gray400} />
-            <Text style={s.miniScoreText}>{players.length}</Text>
-          </View>
-        )}
+    <SafeAreaView style={st.container}><GameHeader />
+      <View style={st.centered}>
+        <Text style={st.loadingText}>Unknown phase: {phase}</Text>
       </View>
-
-      {/* Score ticker (during gameplay) */}
-      {phase !== "game-over" && (
-        <ScrollView
-          horizontal
-          showsHorizontalScrollIndicator={false}
-          style={s.scoreTicker}
-          contentContainerStyle={s.scoreTickerContent}
-        >
-          {leaderboard.map((p) => (
-            <View
-              key={p.user_id}
-              style={[
-                s.scoreChip,
-                p.user_id === user?.id && s.scoreChipMe,
-              ]}
-            >
-              <Text
-                style={[
-                  s.scoreChipName,
-                  p.user_id === user?.id && s.scoreChipNameMe,
-                ]}
-                numberOfLines={1}
-              >
-                {p.user_id === user?.id ? "You" : p.username}
-              </Text>
-              <Text
-                style={[
-                  s.scoreChipScore,
-                  p.user_id === user?.id && s.scoreChipScoreMe,
-                ]}
-              >
-                {p.gameScore}
-              </Text>
-            </View>
-          ))}
-        </ScrollView>
-      )}
-
-      {/* Phase content */}
-      <ScrollView
-        style={s.scrollBody}
-        contentContainerStyle={s.scrollContent}
-        showsVerticalScrollIndicator={false}
-      >
-        {phase === "question" && renderQuestion()}
-        {phase === "reveal" && renderReveal()}
-        {phase === "game-over" && renderGameOver()}
-      </ScrollView>
-      {phase === "game-over" && renderGameOverFooter()}
     </SafeAreaView>
   );
 }
 
-// ─── Styles ─────────────────────────────────────────────────────────────────
+// ---------------------------------------------------------------------------
+// Styles
+// ---------------------------------------------------------------------------
 
-const s = StyleSheet.create({
-  safe: {
-    flex: 1,
-    backgroundColor: colors.background,
-  },
+const st = StyleSheet.create({
+  container: { flex: 1, backgroundColor: colors.background },
+  centered: { flex: 1, justifyContent: "center", alignItems: "center", padding: 24, gap: 12 },
+  loadingText: { fontFamily: fonts.medium, fontSize: 16, color: colors.gray400, marginTop: 16 },
+  bigEmoji: { fontSize: 64, marginBottom: 16 },
+  title: { fontFamily: fonts.extrabold, fontSize: 28, color: colors.white, marginBottom: 8 },
+  tagline: { fontFamily: fonts.regular, fontSize: 15, color: colors.gray400, marginBottom: 32, textAlign: "center" },
+  wait: { fontFamily: fonts.regular, fontSize: 15, color: colors.gray400, textAlign: "center" },
 
-  // ── Intro ──
-  introContainer: {
-    flexGrow: 1,
-    alignItems: "center",
-    justifyContent: "center",
-    paddingVertical: 40,
-    paddingHorizontal: 24,
-  },
-  introEmoji: {
-    fontSize: 64,
-    marginBottom: 16,
-  },
-  introTitle: {
-    fontFamily: fonts.extrabold,
-    fontSize: 28,
-    color: colors.white,
-    marginBottom: 8,
-  },
-  introTagline: {
-    fontFamily: fonts.regular,
-    fontSize: 15,
-    color: colors.gray400,
-    marginBottom: 32,
-  },
-  introRulesContainer: {
-    width: "100%",
-    marginBottom: 32,
-  },
-  introRuleCard: {
-    backgroundColor: colors.surface,
-    borderRadius: 12,
-    padding: 14,
-    marginBottom: 8,
-  },
-  introRuleText: {
-    fontFamily: fonts.regular,
-    fontSize: 14,
-    color: colors.white,
-    lineHeight: 20,
-  },
-  introStartButton: {
-    backgroundColor: colors.primary,
-    borderRadius: 14,
-    paddingVertical: 16,
-    width: "100%",
-    alignItems: "center",
-  },
-  introStartButtonText: {
-    fontFamily: fonts.bold,
-    fontSize: 16,
-    color: colors.white,
-  },
-  introWaitingText: {
-    fontFamily: fonts.regular,
-    fontSize: 15,
-    color: colors.gray400,
-    marginTop: 8,
-  },
+  introScroll: { flexGrow: 1, alignItems: "center", justifyContent: "center", paddingVertical: 40, paddingHorizontal: 24 },
+  rulesBox: { width: "100%", marginBottom: 32 },
+  ruleCard: { backgroundColor: colors.surface, borderRadius: 12, padding: 14, marginBottom: 8 },
+  ruleText: { fontFamily: fonts.regular, fontSize: 14, color: colors.white, lineHeight: 20 },
 
-  // ── Top Bar ──
-  topBar: {
-    flexDirection: "row",
-    alignItems: "center",
-    justifyContent: "space-between",
-    paddingHorizontal: 20,
-    paddingVertical: 12,
-    borderBottomWidth: 1,
-    borderBottomColor: colors.surface,
+  // Rolling
+  rollingContainer: { flex: 1, paddingHorizontal: 20, paddingTop: 40, alignItems: "center", gap: 8 },
+  rollingHeader: { fontFamily: fonts.extrabold, fontSize: 22, color: colors.gold, letterSpacing: 2, textAlign: "center" },
+  rollingSubHeader: { fontFamily: fonts.bold, fontSize: 12, color: colors.gray500, letterSpacing: 3, textAlign: "center", marginBottom: 16 },
+  rollItem: {
+    flexDirection: "row", alignItems: "center", gap: 10, backgroundColor: colors.surface, borderRadius: 12,
+    borderWidth: 1, borderColor: colors.surfaceLight, paddingHorizontal: 14, paddingVertical: 13,
   },
-  topBarLeft: {
-    flexDirection: "row",
-    alignItems: "center",
-    gap: 10,
-  },
-  gameIconBox: {
-    width: 36,
-    height: 36,
-    borderRadius: 10,
-    backgroundColor: colors.success + "20",
-    alignItems: "center",
-    justifyContent: "center",
-  },
-  topBarTitle: {
-    fontFamily: fonts.bold,
-    fontSize: 20,
-    color: colors.white,
-  },
-  miniScoreboard: {
-    flexDirection: "row",
-    alignItems: "center",
-    gap: 4,
-  },
-  miniScoreText: {
-    fontFamily: fonts.semibold,
-    fontSize: 14,
-    color: colors.gray400,
-  },
+  rollItemMe: { borderColor: colors.gold, backgroundColor: "#1A1600" },
+  rollAvatar: { width: 34, height: 34, borderRadius: 17, alignItems: "center", justifyContent: "center", backgroundColor: colors.surfaceLight },
+  rollAvatarLetter: { fontFamily: fonts.extrabold, fontSize: 14, color: colors.gray400 },
+  rollSeat: { fontFamily: fonts.extrabold, fontSize: 16, color: colors.gray500, width: 22, textAlign: "center" },
+  rollName: { flex: 1, fontFamily: fonts.bold, fontSize: 15, color: colors.gray400 },
+  rollYouTag: { fontFamily: fonts.extrabold, fontSize: 10, color: colors.gold, letterSpacing: 2 },
+  rollHint: { fontFamily: fonts.regular, fontSize: 14, color: colors.gray500, marginTop: 24 },
 
-  // ── Score Ticker ──
-  scoreTicker: {
-    maxHeight: 44,
-    borderBottomWidth: 1,
-    borderBottomColor: colors.surface,
+  // Live
+  liveScroll: { flexGrow: 1, paddingHorizontal: 20, paddingTop: 12, paddingBottom: 40, gap: 12 },
+  turnBanner: {
+    flexDirection: "row", alignItems: "center", gap: 10, backgroundColor: colors.surface, borderRadius: 14,
+    borderWidth: 1.5, borderColor: colors.surfaceLight, paddingHorizontal: 14, paddingVertical: 12,
   },
-  scoreTickerContent: {
-    paddingHorizontal: 16,
-    paddingVertical: 8,
-    gap: 8,
-    flexDirection: "row",
-  },
-  scoreChip: {
-    flexDirection: "row",
-    alignItems: "center",
-    backgroundColor: colors.surface,
-    borderRadius: 20,
-    paddingHorizontal: 12,
-    paddingVertical: 4,
-    gap: 6,
-  },
-  scoreChipMe: {
-    backgroundColor: colors.primary + "30",
-    borderWidth: 1,
-    borderColor: colors.primary + "50",
-  },
-  scoreChipName: {
-    fontFamily: fonts.medium,
-    fontSize: 12,
-    color: colors.gray400,
-    maxWidth: 80,
-  },
-  scoreChipNameMe: {
-    color: colors.primaryLight,
-  },
-  scoreChipScore: {
-    fontFamily: fonts.bold,
-    fontSize: 13,
-    color: colors.white,
-  },
-  scoreChipScoreMe: {
-    color: colors.primaryLight,
-  },
+  turnBannerMe: { borderColor: colors.gold, backgroundColor: "#1E1A0A" },
+  turnAvatar: { width: 40, height: 40, borderRadius: 20, alignItems: "center", justifyContent: "center", backgroundColor: colors.surfaceLight },
+  turnAvatarLetter: { fontFamily: fonts.extrabold, fontSize: 17, color: colors.gray400 },
+  turnName: { fontFamily: fonts.extrabold, fontSize: 15, color: colors.white },
+  timerTrack: { height: 4, backgroundColor: colors.surfaceLight, borderRadius: 2, overflow: "hidden" },
+  timerFill: { height: "100%", borderRadius: 2 },
+  timerBubble: { flexDirection: "row", alignItems: "baseline", gap: 1 },
+  timerNum: { fontFamily: fonts.extrabold, fontSize: 22 },
+  timerSec: { fontFamily: fonts.bold, fontSize: 11 },
 
-  // ── Scroll Body ──
-  scrollBody: {
-    flex: 1,
-  },
-  scrollContent: {
-    paddingHorizontal: 20,
-    paddingTop: 16,
-    paddingBottom: 40,
-  },
-  content: {
-    gap: 16,
-  },
-  footer: {
-    paddingHorizontal: 20,
-    paddingTop: 12,
-    paddingBottom: 12,
-    backgroundColor: colors.background,
-  },
+  scoreBar: { flexDirection: "row", alignItems: "center", gap: 8, paddingHorizontal: 4, position: "relative" },
+  deltaAnim: { fontFamily: fonts.extrabold, fontSize: 18, position: "absolute", right: 4 },
+  scoreLabel: { fontFamily: fonts.extrabold, fontSize: 11, color: colors.gray500, letterSpacing: 2 },
+  scoreNum: { fontFamily: fonts.extrabold, fontSize: 18, color: colors.white },
+  scoreTarget: { fontFamily: fonts.medium, fontSize: 14, color: colors.gray500 },
 
-  // ── Round Header ──
-  roundHeader: {
-    flexDirection: "row",
-    alignItems: "center",
-    justifyContent: "space-between",
+  potMeter: {
+    backgroundColor: colors.surface, borderRadius: 12, borderWidth: 1, borderColor: colors.surfaceLight,
+    padding: 14, alignItems: "center", gap: 6,
   },
-  roundBadge: {
-    backgroundColor: colors.surfaceLight,
-    paddingHorizontal: 14,
-    paddingVertical: 6,
-    borderRadius: 20,
-  },
-  roundBadgeText: {
-    fontFamily: fonts.semibold,
-    fontSize: 13,
-    color: colors.gray400,
-  },
-  potBadge: {
-    flexDirection: "row",
-    alignItems: "center",
-    gap: 6,
-    backgroundColor: colors.warning + "15",
-    paddingHorizontal: 14,
-    paddingVertical: 6,
-    borderRadius: 20,
-    borderWidth: 1,
-    borderColor: colors.warning + "30",
-  },
-  potText: {
-    fontFamily: fonts.bold,
-    fontSize: 14,
-    color: colors.warning,
-  },
+  potMax: { borderColor: colors.danger + "66" },
+  potLabel: { fontFamily: fonts.extrabold, fontSize: 11, color: colors.gray500, letterSpacing: 2 },
+  potNum: { fontFamily: fonts.extrabold, fontSize: 28, color: colors.white },
+  potTrack: { flexDirection: "row", gap: 6 },
+  potDot: { width: 12, height: 12, borderRadius: 6, backgroundColor: colors.surfaceLight },
+  potDotOn: { backgroundColor: colors.primary },
+  potDotMax: { backgroundColor: colors.danger },
 
-  // ── Timer ──
-  timerBarOuter: {
-    height: 6,
-    borderRadius: 3,
-    backgroundColor: colors.surface,
-    overflow: "hidden",
+  diffBadge: {
+    flexDirection: "row", alignItems: "center", gap: 6, alignSelf: "flex-start",
+    paddingHorizontal: 10, paddingVertical: 5, borderRadius: 8, borderWidth: 1,
   },
-  timerBarInner: {
-    height: "100%",
-    borderRadius: 3,
-  },
-  timerText: {
-    fontFamily: fonts.bold,
-    fontSize: 14,
-    textAlign: "center",
-  },
+  diffDot: { width: 6, height: 6, borderRadius: 3 },
+  diffText: { fontFamily: fonts.extrabold, fontSize: 11, letterSpacing: 1 },
+  diffPots: { fontFamily: fonts.medium, fontSize: 11 },
 
-  // ── Difficulty ──
-  difficultyRow: {
-    flexDirection: "row",
-    alignItems: "center",
-    gap: 6,
-    alignSelf: "center",
+  qCard: {
+    backgroundColor: colors.surface, borderRadius: 14, borderWidth: 1, borderColor: colors.surfaceLight,
+    padding: 20,
   },
-  difficultyDot: {
-    width: 8,
-    height: 8,
-    borderRadius: 4,
-  },
-  difficultyLabel: {
-    fontFamily: fonts.medium,
-    fontSize: 12,
-    color: colors.gray400,
-  },
+  qText: { fontFamily: fonts.bold, fontSize: 18, color: colors.white, textAlign: "center", lineHeight: 26 },
+  actionHint: { fontFamily: fonts.medium, fontSize: 13, color: colors.gray400, textAlign: "center" },
 
-  // ── Question Card ──
-  questionCard: {
-    backgroundColor: colors.surface,
-    borderRadius: 20,
-    padding: 24,
-    alignItems: "center",
-  },
-  questionText: {
-    fontFamily: fonts.semibold,
-    fontSize: 18,
-    color: colors.white,
-    textAlign: "center",
-    lineHeight: 26,
-  },
-
-  // ── Choices ──
-  choicesContainer: {
-    gap: 10,
-  },
+  choicesGrid: { flexDirection: "row", flexWrap: "wrap", gap: 10, justifyContent: "center" },
   choiceBtn: {
-    flexDirection: "row",
-    alignItems: "center",
-    backgroundColor: colors.surface,
-    borderRadius: 14,
-    padding: 16,
-    gap: 12,
-    borderWidth: 1.5,
-    borderColor: "transparent",
+    width: "47%", backgroundColor: colors.surface, borderRadius: 12, borderWidth: 1,
+    borderColor: colors.surfaceLight, padding: 14, flexDirection: "row", alignItems: "center", gap: 10,
   },
-  choiceBtnSelected: {
-    borderColor: colors.primary,
-    backgroundColor: colors.primary + "15",
+  choiceBtnOff: { opacity: 0.4 },
+  choiceLetterWrap: {
+    width: 28, height: 28, borderRadius: 14, backgroundColor: colors.surfaceLight,
+    alignItems: "center", justifyContent: "center",
   },
-  choiceBtnDisabled: {
-    opacity: 0.5,
-  },
-  choiceBtnCorrect: {
-    borderColor: colors.success,
-    backgroundColor: colors.success + "15",
-  },
-  choiceBtnWrong: {
-    borderColor: colors.danger,
-    backgroundColor: colors.danger + "15",
-  },
-  choiceLetter: {
-    width: 32,
-    height: 32,
-    borderRadius: 10,
-    backgroundColor: colors.surfaceLight,
-    alignItems: "center",
-    justifyContent: "center",
-  },
-  choiceLetterSelected: {
-    backgroundColor: colors.primary,
-  },
-  choiceLetterCorrect: {
-    backgroundColor: colors.success,
-  },
-  choiceLetterWrong: {
-    backgroundColor: colors.danger,
-  },
-  choiceLetterText: {
-    fontFamily: fonts.bold,
-    fontSize: 14,
-    color: colors.gray400,
-  },
-  choiceLetterTextSelected: {
-    color: colors.white,
-  },
-  choiceText: {
-    fontFamily: fonts.medium,
-    fontSize: 15,
-    color: colors.white,
-    flex: 1,
-  },
-  choiceTextSelected: {
-    color: colors.primaryLight,
-  },
+  choiceLetter: { fontFamily: fonts.extrabold, fontSize: 13, color: colors.primaryLight },
+  choiceText: { flex: 1, fontFamily: fonts.medium, fontSize: 14, color: colors.white },
 
-  // ── Waiting / Count ──
-  waitingText: {
-    fontFamily: fonts.medium,
-    fontSize: 14,
-    color: colors.primaryLight,
-    textAlign: "center",
+  skipBtn: {
+    alignItems: "center", paddingVertical: 14, borderRadius: 12,
+    borderWidth: 1, borderColor: colors.surfaceLight,
   },
-  answeredCount: {
-    fontFamily: fonts.regular,
-    fontSize: 13,
-    color: colors.gray500,
-    textAlign: "center",
-  },
+  skipBtnText: { fontFamily: fonts.bold, fontSize: 13, color: colors.gray400 },
 
-  // ── Reveal ──
-  revealLabel: {
-    fontFamily: fonts.bold,
-    fontSize: 16,
-    color: colors.warning,
-  },
-  resultsCard: {
-    backgroundColor: colors.surface,
-    borderRadius: 16,
-    padding: 20,
-    gap: 12,
-  },
-  resultsTitle: {
-    fontFamily: fonts.bold,
-    fontSize: 16,
-    color: colors.white,
-  },
-  resultRow: {
-    flexDirection: "row",
-    justifyContent: "space-between",
-    alignItems: "center",
-  },
-  resultLeft: {
-    flexDirection: "row",
-    alignItems: "center",
-    gap: 8,
-    flexShrink: 1,
-  },
-  // Reveal-phase compaction: question + 4 options + Round Results must fit
-  // on iPhone 16 (393x852) without scrolling (reveal auto-advances in 4s).
-  contentCompact: {
-    gap: 10,
-  },
-  questionCardCompact: {
-    paddingVertical: 14,
-    paddingHorizontal: 18,
-    borderRadius: 16,
-  },
-  questionTextCompact: {
-    fontSize: 16,
-    lineHeight: 22,
-  },
-  choicesContainerCompact: {
-    gap: 6,
-  },
-  choiceBtnCompact: {
-    paddingVertical: 9,
-    paddingHorizontal: 14,
-    borderRadius: 12,
-  },
-  choiceLetterCompact: {
-    width: 28,
-    height: 28,
-    borderRadius: 8,
-  },
-  resultsCardCompact: {
-    paddingVertical: 12,
-    paddingHorizontal: 16,
-    gap: 6,
-  },
-  resultName: {
-    fontFamily: fonts.semibold,
-    fontSize: 15,
-    color: colors.white,
-  },
-  resultPoints: {
-    fontFamily: fonts.bold,
-    fontSize: 15,
-  },
+  spectate: { alignItems: "center", gap: 8, paddingVertical: 20 },
+  spectateText: { fontFamily: fonts.medium, fontSize: 16, color: colors.gray400 },
+  upNext: { fontFamily: fonts.bold, fontSize: 14, color: colors.primaryLight },
 
-  // ── Game Over ──
-  gameOverHeader: {
-    alignItems: "center",
-    gap: 8,
-    paddingVertical: 16,
+  // Reveal
+  revealScroll: { flexGrow: 1, paddingHorizontal: 20, paddingTop: 24, paddingBottom: 40, gap: 16 },
+  revealCard: {
+    backgroundColor: colors.surface, borderRadius: 16, borderWidth: 1, borderColor: colors.surfaceLight,
+    padding: 24, alignItems: "center", gap: 8,
   },
-  gameOverTitle: {
-    fontFamily: fonts.extrabold,
-    fontSize: 32,
-    color: colors.white,
-  },
-  winnerText: {
-    fontFamily: fonts.semibold,
-    fontSize: 16,
-    color: colors.warning,
-  },
+  revealLabel: { fontFamily: fonts.extrabold, fontSize: 11, color: colors.gray500, letterSpacing: 2 },
+  revealAnswer: { fontFamily: fonts.extrabold, fontSize: 22, color: colors.white, textAlign: "center" },
+  revealNote: { fontFamily: fonts.medium, fontSize: 14, color: colors.gray400 },
 
-  // ── Leaderboard ──
-  leaderboardCard: {
-    backgroundColor: colors.surface,
-    borderRadius: 20,
-    padding: 20,
-    gap: 14,
+  standingsCard: {
+    backgroundColor: colors.surface, borderRadius: 14, borderWidth: 1, borderColor: colors.surfaceLight,
+    padding: 16, gap: 8,
   },
-  leaderboardTitle: {
-    fontFamily: fonts.bold,
-    fontSize: 18,
-    color: colors.white,
-    marginBottom: 4,
+  standingsHeader: { fontFamily: fonts.extrabold, fontSize: 11, color: colors.gray500, letterSpacing: 2, marginBottom: 4 },
+  standingRow: {
+    flexDirection: "row", alignItems: "center", gap: 10, paddingVertical: 6,
+    borderBottomWidth: 1, borderBottomColor: colors.surfaceLight,
   },
-  leaderboardRow: {
-    flexDirection: "row",
-    alignItems: "center",
-    paddingVertical: 10,
-    paddingHorizontal: 12,
-    borderRadius: 12,
-    backgroundColor: colors.surfaceLight + "40",
-  },
-  leaderboardRowFirst: {
-    backgroundColor: colors.warning + "15",
-    borderWidth: 1,
-    borderColor: colors.warning + "30",
-  },
-  rankContainer: {
-    width: 64,
-    flexDirection: "row",
-    alignItems: "center",
-    gap: 4,
-  },
-  rankNumber: {
-    fontFamily: fonts.bold,
-    fontSize: 16,
-    color: colors.gray500,
-  },
-  leaderboardName: {
-    flex: 1,
-    fontFamily: fonts.semibold,
-    fontSize: 16,
-    color: colors.white,
-    marginLeft: 10,
-  },
-  leaderboardNameFirst: {
-    color: colors.warning,
-  },
-  leaderboardScore: {
-    fontFamily: fonts.bold,
-    fontSize: 16,
-    color: colors.primaryLight,
-  },
-  leaderboardScoreFirst: {
-    color: colors.warning,
-  },
+  standingRowFirst: { borderBottomColor: colors.gold + "33" },
+  standingRank: { fontFamily: fonts.bold, fontSize: 14, color: colors.gray500, width: 28 },
+  standingName: { flex: 1, fontFamily: fonts.semibold, fontSize: 15, color: colors.white },
+  standingScore: { fontFamily: fonts.bold, fontSize: 16, color: colors.white },
+  targetNote: { fontFamily: fonts.regular, fontSize: 12, color: colors.gray500, textAlign: "center", marginTop: 4 },
 
-  // ── Lobby Button ──
-  lobbyBtn: {
-    flexDirection: "row",
-    alignItems: "center",
-    justifyContent: "center",
-    gap: 8,
-    backgroundColor: colors.primary,
-    paddingVertical: 16,
-    borderRadius: 16,
-    marginTop: 8,
+  // Game over
+  gameOverScroll: { flexGrow: 1, alignItems: "center", paddingHorizontal: 20, paddingTop: 40, paddingBottom: 40, gap: 16 },
+  gameOverTitle: { fontFamily: fonts.extrabold, fontSize: 32, color: colors.white },
+  // gameOverScroll centers its children, so without this the card shrinks to content and standingName (flex: 1) gets no width.
+  gameOverStandings: { alignSelf: "stretch" },
+
+  primaryBtn: {
+    flexDirection: "row", alignItems: "center", justifyContent: "center", gap: 8,
+    backgroundColor: colors.primary, borderRadius: 14, paddingVertical: 16, width: "100%",
   },
-  lobbyBtnText: {
-    fontFamily: fonts.semibold,
-    fontSize: 16,
-    color: colors.white,
-  },
+  primaryBtnText: { fontFamily: fonts.bold, fontSize: 16, color: colors.white },
 });
