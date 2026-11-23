@@ -1,7 +1,7 @@
 import type { ReactNode } from "react";
 import { View, Text, Pressable, StyleSheet, StyleProp, ViewStyle } from "react-native";
 import { Ionicons } from "@expo/vector-icons";
-import { colors, fonts, radii } from "../theme";
+import { colors, fonts } from "../theme";
 
 interface RoomToolbarProps {
   backLabel: string;
@@ -28,7 +28,7 @@ export default function RoomToolbar({ backLabel, onBack, title, onMenu, right, s
           accessibilityLabel={`Back to ${backLabel}`}
           style={({ pressed }) => [s.backPill, pressed && s.pressed]}
         >
-          <Ionicons name="chevron-back" size={16} color={colors.white} />
+          <Ionicons name="chevron-back" size={15} color={colors.gray300} />
           <Text style={s.backText} numberOfLines={1}>
             {backLabel}
           </Text>
@@ -69,31 +69,31 @@ const s = StyleSheet.create({
     flexDirection: "row",
     alignItems: "center",
     gap: 2,
-    height: 38,
-    paddingLeft: 10,
+    height: 36,
+    paddingLeft: 8,
     paddingRight: 14,
-    borderRadius: radii.pill,
-    backgroundColor: colors.surface,
+    borderRadius: 12,
+    backgroundColor: colors.cardFill,
     borderWidth: 1,
-    borderColor: colors.cardBorder,
+    borderColor: colors.cardEdge,
   },
   backText: { fontFamily: fonts.semibold, fontSize: 14, color: colors.white },
   title: {
     flex: 1,
     textAlign: "center",
-    fontFamily: fonts.bold,
-    fontSize: 13,
-    letterSpacing: 2,
+    fontFamily: fonts.semibold,
+    fontSize: 12,
+    letterSpacing: 1,
     textTransform: "uppercase",
     color: colors.white,
   },
   menuBtn: {
-    width: 38,
-    height: 38,
-    borderRadius: 19,
-    backgroundColor: colors.surface,
+    width: 36,
+    height: 36,
+    borderRadius: 12,
+    backgroundColor: colors.cardFill,
     borderWidth: 1,
-    borderColor: colors.cardBorder,
+    borderColor: colors.cardEdge,
     alignItems: "center",
     justifyContent: "center",
   },

@@ -31,8 +31,8 @@ interface PrimaryActionProps {
 }
 
 const VARIANTS: Record<PrimaryActionVariant, { bg: string; fg: string; border?: string }> = {
-  primary: { bg: colors.highlight, fg: colors.onPrimary },
-  dark: { bg: colors.onPrimary, fg: colors.white },
+  primary: { bg: colors.lavender, fg: colors.onLavender },
+  dark: { bg: colors.cardRaised, fg: colors.white, border: colors.cardBorder },
   ghost: { bg: "transparent", fg: colors.white, border: colors.cardBorder },
 };
 
@@ -113,12 +113,13 @@ export function PrimaryActionBar({ children, helperText, style }: PrimaryActionB
 const s = StyleSheet.create({
   base: {
     alignSelf: "stretch",
-    minHeight: 56,
-    borderRadius: radii.pill,
-    paddingVertical: 16,
+    minHeight: 54,
+    borderRadius: radii.md,
+    paddingVertical: 15,
     paddingHorizontal: 24,
     alignItems: "center",
     justifyContent: "center",
+    overflow: "hidden",
   },
   inner: {
     flexDirection: "row",
@@ -128,19 +129,20 @@ const s = StyleSheet.create({
   },
   label: {
     fontFamily: fonts.bold,
-    fontSize: 17,
+    fontSize: 16,
+    letterSpacing: 0.1,
   },
-  fillRadius: { borderRadius: radii.pill },
+  fillRadius: { borderRadius: radii.md },
   dimmed: { opacity: 0.45 },
   pressed: { opacity: 0.85, transform: [{ scale: 0.98 }] },
   bar: {
     paddingHorizontal: spacing.screen,
     paddingTop: spacing.md,
-    backgroundColor: colors.background,
+    backgroundColor: "transparent",
     gap: spacing.md,
   },
   helper: {
-    fontFamily: fonts.medium,
+    fontFamily: fonts.regular,
     fontSize: 13,
     color: colors.gray400,
     textAlign: "center",

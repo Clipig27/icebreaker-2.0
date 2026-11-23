@@ -944,7 +944,13 @@ export default function TalentShowScreen() {
 
     let footer: React.ReactNode = null;
     if (isPerformer) {
-      if (!isR1) footer = <PrimaryAction label="I'm done" onPress={handleDoneEarly} />;
+      if (!isR1)
+        footer = (
+          <>
+            <Text style={st.footerHelper}>Your moment. Give it your best.</Text>
+            <PrimaryAction label="I'm done" onPress={handleDoneEarly} />
+          </>
+        );
     } else if (isR1) {
       footer = hasUsedAction ? (
         <WaitingNote done label="Vote submitted! Watching the show..." />
@@ -981,20 +987,27 @@ export default function TalentShowScreen() {
           <Text style={st.countdownNum}>{secondsLeft}</Text>
           <Eyebrow>Seconds left</Eyebrow>
           <View style={st.progressTrack}>
-            <LinearGradient
-              colors={gradients.primaryButton}
-              start={{ x: 0, y: 0 }}
-              end={{ x: 1, y: 0 }}
-              style={[st.progressFill, { width: `${progress * 100}%` }]}
-            />
+            <View style={[st.progressFill, st.progressFillLavender, { width: `${progress * 100}%` }]} />
           </View>
         </View>
-        <GradientCard contentStyle={st.taskCard}>
-          <Eyebrow tone="lavender">{isPerformer ? "Your task" : "The task"}</Eyebrow>
+        <GradientCard
+          radius={radii.lg}
+          contentStyle={st.taskCard}
+          fill={gradients.taskCard}
+          borderColors={TASK_CARD_EDGE}
+        >
+          <Eyebrow style={st.taskEyebrow}>{isPerformer ? "Your task" : "The task"}</Eyebrow>
           <Text style={st.taskText}>{gs.prompt}</Text>
         </GradientCard>
         {isPerformer ? (
-          <Text style={st.helper}>Everyone else is judging.</Text>
+          <View style={st.performerHelp}>
+            <Text style={st.performerHelpTitle}>Everyone else is judging.</Text>
+            <Text style={st.performerHelpBody}>
+              {isR1
+                ? "Keep going until the timer runs out."
+                : "Keep going until the timer runs out, or finish early when you're done."}
+            </Text>
+          </View>
         ) : isR1 && !hasUsedAction ? (
           <Text style={st.helper}>Rate the performance!</Text>
         ) : null}
@@ -1248,6 +1261,7 @@ const HERO_BORDER = ["rgba(255,255,255,0.55)", "rgba(255,255,255,0.12)"] as cons
 const GOLD_BORDER = ["rgba(246,227,166,0.9)", "rgba(212,168,67,0.35)"] as const;
 const DANGER_BORDER = ["rgba(239,68,68,0.6)", "rgba(239,68,68,0.1)"] as const;
 const SELECTED_BORDER = [colors.highlight, colors.highlightGradientEnd] as const;
+const TASK_CARD_EDGE = ["rgba(186,162,249,0.38)", "rgba(186,162,249,0.16)"] as const;
 const SELECTED_FILL = ["rgba(184,174,232,0.20)", "rgba(184,174,232,0.05)"] as const;
 
 /** Screen frame: background, room toolbar, scrolling body and pinned footer. */
@@ -1404,7 +1418,7 @@ function SubmittedScreen({ submitted, total }: { submitted: number; total: numbe
 // ---------------------------------------------------------------------------
 
 const st = StyleSheet.create({
-  container: { flex: 1, backgroundColor: colors.background },
+  container: { flex: 1, backgroundColor: colors.bgPurple },
   scroll: {
     flexGrow: 1,
     paddingHorizontal: spacing.screen,
@@ -1505,11 +1519,17 @@ const st = StyleSheet.create({
     alignSelf: "stretch",
     height: 6,
     borderRadius: radii.pill,
-    backgroundColor: colors.surfaceLight,
+    backgroundColor: "rgba(255,255,255,0.08)",
     overflow: "hidden",
     marginTop: spacing.md,
   },
   progressFill: { height: "100%", borderRadius: radii.pill },
+  progressFillLavender: { backgroundColor: colors.lavender },
+  taskEyebrow: { fontSize: 9, letterSpacing: 0.8, color: "rgba(255,255,255,0.6)" },
+  performerHelp: { gap: 6 },
+  performerHelpTitle: { fontFamily: fonts.bold, fontSize: 14, color: colors.white },
+  performerHelpBody: { fontFamily: fonts.regular, fontSize: 13, lineHeight: 18, color: colors.gray400 },
+  footerHelper: { fontFamily: fonts.regular, fontSize: 13, color: colors.gray400, textAlign: "center" },
 
   // Judging buttons
   buzzRow: { flexDirection: "row", gap: spacing.md },

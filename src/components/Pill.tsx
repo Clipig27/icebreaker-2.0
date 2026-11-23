@@ -8,18 +8,20 @@ interface PillProps {
   label?: string;
   children?: ReactNode;
   tone?: PillTone;
+  /** Rotate slightly (~-6deg) so the pill reads like a sticker. */
+  tilt?: boolean;
   style?: StyleProp<ViewStyle>;
 }
 
 const TONES: Record<PillTone, { bg: string; fg: string; border?: string }> = {
-  peach: { bg: colors.peach, fg: colors.onPrimary },
-  lavender: { bg: colors.highlight, fg: colors.onPrimary },
+  peach: { bg: colors.peachSticker, fg: colors.onLavender },
+  lavender: { bg: colors.lavenderPill, fg: colors.onLavender },
   lime: { bg: colors.lime, fg: colors.onPrimary },
-  dark: { bg: colors.surface, fg: colors.gray300, border: colors.cardBorder },
+  dark: { bg: colors.cardFill, fg: colors.gray300, border: colors.cardEdge },
 };
 
 /** Small rounded uppercase badge. */
-export default function Pill({ label, children, tone = "lavender", style }: PillProps) {
+export default function Pill({ label, children, tone = "lavender", tilt = false, style }: PillProps) {
   const t = TONES[tone];
   return (
     <View
@@ -27,6 +29,7 @@ export default function Pill({ label, children, tone = "lavender", style }: Pill
         s.pill,
         { backgroundColor: t.bg },
         t.border ? { borderWidth: 1, borderColor: t.border } : null,
+        tilt && s.tilt,
         style,
       ]}
     >
@@ -41,13 +44,21 @@ const s = StyleSheet.create({
     flexDirection: "row",
     alignItems: "center",
     gap: 4,
-    borderRadius: radii.pill,
+    borderRadius: radii.sm,
     paddingHorizontal: 10,
-    paddingVertical: 4,
+    paddingVertical: 5,
+  },
+  tilt: {
+    transform: [{ rotate: "-6deg" }],
+    shadowColor: "#000",
+    shadowOffset: { width: 0, height: 3 },
+    shadowOpacity: 0.25,
+    shadowRadius: 6,
+    elevation: 3,
   },
   text: {
-    fontFamily: fonts.bold,
-    fontSize: 11,
+    fontFamily: fonts.extrabold,
+    fontSize: 10,
     letterSpacing: 0.8,
     textTransform: "uppercase",
   },
