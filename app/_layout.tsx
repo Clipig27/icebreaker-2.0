@@ -1,7 +1,14 @@
-import { useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { Stack } from "expo-router";
 import { StatusBar } from "expo-status-bar";
-import { View, Animated, Easing, StyleSheet } from "react-native";
+import { View, StyleSheet } from "react-native";
+import Animated, {
+  Easing,
+  useAnimatedStyle,
+  useSharedValue,
+  withTiming,
+} from "react-native-reanimated";
+import { scheduleOnRN } from "react-native-worklets";
 import {
   useFonts,
   Inter_400Regular,
@@ -10,105 +17,19 @@ import {
   Inter_700Bold,
   Inter_800ExtraBold,
 } from "@expo-google-fonts/inter";
-import { Ionicons } from "@expo/vector-icons";
 import { useAuthStore } from "../src/stores/authStore";
-import { colors, fonts } from "../src/theme";
+import { colors } from "../src/theme";
+import IntroSplash from "../src/components/IntroSplash";
 
-const INTRO_MIN_MS = 2400;
-const INTRO_FADE_MS = 350;
-
-function IntroSplash({ fontsLoaded }: { fontsLoaded: boolean }) {
-  // Bolt zooms in
-  const boltScale = useRef(new Animated.Value(0.05)).current;
-  const boltOpacity = useRef(new Animated.Value(0)).current;
-  // Green bolt (visible first)
-  const greenOpacity = useRef(new Animated.Value(1)).current;
-  // Purple bolt (fades in on color change)
-  const purpleOpacity = useRef(new Animated.Value(0)).current;
-  // Title
-  const titleOpacity = useRef(new Animated.Value(0)).current;
-  const titleTranslate = useRef(new Animated.Value(14)).current;
-
-  useEffect(() => {
-    // Phase 1: Green bolt zooms in from tiny
-    Animated.parallel([
-      Animated.timing(boltOpacity, { toValue: 1, duration: 250, useNativeDriver: true }),
-      Animated.spring(boltScale, { toValue: 1, tension: 40, friction: 6, useNativeDriver: true }),
-    ]).start();
-
-    // Phase 2: Color shift green -> purple with a slight "comes at you" pop
-    Animated.sequence([
-      Animated.delay(800),
-      Animated.parallel([
-        Animated.timing(greenOpacity, { toValue: 0, duration: 250, useNativeDriver: true }),
-        Animated.timing(purpleOpacity, { toValue: 1, duration: 250, useNativeDriver: true }),
-        // Pop toward you then settle
-        Animated.sequence([
-          Animated.timing(boltScale, { toValue: 1.2, duration: 150, easing: Easing.out(Easing.quad), useNativeDriver: true }),
-          Animated.spring(boltScale, { toValue: 1, tension: 80, friction: 8, useNativeDriver: true }),
-        ]),
-      ]),
-    ]).start();
-
-    // Phase 3: "Icebreaker" appears
-    Animated.sequence([
-      Animated.delay(1300),
-      Animated.parallel([
-        Animated.timing(titleOpacity, { toValue: 1, duration: 350, useNativeDriver: true }),
-        Animated.spring(titleTranslate, { toValue: 0, tension: 65, friction: 9, useNativeDriver: true }),
-      ]),
-    ]).start();
-  }, []);
-
-  return (
-    <View style={sp.container}>
-      {/* Bolt — two layers for color transition, no circle/ring */}
-      <Animated.View style={[sp.boltWrap, { opacity: boltOpacity, transform: [{ scale: boltScale }] }]}>
-        <Animated.View style={[sp.boltLayer, { opacity: greenOpacity }]}>
-          <Ionicons name="flash" size={72} color={colors.lime} />
-        </Animated.View>
-        <Animated.View style={[sp.boltLayer, { opacity: purpleOpacity }]}>
-          <Ionicons name="flash" size={72} color={colors.primaryLight} />
-        </Animated.View>
-      </Animated.View>
-
-      {/* Title */}
-      <Animated.Text
-        style={[
-          sp.title,
-          fontsLoaded ? { fontFamily: fonts.extrabold } : { fontWeight: "800" },
-          { opacity: titleOpacity, transform: [{ translateY: titleTranslate }] },
-        ]}
-      >
-        Icebreaker
-      </Animated.Text>
-    </View>
-  );
-}
-
-const sp = StyleSheet.create({
-  container: {
-    flex: 1,
-    alignItems: "center",
-    justifyContent: "center",
-    backgroundColor: colors.background,
-  },
-  boltWrap: {
-    marginBottom: 40,
-    alignItems: "center",
-    justifyContent: "center",
-  },
-  boltLayer: {
-    position: "absolute",
-    alignItems: "center",
-    justifyContent: "center",
-  },
-  title: {
-    fontSize: 34,
-    color: colors.white,
-    letterSpacing: -0.5,
-  },
-});
+/** The intro's own onComplete gates the handoff; if it hasn't even started by
+ *  this long after mount, stop waiting for it. */
+const INTRO_START_FALLBACK_MS = 4000;
+/** Overlay fade-out (with a slight 1 → 1.06 scale-up of the splash content). */
+const INTRO_FADE_MS = 420;
+/** Hard stop: force-unmount the intro this long after the app is ready. */
+const INTRO_SAFETY_MS = 6000;
+/** Overlay background — matches the intro's top gradient color, so no flash. */
+const INTRO_BG = "#0E0C1A";
 
 // ---------------------------------------------------------------------------
 // Root Layout
@@ -128,25 +49,57 @@ export default function RootLayout() {
 
   const [minElapsed, setMinElapsed] = useState(false);
   const [introVisible, setIntroVisible] = useState(true);
-  const introOpacity = useRef(new Animated.Value(1)).current;
+  const [fading, setFading] = useState(false);
+  const fade = useSharedValue(0); // 0 = splash fully visible, 1 = gone
+
+  /** Date.now() when the splash's clock actually started (null = not yet). */
+  const [introStartedAt, setIntroStartedAt] = useState<number | null>(null);
+  const appReadyAtRef = useRef<number | null>(null);
+
+  const handleIntroStart = useCallback(() => setIntroStartedAt(Date.now()), []);
+  const handleIntroComplete = useCallback(() => setMinElapsed(true), []);
 
   useEffect(() => {
     initialize();
-    const t = setTimeout(() => setMinElapsed(true), INTRO_MIN_MS);
-    return () => clearTimeout(t);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
+
+  // Fallback: if the splash never manages to start, never block the app.
+  useEffect(() => {
+    if (introStartedAt !== null) return;
+    const t = setTimeout(() => setMinElapsed(true), INTRO_START_FALLBACK_MS);
+    return () => clearTimeout(t);
+  }, [introStartedAt]);
 
   const appReady = fontsLoaded && !loading;
 
+  // Handoff: once the app is ready AND the intro has played, fade out + unmount.
   useEffect(() => {
-    if (!appReady || !minElapsed || !introVisible) return;
-    Animated.timing(introOpacity, {
-      toValue: 0,
-      duration: INTRO_FADE_MS,
-      easing: Easing.out(Easing.quad),
-      useNativeDriver: true,
-    }).start(() => setIntroVisible(false));
-  }, [appReady, minElapsed, introVisible]);
+    if (!appReady || !minElapsed || !introVisible || fading) return;
+    setFading(true);
+    fade.value = withTiming(
+      1,
+      { duration: INTRO_FADE_MS, easing: Easing.out(Easing.cubic) },
+      () => {
+        // Unmount whether or not the animation finished.
+        scheduleOnRN(setIntroVisible, false);
+      },
+    );
+  }, [appReady, minElapsed, introVisible, fading, fade]);
+
+  // Safety net: never let the intro linger. Measured from the later of
+  // "app ready" and "splash started".
+  useEffect(() => {
+    if (!appReady) return;
+    if (appReadyAtRef.current === null) appReadyAtRef.current = Date.now();
+    const anchor = Math.max(appReadyAtRef.current, introStartedAt ?? 0);
+    const delay = Math.max(0, anchor + INTRO_SAFETY_MS - Date.now());
+    const t = setTimeout(() => setIntroVisible(false), delay);
+    return () => clearTimeout(t);
+  }, [appReady, introStartedAt]);
+
+  const overlayStyle = useAnimatedStyle(() => ({ opacity: 1 - fade.value }));
+  const contentStyle = useAnimatedStyle(() => ({ transform: [{ scale: 1 + 0.06 * fade.value }] }));
 
   return (
     <View style={{ flex: 1, backgroundColor: colors.background }}>
@@ -162,10 +115,12 @@ export default function RootLayout() {
       )}
       {introVisible && (
         <Animated.View
-          pointerEvents={appReady && minElapsed ? "none" : "auto"}
-          style={[StyleSheet.absoluteFill, { opacity: introOpacity }]}
+          pointerEvents={fading ? "none" : "auto"}
+          style={[StyleSheet.absoluteFill, { backgroundColor: INTRO_BG }, overlayStyle]}
         >
-          <IntroSplash fontsLoaded={fontsLoaded} />
+          <Animated.View style={[StyleSheet.absoluteFill, contentStyle]}>
+            <IntroSplash canStart={appReady} onStart={handleIntroStart} onComplete={handleIntroComplete} />
+          </Animated.View>
         </Animated.View>
       )}
     </View>
