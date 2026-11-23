@@ -20,6 +20,7 @@ import RoomToolbar from "../src/components/RoomToolbar";
 import Eyebrow from "../src/components/Eyebrow";
 import PlayerAvatar from "../src/components/PlayerAvatar";
 import { PrimaryActionBar } from "../src/components/PrimaryAction";
+import { AUCTION_GAME_NAME } from "../src/data/auctionDraft";
 
 type RowTint = "gold" | "teal" | "pink" | "purple";
 
@@ -30,6 +31,7 @@ const GAMES: { id: GameType; name: string; icon: string; color: string; tint: Ro
   { id: "potLuck", name: "Smarty Pot", icon: "trophy", color: "#10B981", tint: "purple" },
   { id: "blindRanking", name: "Blind Ranking", icon: "list", color: "#A78BFA", tint: "purple" },
   { id: "tenSecondTasks", name: "10 Second Tasks", icon: "timer", color: "#F97316", tint: "purple", iconText: "10" },
+  { id: "auctionDraft", name: AUCTION_GAME_NAME, icon: "pricetags", color: "#F472B6", tint: "pink" },
 ];
 
 /** Same per-game row tints as the Games tab list. */

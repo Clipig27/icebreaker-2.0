@@ -12,6 +12,7 @@ import Pill from "../../src/components/Pill";
 import GradientCard from "../../src/components/GradientCard";
 import HeroGradient from "../../src/components/HeroGradient";
 import PlayerAvatar from "../../src/components/PlayerAvatar";
+import { AUCTION_GAME_NAME } from "../../src/data/auctionDraft";
 
 const GAME_INFO: Record<string, { name: string; icon: string; color: string; description: string }> = {
   talentShow: {
@@ -49,6 +50,12 @@ const GAME_INFO: Record<string, { name: string; icon: string; color: string; des
     icon: "timer",
     color: "#F97316",
     description: "One player holds the phone and performs a growing stack of silly tasks before the timer runs out. Judges vote pass or fail. Last player standing wins!",
+  },
+  auctionDraft: {
+    name: AUCTION_GAME_NAME,
+    icon: "pricetags",
+    color: "#F472B6",
+    description: "Everyone starts with $20 and the same base. Bid on items one at a time to build the best creation, then vote for the winner!",
   },
 };
 
