@@ -631,12 +631,14 @@ export default function PotLuckScreen() {
 
         {/* Timer */}
         <View style={st.countdown}>
-          <Text style={[st.countdownNum, urgent && { color: colors.danger }]}>{timeLeft}</Text>
+          <Text style={[st.countdownNum, isMyTurn && st.countdownNumCompact, urgent && { color: colors.danger }]}>{timeLeft}</Text>
           <Eyebrow>Seconds left</Eyebrow>
           <ProgressBar progress={timeLeft / TIMER_SECONDS} />
         </View>
 
-        {/* Pot + my score */}
+        {/* Pot + my score (hidden on my own turn so all 4 answers fit without scrolling;
+            the subtitle already shows the points at stake) */}
+        {!isMyTurn && (
         <View style={st.statRow}>
           <GradientCard
             style={st.flex1}
@@ -676,6 +678,7 @@ export default function PotLuckScreen() {
             )}
           </GradientCard>
         </View>
+        )}
 
         {/* Question */}
         <HeroGradient>
@@ -1017,6 +1020,7 @@ const st = StyleSheet.create({
 
   // Timer
   countdown: { alignItems: "center", gap: spacing.xs },
+  countdownNumCompact: { fontSize: 52, lineHeight: 58 },
   countdownNum: {
     fontFamily: fonts.extrabold,
     fontSize: 72,
