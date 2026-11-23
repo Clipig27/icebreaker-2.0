@@ -11,9 +11,16 @@ import { useRouter, useIsFocused } from "expo-router";
 import { Ionicons } from "@expo/vector-icons";
 import * as Haptics from "expo-haptics";
 import * as Clipboard from "expo-clipboard";
-import { colors, fonts } from "../src/theme";
+import { LinearGradient } from "expo-linear-gradient";
+import { colors, fonts, gradients, radii, spacing, type } from "../src/theme";
 import { useRoomStore, GameType } from "../src/stores/roomStore";
-import SkiaBackground from "../src/components/SkiaBackground";
+import ScreenBackground from "../src/components/ScreenBackground";
+import GradientCard from "../src/components/GradientCard";
+import RoomToolbar from "../src/components/RoomToolbar";
+import Eyebrow from "../src/components/Eyebrow";
+import Pill from "../src/components/Pill";
+import PlayerAvatar from "../src/components/PlayerAvatar";
+import { PrimaryActionBar } from "../src/components/PrimaryAction";
 
 const GAMES: { id: GameType; name: string; icon: string; color: string }[] = [
   { id: "talentShow", name: "Nobody's Got Talent", icon: "star", color: "#F59E0B" },
@@ -91,12 +98,16 @@ function GameCard({ game, onPress }: { game: typeof GAMES[number]; onPress: () =
         onPress();
       }}
     >
-      <Animated.View style={[s.gameRow, animStyle]}>
-        <View style={[s.gameIcon, { backgroundColor: game.color + "20" }]}>
-          <Ionicons name={game.icon as any} size={20} color={game.color} />
-        </View>
-        <Text style={s.gameName}>{game.name}</Text>
-        <Ionicons name="play" size={18} color={colors.primaryLight} />
+      <Animated.View style={animStyle}>
+        <GradientCard radius={radii.lg} contentStyle={s.gameRow}>
+          <View style={[s.gameIcon, { backgroundColor: game.color + "26", borderColor: game.color + "40" }]}>
+            <Ionicons name={game.icon as any} size={20} color={game.color} />
+          </View>
+          <Text style={s.gameName} numberOfLines={1}>{game.name}</Text>
+          <View style={s.playChip}>
+            <Ionicons name="play" size={14} color={colors.onPrimary} />
+          </View>
+        </GradientCard>
       </Animated.View>
     </Pressable>
   );
@@ -223,22 +234,12 @@ export default function Lobby() {
     ]);
   };
 
+  const selectedGame = room.game_type ? GAMES.find((g) => g.id === room.game_type) : undefined;
+
   return (
-    <SafeAreaView style={s.safe}>
-      <SkiaBackground />
-      <View style={s.header}>
-        <Pressable onPress={handleLeave}>
-          <Ionicons name="arrow-back" size={24} color={colors.white} />
-        </Pressable>
-        <Pressable onPress={handleCopyCode} style={s.codeBox}>
-          <Text style={s.codeLabel}>ROOM CODE</Text>
-          <View style={s.codeRow}>
-            <Text style={s.code}>{room.code}</Text>
-            <Ionicons name="copy-outline" size={16} color={colors.gray400} style={{ marginLeft: 8 }} />
-          </View>
-        </Pressable>
-        <View style={{ width: 24 }} />
-      </View>
+    <SafeAreaView style={s.safe} edges={["top"]}>
+      <ScreenBackground />
+      <RoomToolbar backLabel="Play" title="ROOM LOBBY" onBack={handleLeave} style={s.toolbar} />
 
       <ScrollView
         style={s.scroll}
@@ -247,10 +248,40 @@ export default function Lobby() {
         onLayout={(e) => setViewportH(e.nativeEvent.layout.height)}
         onContentSizeChange={(_w, h) => setContentH(h)}
       >
+      <Text style={s.subtitle}>Your people. Your room.</Text>
+
+      {/* Room code */}
+      <GradientCard style={s.codeCard} contentStyle={s.codeCardContent}>
+        <View style={{ flex: 1 }}>
+          <Eyebrow style={s.codeLabel}>ROOM CODE</Eyebrow>
+          <Text style={s.code} numberOfLines={1} adjustsFontSizeToFit>
+            {room.code}
+          </Text>
+        </View>
+        <Pressable
+          onPress={handleCopyCode}
+          accessibilityRole="button"
+          accessibilityLabel="Copy room code"
+          style={({ pressed }) => [s.copyBtn, pressed && { opacity: 0.85, transform: [{ scale: 0.97 }] }]}
+        >
+          <LinearGradient
+            colors={gradients.primaryButton}
+            locations={[0, 0.5, 1]}
+            start={{ x: 0, y: 0 }}
+            end={{ x: 0.6, y: 1 }}
+            style={StyleSheet.absoluteFill}
+            pointerEvents="none"
+          />
+          <Ionicons name="copy-outline" size={15} color={colors.onPrimary} />
+          <Text style={s.copyText}>Copy</Text>
+        </Pressable>
+      </GradientCard>
+
       <View style={s.section}>
-        <Text style={s.sectionTitle}>
-          Players ({players.length})
-        </Text>
+        <View style={s.sectionHeader}>
+          <Eyebrow>Players</Eyebrow>
+          <Pill tone="dark" label={String(players.length)} />
+        </View>
         {players.map((item, index) => (
             <Animated.View
               key={item.id}
@@ -259,26 +290,52 @@ export default function Lobby() {
                   ? FadeInDown.delay(index * 80).duration(400).springify()
                   : undefined
               }
-              style={s.playerRow}
+              style={s.playerRowWrap}
             >
-              <PulsingDot />
-              <View style={[s.avatar, { backgroundColor: item.is_host ? colors.primary + "30" : colors.surfaceLight }]}>
-                <Text style={s.avatarText}>{item.username.charAt(0).toUpperCase()}</Text>
-              </View>
-              <Text style={s.playerName}>{item.username}</Text>
-              {item.is_host && <Text style={s.hostBadge}>HOST</Text>}
-              {isHost && !item.is_host && (
-                <Pressable onPress={() => handleKick(item.user_id, item.username)}>
-                  <Ionicons name="close-circle" size={22} color={colors.danger} />
-                </Pressable>
-              )}
+              <GradientCard radius={radii.lg} contentStyle={s.playerRow}>
+                <View>
+                  <PlayerAvatar username={item.username} size={40} />
+                  <View style={s.onlineDotWrap}>
+                    <PulsingDot />
+                  </View>
+                </View>
+                <Text style={s.playerName} numberOfLines={1}>{item.username}</Text>
+                {item.is_host ? (
+                  <Pill tone="lavender" label="HOST" />
+                ) : (
+                  <Pill tone="dark" label="JOINED" />
+                )}
+                {isHost && !item.is_host && (
+                  <Pressable
+                    onPress={() => handleKick(item.user_id, item.username)}
+                    hitSlop={8}
+                    style={s.kickBtn}
+                  >
+                    <Ionicons name="close" size={16} color={colors.danger} />
+                  </Pressable>
+                )}
+              </GradientCard>
             </Animated.View>
         ))}
       </View>
 
+      {selectedGame && (
+        <GradientCard style={s.section} contentStyle={s.selectedCard}>
+          <View style={[s.gameIcon, { backgroundColor: selectedGame.color + "26", borderColor: selectedGame.color + "40" }]}>
+            <Ionicons name={selectedGame.icon as any} size={20} color={selectedGame.color} />
+          </View>
+          <View style={{ flex: 1 }}>
+            <Eyebrow>SELECTED GAME ★</Eyebrow>
+            <Text style={s.selectedName} numberOfLines={1}>{selectedGame.name}</Text>
+          </View>
+        </GradientCard>
+      )}
+
       {isHost && (
         <View style={s.section}>
-          <Text style={s.sectionTitle}>Pick a Game</Text>
+          <View style={s.sectionHeader}>
+            <Eyebrow>Pick a game</Eyebrow>
+          </View>
           {GAMES.map((game) => (
             <GameCard
               key={game.id}
@@ -288,92 +345,139 @@ export default function Lobby() {
           ))}
         </View>
       )}
-
-      {!isHost && (
-        <View style={s.waiting}>
-          <Text style={s.waitingText}>Waiting for host to start...</Text>
-        </View>
-      )}
       </ScrollView>
+
+      {isHost ? (
+        <PrimaryActionBar helperText="You're the host. Tap a game to start when everyone's in.">
+          {null}
+        </PrimaryActionBar>
+      ) : (
+        <PrimaryActionBar>
+          <GradientCard radius={radii.pill} contentStyle={s.waiting}>
+            <PulsingDot />
+            <Text style={s.waitingText}>Waiting for the host to start…</Text>
+          </GradientCard>
+        </PrimaryActionBar>
+      )}
     </SafeAreaView>
   );
 }
 
 const s = StyleSheet.create({
   safe: { flex: 1, backgroundColor: colors.background },
-  header: {
+  toolbar: { paddingHorizontal: spacing.lg },
+  subtitle: { ...type.subtitle, textAlign: "center", marginTop: 2, marginBottom: 20 },
+
+  // Room code
+  codeCard: { marginBottom: 28 },
+  codeCardContent: {
+    flexDirection: "row",
+    alignItems: "center",
+    paddingVertical: 18,
+    paddingHorizontal: 20,
+    gap: 12,
+  },
+  codeLabel: { marginBottom: 4 },
+  code: { fontFamily: fonts.extrabold, fontSize: 38, color: colors.white, letterSpacing: 8 },
+  copyBtn: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 6,
+    paddingVertical: 12,
+    paddingHorizontal: 18,
+    borderRadius: radii.pill,
+    overflow: "hidden",
+  },
+  copyText: { fontFamily: fonts.bold, fontSize: 15, color: colors.onPrimary },
+
+  section: { marginBottom: 28 },
+  sectionHeader: {
     flexDirection: "row",
     alignItems: "center",
     justifyContent: "space-between",
-    paddingHorizontal: 24,
-    paddingTop: 16,
-    paddingBottom: 24,
+    marginBottom: 12,
   },
-  codeBox: { alignItems: "center", padding: 8 },
-  codeRow: { flexDirection: "row", alignItems: "center" },
-  codeLabel: { fontFamily: fonts.medium, fontSize: 12, color: colors.gray400, letterSpacing: 2 },
-  code: { fontFamily: fonts.extrabold, fontSize: 32, color: colors.primary, letterSpacing: 6 },
-  section: { paddingHorizontal: 24, marginBottom: 24 },
-  sectionTitle: { fontFamily: fonts.semibold, fontSize: 16, color: colors.gray400, marginBottom: 12 },
   scroll: { flex: 1 },
-  // flexGrow lets the non-host "waiting" block (flex: 1) still fill the leftover space
-  scrollContent: { flexGrow: 1, paddingBottom: 24 },
+  scrollContent: { flexGrow: 1, paddingHorizontal: spacing.screen, paddingBottom: 24 },
+
+  // Players
+  playerRowWrap: { marginBottom: 10 },
   playerRow: {
     flexDirection: "row",
     alignItems: "center",
-    backgroundColor: colors.surface,
-    borderRadius: 12,
-    padding: 14,
-    marginBottom: 8,
-    borderWidth: 1,
-    borderColor: colors.border,
+    gap: 12,
+    paddingVertical: 12,
+    paddingHorizontal: 14,
   },
-  avatar: {
-    width: 36,
-    height: 36,
-    borderRadius: 18,
+  onlineDotWrap: {
+    position: "absolute",
+    right: -2,
+    bottom: -2,
+    padding: 2,
+    borderRadius: 7,
+    backgroundColor: colors.card,
+  },
+  playerName: { fontFamily: fonts.bold, fontSize: 16, color: colors.white, flex: 1 },
+  kickBtn: {
+    width: 30,
+    height: 30,
+    borderRadius: 15,
     alignItems: "center",
     justifyContent: "center",
-    marginRight: 12,
+    backgroundColor: "rgba(239,68,68,0.12)",
+    borderWidth: 1,
+    borderColor: "rgba(239,68,68,0.3)",
   },
-  avatarText: { fontFamily: fonts.bold, fontSize: 16, color: colors.white },
-  playerName: { fontFamily: fonts.semibold, fontSize: 16, color: colors.white, flex: 1 },
-  hostBadge: {
-    fontFamily: fonts.bold,
-    fontSize: 11,
-    color: colors.primary,
-    backgroundColor: colors.primary + "20",
-    paddingHorizontal: 8,
-    paddingVertical: 2,
-    borderRadius: 6,
-    overflow: "hidden",
+
+  // Selected game
+  selectedCard: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 12,
+    padding: 16,
   },
-  gameCardTouch: { marginBottom: 8 },
+  selectedName: { fontFamily: fonts.extrabold, fontSize: 18, color: colors.white, marginTop: 4 },
+
+  // Game picker
+  gameCardTouch: { marginBottom: 10 },
   gameRow: {
     flexDirection: "row",
     alignItems: "center",
-    backgroundColor: colors.surface,
-    borderRadius: 12,
     padding: 14,
-    borderWidth: 1,
-    borderColor: colors.border,
   },
   gameIcon: {
-    width: 36,
-    height: 36,
-    borderRadius: 10,
+    width: 42,
+    height: 42,
+    borderRadius: radii.md,
+    borderWidth: 1,
     alignItems: "center",
     justifyContent: "center",
     marginRight: 12,
   },
-  gameName: { fontFamily: fonts.semibold, fontSize: 16, color: colors.white, flex: 1 },
-  waiting: { flex: 1, alignItems: "center", justifyContent: "center", paddingBottom: 100 },
-  waitingText: { fontFamily: fonts.regular, fontSize: 16, color: colors.gray500 },
+  gameName: { fontFamily: fonts.bold, fontSize: 16, color: colors.white, flex: 1, marginRight: 8 },
+  playChip: {
+    width: 32,
+    height: 32,
+    borderRadius: 16,
+    backgroundColor: colors.highlight,
+    alignItems: "center",
+    justifyContent: "center",
+    paddingLeft: 2,
+  },
+
+  // Non-host footer
+  waiting: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "center",
+    gap: 10,
+    paddingVertical: 16,
+  },
+  waitingText: { fontFamily: fonts.semibold, fontSize: 15, color: colors.gray300 },
   onlineDot: {
     width: 8,
     height: 8,
     borderRadius: 4,
     backgroundColor: "#10B981",
-    marginRight: 10,
   },
 });

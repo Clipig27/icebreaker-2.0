@@ -2,15 +2,16 @@ import React, { useState, useEffect, useRef, useCallback } from "react";
 import {
   View,
   Text,
-  TouchableOpacity,
+  Pressable,
   StyleSheet,
-  SafeAreaView,
   ScrollView,
   ActivityIndicator,
 } from "react-native";
+import { SafeAreaView } from "react-native-safe-area-context";
 import { useRouter } from "expo-router";
 import { Ionicons } from "@expo/vector-icons";
-import { colors, fonts } from "../../src/theme";
+import { LinearGradient } from "expo-linear-gradient";
+import { colors, fonts, gradients, radii, spacing, type } from "../../src/theme";
 import { useRoomStore } from "../../src/stores/roomStore";
 import { useAuthStore } from "../../src/stores/authStore";
 import {
@@ -21,6 +22,12 @@ import {
 import HostWaitingPill from "../../src/components/HostWaitingPill";
 import GameHeader from "../../src/components/GameHeader";
 import GameLoadingScreen from "../../src/components/GameLoadingScreen";
+import ScreenBackground from "../../src/components/ScreenBackground";
+import PrimaryAction, { PrimaryActionBar } from "../../src/components/PrimaryAction";
+import Eyebrow from "../../src/components/Eyebrow";
+import Pill from "../../src/components/Pill";
+import GradientCard from "../../src/components/GradientCard";
+import PlayerAvatar from "../../src/components/PlayerAvatar";
 
 // ---------------------------------------------------------------------------
 // Types
@@ -797,82 +804,130 @@ export default function TalentShowScreen() {
   // === INTRO ===
   if (phase === "intro") {
     return (
-      <SafeAreaView style={st.container}><GameHeader />
-        <ScrollView contentContainerStyle={st.introScroll}>
-          <Text style={st.bigEmoji}>{"\u2B50"}</Text>
-          <Text style={st.title}>Nobody's Got Talent</Text>
-          <Text style={st.tagline}>Perform, buzz, and vote your way to victory!</Text>
-          <View style={st.rulesBox}>
-            {[
-              ["\uD83C\uDFAD", "Round 1: Everyone performs a prompt. Audience buzzes or golden buzzes."],
-              ["\uD83D\uDD34", "If majority buzzes, you're eliminated. Golden = you advance!"],
-              ["\uD83C\uDFC6", "Round 2: Survivors perform again. Vote for top 2 finalists."],
-              ["\uD83C\uDF1F", "Round 3: Finals! 2 finalists perform. Everyone votes for the winner."],
-            ].map(([icon, text], i) => (
-              <View key={i} style={st.ruleCard}>
-                <Text style={st.ruleText}>{icon}  {text}</Text>
-              </View>
-            ))}
-          </View>
-          {isHost ? (
-            <TouchableOpacity style={st.primaryBtn} onPress={startFromIntro}>
-              <Text style={st.primaryBtnText}>Start Game</Text>
-            </TouchableOpacity>
+      <Shell
+        footer={
+          isHost ? (
+            <PrimaryAction label="Start Game" icon="play" onPress={startFromIntro} />
           ) : (
-            <Text style={st.wait}>Waiting for host to start...</Text>
-          )}
-        </ScrollView>
-      </SafeAreaView>
+            <WaitingNote label="Waiting for host to start..." />
+          )
+        }
+      >
+        <ScreenTitle title="Nobody's Got Talent" subtitle="Perform, buzz, and vote your way to victory!" />
+        <GradientCard fill={gradients.hero} borderColors={HERO_BORDER} contentStyle={st.heroContent}>
+          <View style={st.heroCopy}>
+            <Eyebrow tone="dark">3 rounds · 1 winner</Eyebrow>
+            <Text style={st.heroTitle}>Auditions, Semifinals, The Finals.</Text>
+          </View>
+          <Text style={st.heroEmoji}>{"⭐"}</Text>
+        </GradientCard>
+        <Eyebrow style={st.sectionEyebrow}>How it works</Eyebrow>
+        <View style={st.list}>
+          {[
+            ["🎭", "Round 1: Everyone performs a prompt. Audience buzzes or golden buzzes."],
+            ["🔴", "If majority buzzes, you're eliminated. Golden = you advance!"],
+            ["🏆", "Round 2: Survivors perform again. Vote for top 2 finalists."],
+            ["🌟", "Round 3: Finals! 2 finalists perform. Everyone votes for the winner."],
+          ].map(([icon, text], i) => (
+            <GradientCard key={i} radius={radii.lg} contentStyle={st.ruleRow}>
+              <View style={st.ruleIcon}>
+                <Text style={st.ruleEmoji}>{icon}</Text>
+              </View>
+              <Text style={st.ruleText}>{text}</Text>
+            </GradientCard>
+          ))}
+        </View>
+      </Shell>
     );
   }
 
   // === ROUND INTRO ===
   if (phase === "round-intro") {
-    const roundNames = { 1: "Auditions", 2: "Semifinals", 3: "The Finals" };
+    const roundNames = ROUND_NAMES;
     return (
-      <SafeAreaView style={st.container}><GameHeader />
-        <View style={st.centered}>
-          <Text style={st.roundBadge}>ROUND {gs.round}</Text>
-          <Text style={st.roundTitle}>{roundNames[gs.round] ?? `Round ${gs.round}`}</Text>
-          <Text style={st.roundSub}>
-            {gs.round === 1 && `${gs.performerQueue.length} performers. Buzz or golden buzz!`}
-            {gs.round === 2 && `${gs.performerQueue.length} survivors. Vote for the top 2!`}
-            {gs.round === 3 && "2 finalists. Vote for the winner!"}
-          </Text>
-          {isHost ? (
-            <TouchableOpacity style={st.primaryBtn} onPress={advanceToPrep}>
-              <Text style={st.primaryBtnText}>Continue</Text>
-              <Ionicons name="arrow-forward" size={20} color={colors.white} />
-            </TouchableOpacity>
+      <Shell
+        footer={
+          isHost ? (
+            <PrimaryAction label="Continue" icon="arrow-forward" onPress={advanceToPrep} />
           ) : (
-            <Text style={st.wait}>Waiting for host...</Text>
-          )}
+            <WaitingNote label="Waiting for host..." />
+          )
+        }
+      >
+        <ScreenTitle
+          title={roundNames[gs.round] ?? `Round ${gs.round}`}
+          subtitle={
+            gs.round === 1
+              ? `${gs.performerQueue.length} performers. Buzz or golden buzz!`
+              : gs.round === 2
+                ? `${gs.performerQueue.length} survivors. Vote for the top 2!`
+                : "2 finalists. Vote for the winner!"
+          }
+          pill={`Round ${gs.round}`}
+        />
+        <GradientCard fill={gradients.hero} borderColors={HERO_BORDER} contentStyle={st.heroContent}>
+          <View style={st.heroCopy}>
+            <Eyebrow tone="dark">Round {gs.round}</Eyebrow>
+            <Text style={st.heroTitle}>{roundNames[gs.round] ?? `Round ${gs.round}`}</Text>
+          </View>
+          <Text style={st.heroBig}>{String(gs.round).padStart(2, "0")}</Text>
+        </GradientCard>
+        <Eyebrow style={st.sectionEyebrow}>The line-up</Eyebrow>
+        <View style={st.lineup}>
+          {gs.performerQueue.map((pid) => (
+            <View key={pid} style={st.chip}>
+              <PlayerAvatar username={playerMap[pid] ?? "Player"} size={28} />
+              <Text style={st.chipText} numberOfLines={1}>
+                {playerMap[pid] ?? "Player"}
+              </Text>
+            </View>
+          ))}
         </View>
-      </SafeAreaView>
+      </Shell>
     );
   }
 
   // === PREP (performer sees prompt, presses start) ===
   if (phase === "prep" || phase === "tiebreak-prep") {
     const isTB = phase === "tiebreak-prep";
+    const roundName = ROUND_NAMES[gs.round] ?? `Round ${gs.round}`;
     return (
-      <SafeAreaView style={st.container}><GameHeader />
-        <View style={st.centered}>
-          <Text style={st.prepLabel}>{isTB ? "TIEBREAKER" : `PERFORMER ${gs.currentPerformerIdx + 1} of ${gs.performerQueue.length}`}</Text>
-          <Text style={st.prepName}>{currentPerformerName}</Text>
-          <View style={st.promptCard}>
-            <Text style={st.promptText}>{gs.prompt}</Text>
-          </View>
-          <Text style={st.prepTimer}>{isTB ? "10" : "30"} seconds</Text>
-          {isPerformer ? (
-            <TouchableOpacity style={st.primaryBtn} onPress={startPerforming}>
-              <Text style={st.primaryBtnText}>Start!</Text>
-            </TouchableOpacity>
+      <Shell
+        footer={
+          isPerformer ? (
+            <PrimaryAction label="Start!" icon="play" onPress={startPerforming} />
           ) : (
-            <Text style={st.wait}>Waiting for {currentPerformerName} to start...</Text>
-          )}
-        </View>
-      </SafeAreaView>
+            <WaitingNote label={`Waiting for ${currentPerformerName} to start...`} />
+          )
+        }
+      >
+        <ScreenTitle
+          title={isPerformer ? "You're up!" : `${currentPerformerName} is up`}
+          subtitle={
+            isTB
+              ? `Tiebreaker · ${roundName}`
+              : `Performer ${gs.currentPerformerIdx + 1} of ${gs.performerQueue.length} · ${roundName}`
+          }
+          pill={isTB ? "Tiebreaker" : undefined}
+        />
+        <GradientCard radius={radii.lg} contentStyle={st.candidateRow}>
+          <PlayerAvatar username={currentPerformerName} size={44} />
+          <View style={st.flex1}>
+            <Eyebrow>{isTB ? "Tiebreaker" : `Performer ${gs.currentPerformerIdx + 1} of ${gs.performerQueue.length}`}</Eyebrow>
+            <Text style={st.candidateName} numberOfLines={1}>
+              {currentPerformerName}
+            </Text>
+          </View>
+        </GradientCard>
+        <GradientCard contentStyle={st.taskCard}>
+          <Eyebrow tone="lavender">{isPerformer ? "Your task" : "The task"}</Eyebrow>
+          <Text style={st.taskText}>{gs.prompt}</Text>
+          <View style={st.taskMeta}>
+            <Ionicons name="timer-outline" size={16} color={colors.gray400} />
+            <Text style={st.taskMetaText}>{isTB ? "10" : "30"} seconds</Text>
+          </View>
+        </GradientCard>
+      </Shell>
     );
   }
 
@@ -882,50 +937,68 @@ export default function TalentShowScreen() {
     const goldenCount = gs.goldenPlayerIds.length;
     const hasUsedAction = gs.buzzedPlayerIds.includes(myId) || gs.goldenPlayerIds.includes(myId);
     const isR1 = gs.round === 1 && phase === "performing";
+    const isTB = phase === "tiebreak-performing";
+    const roundName = ROUND_NAMES[gs.round] ?? `Round ${gs.round}`;
+    const progress =
+      gs.timerDuration > 0 ? Math.min(1, Math.max(0, (secondsLeft * 1000) / gs.timerDuration)) : 0;
+
+    let footer: React.ReactNode = null;
+    if (isPerformer) {
+      if (!isR1) footer = <PrimaryAction label="I'm done" onPress={handleDoneEarly} />;
+    } else if (isR1) {
+      footer = hasUsedAction ? (
+        <WaitingNote done label="Vote submitted! Watching the show..." />
+      ) : (
+        <View style={st.buzzRow}>
+          <Pressable
+            onPress={handleBuzz}
+            accessibilityRole="button"
+            style={({ pressed }) => [st.judgeBtn, st.buzzBtn, pressed && st.pressed]}
+          >
+            <Ionicons name="close-circle" size={18} color={colors.danger} />
+            <Text style={st.buzzBtnText} numberOfLines={1} adjustsFontSizeToFit>
+              Buzz ({buzzCount})
+            </Text>
+          </Pressable>
+          <GoldenButton label={`Golden (${goldenCount})`} onPress={handleGolden} />
+        </View>
+      );
+    } else {
+      footer = <WaitingNote label="Watching the performance..." />;
+    }
 
     return (
-      <SafeAreaView style={st.container}><GameHeader />
-        <ScrollView contentContainerStyle={st.perfScroll}>
-          <Text style={st.perfLabel}>{currentPerformerName} is performing!</Text>
-          <View style={st.timerCircle}>
-            <Text style={st.timerBig}>{secondsLeft}</Text>
+      <Shell footer={footer}>
+        <ScreenTitle
+          title={isPerformer ? "You're on!" : `${currentPerformerName} is on!`}
+          subtitle={
+            isTB
+              ? `Tiebreaker · ${roundName}`
+              : `Performer ${gs.currentPerformerIdx + 1} of ${gs.performerQueue.length} · ${roundName}`
+          }
+        />
+        <View style={st.countdown}>
+          <Text style={st.countdownNum}>{secondsLeft}</Text>
+          <Eyebrow>Seconds left</Eyebrow>
+          <View style={st.progressTrack}>
+            <LinearGradient
+              colors={gradients.primaryButton}
+              start={{ x: 0, y: 0 }}
+              end={{ x: 1, y: 0 }}
+              style={[st.progressFill, { width: `${progress * 100}%` }]}
+            />
           </View>
-          <View style={st.promptCard}>
-            <Text style={st.promptText}>{gs.prompt}</Text>
-          </View>
-
-          {isPerformer ? (
-            <View style={{ gap: 12 }}>
-              <Text style={st.perfHint}>You're performing! Go!</Text>
-              {!isR1 && (
-                <TouchableOpacity style={st.secondaryBtn} onPress={handleDoneEarly}>
-                  <Text style={st.secondaryBtnText}>I'm Done</Text>
-                </TouchableOpacity>
-              )}
-            </View>
-          ) : isR1 ? (
-            <View style={{ gap: 12, alignSelf: "stretch" }}>
-              {hasUsedAction ? (
-                <Text style={st.wait}>Vote submitted! Watching the show...</Text>
-              ) : (
-                <>
-                  <Text style={st.perfHint}>Rate the performance!</Text>
-                  <View style={st.buzzRow}>
-                    <TouchableOpacity style={st.buzzBtn} onPress={handleBuzz}>
-                      <Text style={st.buzzBtnText} numberOfLines={1} adjustsFontSizeToFit>BUZZ ({buzzCount})</Text>
-                    </TouchableOpacity>
-                    <TouchableOpacity style={st.goldenBtn} onPress={handleGolden}>
-                      <Text style={st.goldenBtnText} numberOfLines={1} adjustsFontSizeToFit>GOLDEN ({goldenCount})</Text>
-                    </TouchableOpacity>
-                  </View>
-                </>
-              )}
-            </View>
-          ) : (
-            <Text style={st.wait}>Watching the performance...</Text>
-          )}
-        </ScrollView>
-      </SafeAreaView>
+        </View>
+        <GradientCard contentStyle={st.taskCard}>
+          <Eyebrow tone="lavender">{isPerformer ? "Your task" : "The task"}</Eyebrow>
+          <Text style={st.taskText}>{gs.prompt}</Text>
+        </GradientCard>
+        {isPerformer ? (
+          <Text style={st.helper}>Everyone else is judging.</Text>
+        ) : isR1 && !hasUsedAction ? (
+          <Text style={st.helper}>Rate the performance!</Text>
+        ) : null}
+      </Shell>
     );
   }
 
@@ -934,53 +1007,79 @@ export default function TalentShowScreen() {
     const isVoter = gs.r1NeutralVoterIds.includes(myId);
     const hasVoted = gs.r1NeutralSubmittedIds.includes(myId);
     return (
-      <SafeAreaView style={st.container}><GameHeader />
-        <View style={st.centered}>
-          <Text style={st.voteTitle}>Jury Vote</Text>
-          <Text style={st.voteSub}>{currentPerformerName}'s performance was split. Cast your vote!</Text>
-          <Text style={st.voteSub}>Buzzes: {gs.buzzedPlayerIds.length} | Golden: {gs.goldenPlayerIds.length}</Text>
-          {isVoter && !hasVoted ? (
+      <Shell
+        footer={
+          isVoter && !hasVoted ? (
             <View style={st.buzzRow}>
-              <TouchableOpacity style={st.goldenBtn} onPress={() => handleNeutralVote("advance")}>
-                <Text style={st.goldenBtnText}>ADVANCE</Text>
-              </TouchableOpacity>
-              <TouchableOpacity style={st.buzzBtn} onPress={() => handleNeutralVote("eliminate")}>
-                <Text style={st.buzzBtnText}>ELIMINATE</Text>
-              </TouchableOpacity>
+              <GoldenButton label="Advance" icon="arrow-up-circle" onPress={() => handleNeutralVote("advance")} />
+              <Pressable
+                onPress={() => handleNeutralVote("eliminate")}
+                accessibilityRole="button"
+                style={({ pressed }) => [st.judgeBtn, st.buzzBtn, pressed && st.pressed]}
+              >
+                <Ionicons name="close-circle" size={18} color={colors.danger} />
+                <Text style={st.buzzBtnText}>Eliminate</Text>
+              </Pressable>
             </View>
           ) : (
-            <Text style={st.wait}>{hasVoted ? "Vote submitted!" : "Waiting for jury..."}</Text>
-          )}
+            <WaitingNote done={hasVoted} label={hasVoted ? "Vote submitted!" : "Waiting for jury..."} />
+          )
+        }
+      >
+        <ScreenTitle
+          title="Jury Vote"
+          subtitle={`${currentPerformerName}'s performance was split. Cast your vote!`}
+        />
+        <GradientCard radius={radii.lg} contentStyle={st.candidateRow}>
+          <PlayerAvatar username={currentPerformerName} size={44} />
+          <Text style={st.candidateName} numberOfLines={1}>
+            {currentPerformerName}
+          </Text>
+        </GradientCard>
+        <View style={st.statRow}>
+          <StatCard label="Buzzes" value={gs.buzzedPlayerIds.length} />
+          <StatCard label="Golden" value={gs.goldenPlayerIds.length} gold />
         </View>
-      </SafeAreaView>
+      </Shell>
     );
   }
 
   // === R1 RESULT ===
   if (phase === "r1-result") {
     const lastResult = gs.r1Results[gs.r1Results.length - 1];
+    const outcome = lastResult?.outcome;
+    const lightCard = outcome === "golden" || outcome === "advanced";
     return (
-      <SafeAreaView style={st.container}><GameHeader />
-        <View style={st.centered}>
+      <Shell
+        footer={
+          isHost ? (
+            <PrimaryAction label="Continue" icon="arrow-forward" onPress={advanceFromR1Result} />
+          ) : (
+            <WaitingNote label="Waiting for host..." />
+          )
+        }
+      >
+        <ScreenTitle title="The verdict" subtitle={`${ROUND_NAMES[gs.round] ?? `Round ${gs.round}`}`} />
+        <GradientCard
+          fill={outcome === "golden" ? gradients.gold : outcome === "advanced" ? gradients.hero : undefined}
+          borderColors={outcome === "golden" ? GOLD_BORDER : outcome === "advanced" ? HERO_BORDER : DANGER_BORDER}
+          contentStyle={st.resultCard}
+        >
           <Text style={st.resultEmoji}>
-            {lastResult?.outcome === "golden" ? "\u2B50" : lastResult?.outcome === "advanced" ? "\u2705" : "\u274C"}
+            {lastResult?.outcome === "golden" ? "⭐" : lastResult?.outcome === "advanced" ? "✅" : "❌"}
           </Text>
-          <Text style={st.resultName}>{lastResult?.playerName ?? "Player"}</Text>
-          <Text style={st.resultOutcome}>
+          <Text style={[st.resultName, { color: lightCard ? colors.onPrimary : colors.white }]}>
+            {lastResult?.playerName ?? "Player"}
+          </Text>
+          <Text style={[st.resultOutcome, { color: lightCard ? colors.onPrimary : colors.danger }]}>
             {lastResult?.outcome === "golden" ? "Golden Buzzer!" : lastResult?.outcome === "advanced" ? "ADVANCED!" : "ELIMINATED!"}
           </Text>
-          <Text style={st.resultDetail}>
-            Buzzes: {lastResult?.buzzCount ?? 0} | Golden: {lastResult?.goldenCount ?? 0}
-          </Text>
-          {isHost && (
-            <TouchableOpacity style={st.primaryBtn} onPress={advanceFromR1Result}>
-              <Text style={st.primaryBtnText}>Continue</Text>
-              <Ionicons name="arrow-forward" size={20} color={colors.white} />
-            </TouchableOpacity>
-          )}
-          {!isHost && <Text style={st.wait}>Waiting for host...</Text>}
+        </GradientCard>
+        <View style={st.statRow}>
+          <StatCard label="Buzzes" value={lastResult?.buzzCount ?? 0} />
+          <StatCard label="Golden" value={lastResult?.goldenCount ?? 0} gold />
         </View>
-      </SafeAreaView>
+      </Shell>
     );
   }
 
@@ -989,27 +1088,27 @@ export default function TalentShowScreen() {
     const hasVoted = gs.r2SubmittedVoterIds.includes(myId);
     const performers = gs.r2Results ?? [];
     if (hasVoted) {
-      return (
-        <SafeAreaView style={st.container}><GameHeader />
-          <View style={st.centered}>
-            <Ionicons name="checkmark-circle" size={48} color={colors.success} />
-            <Text style={st.title}>Vote submitted!</Text>
-            <Text style={st.wait}>{gs.r2SubmittedVoterIds.length} / {gs.r2VoterIds.length} voted</Text>
-          </View>
-        </SafeAreaView>
-      );
+      return <SubmittedScreen submitted={gs.r2SubmittedVoterIds.length} total={gs.r2VoterIds.length} />;
     }
     return (
-      <SafeAreaView style={st.container}><GameHeader />
-        <ScrollView contentContainerStyle={st.voteScroll}>
-          <Text style={st.voteTitle}>Vote for Top 2</Text>
-          <Text style={st.voteSub}>Select exactly 2 performers to advance to the finals.</Text>
+      <Shell
+        footer={
+          <PrimaryAction label="Submit Vote" onPress={handleR2Vote} disabled={r2Selected.length !== 2} />
+        }
+      >
+        <ScreenTitle
+          title="Vote for Top 2"
+          subtitle="Select exactly 2 performers to advance to the finals."
+          pill={`${r2Selected.length}/2 picked`}
+        />
+        <View style={st.list}>
           {performers.map((p) => {
             const sel = r2Selected.includes(p.playerId);
             return (
-              <TouchableOpacity
+              <CandidateRow
                 key={p.playerId}
-                style={[st.voteOption, sel && st.voteOptionSel]}
+                name={p.playerName}
+                selected={sel}
                 onPress={() => {
                   setR2Selected((prev) =>
                     prev.includes(p.playerId)
@@ -1017,21 +1116,16 @@ export default function TalentShowScreen() {
                       : prev.length < 2 ? [...prev, p.playerId] : prev
                   );
                 }}
-              >
-                <Ionicons name={sel ? "checkbox" : "square-outline"} size={22} color={sel ? colors.primary : colors.gray500} />
-                <Text style={st.voteOptionText}>{p.playerName}</Text>
-              </TouchableOpacity>
+                trailing={
+                  <View style={[st.check, sel && st.checkOn]}>
+                    {sel ? <Ionicons name="checkmark" size={16} color={colors.onPrimary} /> : null}
+                  </View>
+                }
+              />
             );
           })}
-          <TouchableOpacity
-            style={[st.primaryBtn, r2Selected.length !== 2 && { opacity: 0.4 }]}
-            onPress={handleR2Vote}
-            disabled={r2Selected.length !== 2}
-          >
-            <Text style={st.primaryBtnText}>Submit Vote</Text>
-          </TouchableOpacity>
-        </ScrollView>
-      </SafeAreaView>
+        </View>
+      </Shell>
     );
   }
 
@@ -1039,29 +1133,22 @@ export default function TalentShowScreen() {
   if (phase === "tiebreak-vote") {
     const hasVoted = gs.tbSubmittedVoterIds.includes(myId);
     if (hasVoted) {
-      return (
-        <SafeAreaView style={st.container}><GameHeader />
-          <View style={st.centered}>
-            <Ionicons name="checkmark-circle" size={48} color={colors.success} />
-            <Text style={st.title}>Vote submitted!</Text>
-            <Text style={st.wait}>{gs.tbSubmittedVoterIds.length} / {gs.tbVoterIds.length} voted</Text>
-          </View>
-        </SafeAreaView>
-      );
+      return <SubmittedScreen submitted={gs.tbSubmittedVoterIds.length} total={gs.tbVoterIds.length} />;
     }
     return (
-      <SafeAreaView style={st.container}><GameHeader />
-        <ScrollView contentContainerStyle={st.voteScroll}>
-          <Text style={st.voteTitle}>Tiebreaker Vote</Text>
-          <Text style={st.voteSub}>Pick who should advance.</Text>
+      <Shell>
+        <ScreenTitle title="Tiebreaker Vote" subtitle="Pick who should advance." pill="Tiebreaker" />
+        <View style={st.list}>
           {gs.tiebreakerCandidates.map((pid) => (
-            <TouchableOpacity key={pid} style={st.voteOption} onPress={() => handleTBVote(pid)}>
-              <Text style={st.voteOptionText}>{playerMap[pid] ?? "Player"}</Text>
-              <Ionicons name="arrow-forward" size={16} color={colors.gray400} />
-            </TouchableOpacity>
+            <CandidateRow
+              key={pid}
+              name={playerMap[pid] ?? "Player"}
+              onPress={() => handleTBVote(pid)}
+              trailing={<VoteTag />}
+            />
           ))}
-        </ScrollView>
-      </SafeAreaView>
+        </View>
+      </Shell>
     );
   }
 
@@ -1069,29 +1156,22 @@ export default function TalentShowScreen() {
   if (phase === "r3-voting") {
     const hasVoted = gs.r3SubmittedVoterIds.includes(myId);
     if (hasVoted) {
-      return (
-        <SafeAreaView style={st.container}><GameHeader />
-          <View style={st.centered}>
-            <Ionicons name="checkmark-circle" size={48} color={colors.success} />
-            <Text style={st.title}>Vote submitted!</Text>
-            <Text style={st.wait}>{gs.r3SubmittedVoterIds.length} / {gs.r3VoterIds.length} voted</Text>
-          </View>
-        </SafeAreaView>
-      );
+      return <SubmittedScreen submitted={gs.r3SubmittedVoterIds.length} total={gs.r3VoterIds.length} />;
     }
     return (
-      <SafeAreaView style={st.container}><GameHeader />
-        <ScrollView contentContainerStyle={st.voteScroll}>
-          <Text style={st.voteTitle}>The Final Vote</Text>
-          <Text style={st.voteSub}>Who should win?</Text>
+      <Shell>
+        <ScreenTitle title="The Final Vote" subtitle="Who should win?" pill="Finals" />
+        <View style={st.list}>
           {gs.r3FinalistIds.map((pid) => (
-            <TouchableOpacity key={pid} style={st.voteOption} onPress={() => handleR3Vote(pid)}>
-              <Text style={st.voteOptionText}>{playerMap[pid] ?? "Player"}</Text>
-              <Ionicons name="arrow-forward" size={16} color={colors.gray400} />
-            </TouchableOpacity>
+            <CandidateRow
+              key={pid}
+              name={playerMap[pid] ?? "Player"}
+              onPress={() => handleR3Vote(pid)}
+              trailing={<VoteTag />}
+            />
           ))}
-        </ScrollView>
-      </SafeAreaView>
+        </View>
+      </Shell>
     );
   }
 
@@ -1100,37 +1180,222 @@ export default function TalentShowScreen() {
     const winnerName = gs.winnerId ? playerMap[gs.winnerId] ?? "???" : "???";
     const iWon = gs.winnerId === myId;
     return (
-      <SafeAreaView style={st.container}><GameHeader />
-        <View style={st.centered}>
-          <Ionicons name="trophy" size={56} color={colors.warning} />
-          <Text style={st.winnerTitle}>{iWon ? "YOU WIN!" : `${winnerName} WINS!`}</Text>
-          {gs.runnerUpId && (
-            <Text style={st.runnerUp}>Runner-up: {playerMap[gs.runnerUpId] ?? "?"}</Text>
-          )}
-          {isHost ? (
-            <View style={{ gap: 10, width: "100%" }}>
-              <TouchableOpacity style={st.primaryBtn} onPress={() => startGame("talentShow")} activeOpacity={0.7}>
-                <Ionicons name="refresh" size={20} color={colors.white} />
-                <Text style={st.primaryBtnText}>Play Again</Text>
-              </TouchableOpacity>
-              <TouchableOpacity style={st.secondaryBtn} onPress={handleBackToLobby} activeOpacity={0.7}>
-                <Text style={st.secondaryBtnText}>Back to Lobby</Text>
-              </TouchableOpacity>
+      <Shell
+        footer={
+          isHost ? (
+            <View style={st.footerStack}>
+              <PrimaryAction
+                label="Play Again"
+                icon="refresh"
+                iconPosition="left"
+                onPress={() => startGame("talentShow")}
+              />
+              <PrimaryAction label="Back to Lobby" variant="ghost" onPress={handleBackToLobby} />
             </View>
           ) : (
-            <HostWaitingPill label="Waiting for host..." />
-          )}
-        </View>
-      </SafeAreaView>
+            <View style={st.centerRow}>
+              <HostWaitingPill label="Waiting for host..." />
+            </View>
+          )
+        }
+      >
+        <ScreenTitle title={iWon ? "YOU WIN!" : `${winnerName} WINS!`} subtitle="Final results" />
+        <GradientCard fill={gradients.hero} borderColors={HERO_BORDER} contentStyle={st.winnerContent}>
+          <View style={[st.rankTile, st.rankTileHero]}>
+            <Text style={[st.rankText, st.rankTextHero]}>1</Text>
+          </View>
+          <PlayerAvatar username={winnerName} size={48} />
+          <View style={st.flex1}>
+            <Eyebrow tone="dark">Winner</Eyebrow>
+            <Text style={st.winnerName} numberOfLines={1}>
+              {winnerName}
+            </Text>
+          </View>
+          <Ionicons name="trophy" size={30} color={colors.onPrimary} />
+        </GradientCard>
+        {gs.runnerUpId && (
+          <GradientCard radius={radii.lg} contentStyle={st.candidateRow}>
+            <View style={st.rankTile}>
+              <Text style={st.rankText}>2</Text>
+            </View>
+            <PlayerAvatar username={playerMap[gs.runnerUpId] ?? "?"} size={40} />
+            <View style={st.flex1}>
+              <Eyebrow>Runner-up</Eyebrow>
+              <Text style={st.candidateName} numberOfLines={1}>
+                {playerMap[gs.runnerUpId] ?? "?"}
+              </Text>
+            </View>
+          </GradientCard>
+        )}
+      </Shell>
     );
   }
 
   return (
-    <SafeAreaView style={st.container}><GameHeader />
-      <View style={st.centered}>
-        <Text style={st.loadingText}>Unknown phase: {phase}</Text>
-      </View>
+    <Shell>
+      <Text style={st.loadingText}>Unknown phase: {phase}</Text>
+    </Shell>
+  );
+}
+
+// ---------------------------------------------------------------------------
+// Presentational helpers (no game logic)
+// ---------------------------------------------------------------------------
+
+const ROUND_NAMES: Record<number, string> = { 1: "Auditions", 2: "Semifinals", 3: "The Finals" };
+
+const HERO_BORDER = ["rgba(255,255,255,0.55)", "rgba(255,255,255,0.12)"] as const;
+const GOLD_BORDER = ["rgba(246,227,166,0.9)", "rgba(212,168,67,0.35)"] as const;
+const DANGER_BORDER = ["rgba(239,68,68,0.6)", "rgba(239,68,68,0.1)"] as const;
+const SELECTED_BORDER = [colors.highlight, colors.highlightGradientEnd] as const;
+const SELECTED_FILL = ["rgba(184,174,232,0.20)", "rgba(184,174,232,0.05)"] as const;
+
+/** Screen frame: background, room toolbar, scrolling body and pinned footer. */
+function Shell({ children, footer }: { children: React.ReactNode; footer?: React.ReactNode }) {
+  return (
+    <SafeAreaView style={st.container} edges={["top", "left", "right"]}>
+      <ScreenBackground />
+      <GameHeader />
+      <ScrollView
+        contentContainerStyle={[st.scroll, !footer && st.scrollNoFooter]}
+        showsVerticalScrollIndicator={false}
+      >
+        {children}
+      </ScrollView>
+      {footer ? <PrimaryActionBar>{footer}</PrimaryActionBar> : null}
     </SafeAreaView>
+  );
+}
+
+function ScreenTitle({ title, subtitle, pill }: { title: string; subtitle?: string; pill?: string }) {
+  return (
+    <View style={st.titleBlock}>
+      <View style={st.eyebrowRow}>
+        <Eyebrow tone="lavender">Nobody's Got Talent</Eyebrow>
+        {pill ? <Pill tone="peach" label={pill} /> : null}
+      </View>
+      <Text style={type.title}>{title}</Text>
+      {subtitle ? <Text style={type.subtitle}>{subtitle}</Text> : null}
+    </View>
+  );
+}
+
+function WaitingNote({ label, done = false }: { label: string; done?: boolean }) {
+  return (
+    <View style={st.waiting}>
+      {done ? (
+        <Ionicons name="checkmark-circle" size={18} color={colors.highlight} />
+      ) : (
+        <ActivityIndicator size="small" color={colors.highlight} />
+      )}
+      <Text style={st.waitingText} numberOfLines={1}>
+        {label}
+      </Text>
+    </View>
+  );
+}
+
+function GoldenButton({
+  label,
+  onPress,
+  icon = "star",
+}: {
+  label: string;
+  onPress: () => void;
+  icon?: React.ComponentProps<typeof Ionicons>["name"];
+}) {
+  return (
+    <Pressable
+      onPress={onPress}
+      accessibilityRole="button"
+      style={({ pressed }) => [st.judgeBtn, pressed && st.pressed]}
+    >
+      <LinearGradient
+        colors={gradients.gold}
+        start={{ x: 0, y: 0 }}
+        end={{ x: 0.6, y: 1 }}
+        style={[StyleSheet.absoluteFill, st.pillRadius]}
+        pointerEvents="none"
+      />
+      <Ionicons name={icon} size={18} color={colors.onPrimary} />
+      <Text style={st.goldenBtnText} numberOfLines={1} adjustsFontSizeToFit>
+        {label}
+      </Text>
+    </Pressable>
+  );
+}
+
+function StatCard({ label, value, gold = false }: { label: string; value: number; gold?: boolean }) {
+  return (
+    <GradientCard style={st.flex1} radius={radii.lg} contentStyle={st.statContent}>
+      <Text style={[st.statValue, gold && { color: colors.goldLight }]}>{value}</Text>
+      <Eyebrow>{label}</Eyebrow>
+    </GradientCard>
+  );
+}
+
+function CandidateRow({
+  name,
+  selected = false,
+  onPress,
+  trailing,
+}: {
+  name: string;
+  selected?: boolean;
+  onPress: () => void;
+  trailing?: React.ReactNode;
+}) {
+  return (
+    <Pressable
+      onPress={onPress}
+      accessibilityRole="button"
+      accessibilityState={{ selected }}
+      style={({ pressed }) => [pressed && st.pressed]}
+    >
+      <GradientCard
+        radius={radii.lg}
+        borderColors={selected ? SELECTED_BORDER : undefined}
+        fill={selected ? SELECTED_FILL : undefined}
+        contentStyle={st.candidateRow}
+      >
+        <PlayerAvatar username={name} size={40} />
+        <Text style={st.candidateName} numberOfLines={1}>
+          {name}
+        </Text>
+        {trailing}
+      </GradientCard>
+    </Pressable>
+  );
+}
+
+function VoteTag() {
+  return (
+    <View style={st.voteTag}>
+      <Text style={st.voteTagText}>VOTE</Text>
+      <Ionicons name="chevron-forward" size={16} color={colors.highlight} />
+    </View>
+  );
+}
+
+function SubmittedScreen({ submitted, total }: { submitted: number; total: number }) {
+  return (
+    <Shell footer={<WaitingNote label={`${submitted} / ${total} voted`} />}>
+      <ScreenTitle title="Vote submitted!" subtitle={`${submitted} / ${total} voted`} />
+      <GradientCard contentStyle={st.submittedCard}>
+        <View style={st.submittedIcon}>
+          <Ionicons name="checkmark" size={36} color={colors.highlight} />
+        </View>
+        <Eyebrow>Votes in</Eyebrow>
+        <View style={st.progressTrack}>
+          <LinearGradient
+            colors={gradients.primaryButton}
+            start={{ x: 0, y: 0 }}
+            end={{ x: 1, y: 0 }}
+            style={[st.progressFill, { width: `${total > 0 ? Math.min(100, (submitted / total) * 100) : 0}%` }]}
+          />
+        </View>
+      </GradientCard>
+    </Shell>
   );
 }
 
@@ -1140,83 +1405,184 @@ export default function TalentShowScreen() {
 
 const st = StyleSheet.create({
   container: { flex: 1, backgroundColor: colors.background },
-  centered: { flex: 1, justifyContent: "center", alignItems: "center", padding: 24, gap: 12 },
+  scroll: {
+    flexGrow: 1,
+    paddingHorizontal: spacing.screen,
+    paddingTop: spacing.lg,
+    paddingBottom: spacing.xl,
+    gap: spacing.lg,
+  },
+  scrollNoFooter: { paddingBottom: 48 },
+  flex1: { flex: 1 },
+  list: { gap: spacing.sm },
+  centerRow: { alignItems: "center" },
+  footerStack: { gap: spacing.md },
+  pressed: { opacity: 0.85, transform: [{ scale: 0.98 }] },
+  pillRadius: { borderRadius: radii.pill },
   loadingText: { fontFamily: fonts.medium, fontSize: 16, color: colors.gray400, marginTop: 16 },
-  bigEmoji: { fontSize: 64, marginBottom: 16 },
-  title: { fontFamily: fonts.extrabold, fontSize: 28, color: colors.white, marginBottom: 8 },
-  tagline: { fontFamily: fonts.regular, fontSize: 15, color: colors.gray400, marginBottom: 32, textAlign: "center" },
-  wait: { fontFamily: fonts.regular, fontSize: 15, color: colors.gray400, textAlign: "center" },
 
-  introScroll: { flexGrow: 1, alignItems: "center", justifyContent: "center", paddingVertical: 40, paddingHorizontal: 24 },
-  rulesBox: { width: "100%", marginBottom: 32 },
-  ruleCard: { backgroundColor: colors.surface, borderRadius: 12, padding: 14, marginBottom: 8 },
-  ruleText: { fontFamily: fonts.regular, fontSize: 14, color: colors.white, lineHeight: 20 },
+  // Title block
+  titleBlock: { gap: spacing.sm },
+  eyebrowRow: { flexDirection: "row", alignItems: "center", gap: spacing.sm, flexWrap: "wrap" },
+  sectionEyebrow: { marginTop: spacing.xs },
+  helper: { fontFamily: fonts.medium, fontSize: 14, color: colors.gray400, textAlign: "center" },
 
-  // Round intro
-  roundBadge: { fontFamily: fonts.extrabold, fontSize: 13, color: colors.primaryLight, letterSpacing: 3 },
-  roundTitle: { fontFamily: fonts.extrabold, fontSize: 32, color: colors.white },
-  roundSub: { fontFamily: fonts.regular, fontSize: 15, color: colors.gray400, textAlign: "center", marginBottom: 16 },
+  // Waiting note (footer)
+  waiting: {
+    minHeight: 56,
+    borderRadius: radii.pill,
+    backgroundColor: colors.surface,
+    borderWidth: 1,
+    borderColor: colors.cardBorder,
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "center",
+    gap: 10,
+    paddingHorizontal: 20,
+  },
+  waitingText: { flexShrink: 1, fontFamily: fonts.semibold, fontSize: 15, color: colors.gray300 },
 
-  // Prep
-  prepLabel: { fontFamily: fonts.extrabold, fontSize: 11, color: colors.gray500, letterSpacing: 2 },
-  prepName: { fontFamily: fonts.extrabold, fontSize: 28, color: colors.white },
-  promptCard: {
-    backgroundColor: colors.surface, borderRadius: 16, borderWidth: 1, borderColor: colors.surfaceLight,
-    padding: 20, width: "100%",
+  // Hero (lavender) card
+  heroContent: { flexDirection: "row", alignItems: "center", padding: 22, gap: spacing.md },
+  heroCopy: { flex: 1, gap: 6 },
+  heroTitle: { fontFamily: fonts.extrabold, fontSize: 24, lineHeight: 29, color: colors.onPrimary },
+  heroEmoji: { fontSize: 56 },
+  heroBig: {
+    fontFamily: fonts.extrabold,
+    fontSize: 64,
+    lineHeight: 70,
+    letterSpacing: -2,
+    color: colors.onPrimary,
+    fontVariant: ["tabular-nums"],
   },
-  promptText: { fontFamily: fonts.bold, fontSize: 18, color: colors.white, textAlign: "center", lineHeight: 26 },
-  prepTimer: { fontFamily: fonts.medium, fontSize: 14, color: colors.gray400 },
 
-  // Performing
-  perfScroll: { flexGrow: 1, paddingHorizontal: 20, paddingTop: 24, paddingBottom: 40, gap: 16, alignItems: "center" },
-  perfLabel: { fontFamily: fonts.extrabold, fontSize: 20, color: colors.white },
-  timerCircle: {
-    width: 100, height: 100, borderRadius: 50, borderWidth: 4, borderColor: colors.primary,
-    alignItems: "center", justifyContent: "center",
+  // Rules
+  ruleRow: { flexDirection: "row", alignItems: "center", gap: spacing.md, padding: spacing.lg },
+  ruleIcon: {
+    width: 40,
+    height: 40,
+    borderRadius: radii.md,
+    backgroundColor: colors.highlightSoft,
+    alignItems: "center",
+    justifyContent: "center",
   },
-  timerBig: { fontFamily: fonts.extrabold, fontSize: 36, color: colors.white },
-  perfHint: { fontFamily: fonts.medium, fontSize: 14, color: colors.gray400, textAlign: "center" },
-  buzzRow: { flexDirection: "row", gap: 12, justifyContent: "center", alignSelf: "stretch" },
-  buzzBtn: {
-    flex: 1, backgroundColor: colors.danger + "22", borderWidth: 1.5, borderColor: colors.danger,
-    borderRadius: 14, paddingVertical: 16, alignItems: "center",
+  ruleEmoji: { fontSize: 20 },
+  ruleText: { flex: 1, fontFamily: fonts.medium, fontSize: 14, lineHeight: 20, color: colors.white },
+
+  // Line-up chips
+  lineup: { flexDirection: "row", flexWrap: "wrap", gap: spacing.sm },
+  chip: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 8,
+    paddingLeft: 4,
+    paddingRight: 14,
+    paddingVertical: 4,
+    borderRadius: radii.pill,
+    backgroundColor: colors.surface,
+    borderWidth: 1,
+    borderColor: colors.cardBorder,
   },
-  buzzBtnText: { fontFamily: fonts.bold, fontSize: 15, color: colors.danger },
-  goldenBtn: {
-    flex: 1, backgroundColor: colors.warning + "22", borderWidth: 1.5, borderColor: colors.warning,
-    borderRadius: 14, paddingVertical: 16, alignItems: "center",
+  chipText: { fontFamily: fonts.semibold, fontSize: 14, color: colors.white, maxWidth: 140 },
+
+  // Task card
+  taskCard: { padding: 22, gap: spacing.md },
+  taskText: { fontFamily: fonts.extrabold, fontSize: 24, lineHeight: 31, color: colors.white },
+  taskMeta: { flexDirection: "row", alignItems: "center", gap: 6 },
+  taskMetaText: { fontFamily: fonts.semibold, fontSize: 13, color: colors.gray400 },
+
+  // Countdown
+  countdown: { alignItems: "center", gap: spacing.xs, paddingTop: spacing.sm },
+  countdownNum: {
+    fontFamily: fonts.extrabold,
+    fontSize: 96,
+    lineHeight: 104,
+    letterSpacing: -3,
+    color: colors.white,
+    fontVariant: ["tabular-nums"],
   },
-  goldenBtnText: { fontFamily: fonts.bold, fontSize: 15, color: colors.warning },
+  progressTrack: {
+    alignSelf: "stretch",
+    height: 6,
+    borderRadius: radii.pill,
+    backgroundColor: colors.surfaceLight,
+    overflow: "hidden",
+    marginTop: spacing.md,
+  },
+  progressFill: { height: "100%", borderRadius: radii.pill },
+
+  // Judging buttons
+  buzzRow: { flexDirection: "row", gap: spacing.md },
+  judgeBtn: {
+    flex: 1,
+    minHeight: 56,
+    borderRadius: radii.pill,
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "center",
+    gap: 8,
+    paddingHorizontal: 16,
+  },
+  buzzBtn: { backgroundColor: colors.surface, borderWidth: 1.5, borderColor: colors.danger },
+  buzzBtnText: { flexShrink: 1, fontFamily: fonts.bold, fontSize: 16, color: colors.white },
+  goldenBtnText: { flexShrink: 1, fontFamily: fonts.bold, fontSize: 16, color: colors.onPrimary },
+
+  // Stats
+  statRow: { flexDirection: "row", gap: spacing.md },
+  statContent: { padding: spacing.lg, gap: 4 },
+  statValue: { fontFamily: fonts.extrabold, fontSize: 30, color: colors.white, fontVariant: ["tabular-nums"] },
 
   // Result
+  resultCard: { alignItems: "center", paddingVertical: 28, paddingHorizontal: 20, gap: spacing.sm },
   resultEmoji: { fontSize: 56 },
-  resultName: { fontFamily: fonts.extrabold, fontSize: 28, color: colors.white },
-  resultOutcome: { fontFamily: fonts.bold, fontSize: 18, color: colors.primaryLight },
-  resultDetail: { fontFamily: fonts.medium, fontSize: 14, color: colors.gray400 },
+  resultName: { fontFamily: fonts.extrabold, fontSize: 28, textAlign: "center" },
+  resultOutcome: { fontFamily: fonts.bold, fontSize: 15, letterSpacing: 1.5, textTransform: "uppercase" },
 
-  // Voting
-  voteScroll: { flexGrow: 1, paddingHorizontal: 20, paddingTop: 24, paddingBottom: 40, gap: 12 },
-  voteTitle: { fontFamily: fonts.extrabold, fontSize: 22, color: colors.white },
-  voteSub: { fontFamily: fonts.regular, fontSize: 14, color: colors.gray400 },
-  voteOption: {
-    flexDirection: "row", alignItems: "center", gap: 12, backgroundColor: colors.surface,
-    borderRadius: 12, borderWidth: 1, borderColor: colors.surfaceLight, paddingHorizontal: 16, paddingVertical: 14,
+  // Candidate rows
+  candidateRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: spacing.md,
+    paddingVertical: 14,
+    paddingHorizontal: spacing.lg,
   },
-  voteOptionSel: { borderColor: colors.primary },
-  voteOptionText: { flex: 1, fontFamily: fonts.bold, fontSize: 16, color: colors.white },
+  candidateName: { flex: 1, fontFamily: fonts.bold, fontSize: 17, color: colors.white },
+  check: {
+    width: 26,
+    height: 26,
+    borderRadius: 13,
+    borderWidth: 1.5,
+    borderColor: colors.gray600,
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  checkOn: { backgroundColor: colors.highlight, borderColor: colors.highlight },
+  voteTag: { flexDirection: "row", alignItems: "center", gap: 2 },
+  voteTagText: { fontFamily: fonts.bold, fontSize: 12, letterSpacing: 1.2, color: colors.highlight },
+
+  // Submitted
+  submittedCard: { alignItems: "center", padding: 24, gap: spacing.md },
+  submittedIcon: {
+    width: 72,
+    height: 72,
+    borderRadius: 36,
+    backgroundColor: colors.highlightSoft,
+    alignItems: "center",
+    justifyContent: "center",
+  },
 
   // Winner
-  winnerTitle: { fontFamily: fonts.extrabold, fontSize: 36, color: colors.warning },
-  runnerUp: { fontFamily: fonts.medium, fontSize: 16, color: colors.gray400 },
-
-  primaryBtn: {
-    flexDirection: "row", alignItems: "center", justifyContent: "center", gap: 8,
-    backgroundColor: colors.primary, borderRadius: 14, paddingVertical: 16, width: "100%",
+  winnerContent: { flexDirection: "row", alignItems: "center", gap: spacing.md, padding: 20 },
+  rankTile: {
+    width: 36,
+    height: 36,
+    borderRadius: radii.sm,
+    backgroundColor: colors.surfaceLight,
+    alignItems: "center",
+    justifyContent: "center",
   },
-  primaryBtnText: { fontFamily: fonts.bold, fontSize: 16, color: colors.white },
-  secondaryBtn: {
-    alignItems: "center", paddingVertical: 14, borderRadius: 14,
-    borderWidth: 1, borderColor: colors.surfaceLight, width: "100%",
-  },
-  secondaryBtnText: { fontFamily: fonts.bold, fontSize: 15, color: colors.gray400 },
+  rankTileHero: { backgroundColor: colors.onPrimary },
+  rankText: { fontFamily: fonts.extrabold, fontSize: 16, color: colors.white },
+  rankTextHero: { color: colors.highlight },
+  winnerName: { fontFamily: fonts.extrabold, fontSize: 24, color: colors.onPrimary },
 });
