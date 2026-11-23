@@ -26,8 +26,10 @@ import IntroSplash from "../src/components/IntroSplash";
 const INTRO_START_FALLBACK_MS = 4000;
 /** Overlay fade-out (with a slight 1 → 1.06 scale-up of the splash content). */
 const INTRO_FADE_MS = 420;
-/** Hard stop: force-unmount the intro this long after the app is ready. */
-const INTRO_SAFETY_MS = 6000;
+/** Hard stop: force-unmount the intro this long after the later of "app ready"
+ *  and "intro started". Must exceed START_DELAY (180) + TIMELINE.total (4100)
+ *  + INTRO_FADE_MS (420) ≈ 4.7s with headroom for a busy JS thread. */
+const INTRO_SAFETY_MS = 7000;
 /** Overlay background — matches the intro's top gradient color, so no flash. */
 const INTRO_BG = "#0E0C1A";
 
