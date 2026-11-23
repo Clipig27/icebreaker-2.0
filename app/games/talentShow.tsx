@@ -19,6 +19,7 @@ import {
   TALENT_SHOW_TIEBREAK_PROMPTS,
   TALENT_SHOW_FINAL_PROMPTS,
 } from "../../src/data/talentShow";
+import { getRecent, hashString, loadRecent, markUsed, pickFresh } from "../../src/utils/deck";
 import HostWaitingPill from "../../src/components/HostWaitingPill";
 import GameHeader from "../../src/components/GameHeader";
 import GameLoadingScreen from "../../src/components/GameLoadingScreen";
@@ -107,11 +108,26 @@ type GameState = {
 // Helpers
 // ---------------------------------------------------------------------------
 
+// Device-level "recently used" bank key per prompt pool (no repeats across games).
+const DECK_KEYS = new Map<readonly string[], string>([
+  [TALENT_SHOW_PROMPTS, "ngt"],
+  [TALENT_SHOW_TIEBREAK_PROMPTS, "ngt:tb"],
+  [TALENT_SHOW_FINAL_PROMPTS, "ngt:final"],
+]);
+const promptId = (s: string) => hashString(s).toString(36);
+
 function pickRandom<T>(arr: T[], exclude: Set<number>): { item: T; index: number } {
   const available = arr.map((_, i) => i).filter((i) => !exclude.has(i));
   const pool = available.length > 0 ? available : arr.map((_, i) => i);
   if (available.length === 0) exclude.clear();
-  const index = pool[Math.floor(Math.random() * pool.length)];
+  const key = DECK_KEYS.get(arr as unknown as string[]);
+  if (!key) {
+    const index = pool[Math.floor(Math.random() * pool.length)];
+    return { item: arr[index], index };
+  }
+  const idOfIdx = (i: number) => promptId(String(arr[i]));
+  const [index] = pickFresh(pool, 1, idOfIdx, getRecent(key));
+  markUsed(key, [idOfIdx(index)]);
   return { item: arr[index], index };
 }
 
@@ -157,6 +173,13 @@ export default function TalentShowScreen() {
   const usedR1R2Ref = useRef(new Set<number>());
   const usedTBRef = useRef(new Set<number>());
   const usedFinalRef = useRef(new Set<number>());
+
+  // Hydrate the device's recently-used prompt lists so picks stay fresh across games.
+  useEffect(() => {
+    loadRecent("ngt");
+    loadRecent("ngt:tb");
+    loadRecent("ngt:final");
+  }, []);
 
   // R2 multi-select
   const [r2Selected, setR2Selected] = useState<string[]>([]);

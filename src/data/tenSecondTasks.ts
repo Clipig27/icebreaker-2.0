@@ -1,3 +1,5 @@
+import { generateTasks } from "./gen/tenSecondTasksGen";
+
 export interface Task {
   id: string;
   text: string;
@@ -95,3 +97,20 @@ export const TASKS: Task[] = [
   { id: "t74", text: "Pretend to climb an invisible rope", tags: ["physical"], flags: [] },
   { id: "t75", text: "Shuffle side to side like a basketball defender", tags: ["physical"], flags: [] },
 ];
+
+let allTasks: Task[] | null = null;
+
+/** Curated tasks + generated ones (built lazily; exact duplicates skipped). */
+export function getAllTasks(): Task[] {
+  if (allTasks) return allTasks;
+  const seen = new Set(TASKS.map((t) => t.text.toLowerCase()));
+  const out = TASKS.slice();
+  for (const t of generateTasks()) {
+    const k = t.text.toLowerCase();
+    if (seen.has(k)) continue;
+    seen.add(k);
+    out.push(t);
+  }
+  allTasks = out;
+  return out;
+}

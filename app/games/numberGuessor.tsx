@@ -25,7 +25,10 @@ import GradientCard from "../../src/components/GradientCard";
 import HeroGradient from "../../src/components/HeroGradient";
 import { useRoomStore } from "../../src/stores/roomStore";
 import { useAuthStore } from "../../src/stores/authStore";
-import { NUMBER_GUESSOR_PROMPTS } from "../../src/data/numberGuessor";
+import { getAllNumberPrompts } from "../../src/data/numberGuessor";
+import { drawFresh, loadRecent } from "../../src/utils/deck";
+
+const NG_DECK_KEY = "ng";
 import { competitionRanks, joinNames, ordinal } from "../../src/utils/rank";
 import HostWaitingPill from "../../src/components/HostWaitingPill";
 import GameHeader from "../../src/components/GameHeader";
@@ -118,6 +121,11 @@ export default function NumberGuessorScreen() {
   // Navigate back to the lobby when the room returns to lobby (host + players).
   // Single place that leaves the game screen; fires once.
   // -------------------------------------------------------------------------
+  // Hydrate this device's recently-used prompt list (keeps sessions fresh).
+  useEffect(() => {
+    loadRecent(NG_DECK_KEY);
+  }, []);
+
   // Track wins/games played
   const trackedGameRef = useRef(false);
   useEffect(() => {
@@ -258,8 +266,7 @@ export default function NumberGuessorScreen() {
   // -------------------------------------------------------------------------
 
   const beginGame = useCallback(async () => {
-    const shuffled = shuffleArray(NUMBER_GUESSOR_PROMPTS);
-    const selected = shuffled.slice(0, selectedRounds);
+    const selected = drawFresh(NG_DECK_KEY, getAllNumberPrompts(), selectedRounds, (p) => p.id);
     const firstPrompt = selected[0];
 
     await mutateGameState((cur) => {
@@ -382,7 +389,7 @@ export default function NumberGuessorScreen() {
 
       const nextRound = cur.currentRound + 1;
       const nextPromptId = cur.promptIds[nextRound - 1];
-      const nextPrompt = NUMBER_GUESSOR_PROMPTS.find((p) => p.id === nextPromptId) ?? null;
+      const nextPrompt = getAllNumberPrompts().find((p) => p.id === nextPromptId) ?? null;
 
       return {
         ...cur,

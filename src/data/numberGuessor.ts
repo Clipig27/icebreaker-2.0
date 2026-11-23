@@ -7,6 +7,8 @@
 //   • Prefer answers in the 8–90 range (estimatable, not trivially obvious)
 // ─────────────────────────────────────────────────────────────────────────────
 
+import { generateNumberPrompts } from './gen/numberGuessorGen';
+
 export type NumberPromptCategory = 'geography' | 'sports' | 'science' | 'history' | 'math';
 
 export type NumberPrompt = {
@@ -143,15 +145,12 @@ export const NUMBER_GUESSOR_PROMPTS: NumberPrompt[] = [
   { id: 'ng_155', text: 'How many years can a whale shark live?',                                      correctAnswer: 70, category: 'nature' },
   { id: 'ng_156', text: 'How many known species of frog are there (approximately in thousands)?',      correctAnswer:  7, category: 'nature' },
   { id: 'ng_157', text: 'How many percent of the world\'s fresh water is in the Amazon River?',        correctAnswer: 20, category: 'nature' },
-  { id: 'ng_158', text: 'How many miles per hour can a peregrine falcon dive?',                        correctAnswer: 99, category: 'nature' }, // ~240 kph ≈ 240? Actually 240mph. Let's use a different one:
   { id: 'ng_158', text: 'How many days does a caterpillar spend in its chrysalis (monarch butterfly)?', correctAnswer: 14, category: 'nature' },
   { id: 'ng_159', text: 'How many teeth does a snail have (approximately in hundreds)?',               correctAnswer: 14, category: 'nature' },
   { id: 'ng_160', text: 'How many percent of a panda\'s diet is bamboo?',                              correctAnswer: 99, category: 'nature' },
   { id: 'ng_161', text: 'How many years does a sea turtle live on average?',                           correctAnswer: 80, category: 'nature' },
   { id: 'ng_162', text: 'How many chambers does a cow\'s stomach have?',                               correctAnswer:  4, category: 'nature' },
-  { id: 'ng_163', text: 'How many eggs does a chicken lay per year on average?',                       correctAnswer: 85, category: 'nature' }, // commercial hens lay 250+. Let me use a wild hen: ~12. Let's pick something cleaner:
   { id: 'ng_163', text: 'How many miles per hour can a cheetah run at top speed?',                     correctAnswer: 70, category: 'nature' },
-  { id: 'ng_164', text: 'How many bones does a shark have?',                                           correctAnswer:  0, category: 'nature' },
   { id: 'ng_165', text: 'How many percent of their time do house cats spend sleeping?',                correctAnswer: 70, category: 'nature' },
 
   // Food & Drink
@@ -170,7 +169,6 @@ export const NUMBER_GUESSOR_PROMPTS: NumberPrompt[] = [
   { id: 'ng_178', text: 'How many pounds of grapes does it take to make one bottle of wine?',          correctAnswer:  2, category: 'food' },
   { id: 'ng_179', text: 'How many percent of the world\'s vanilla comes from Madagascar?',             correctAnswer: 80, category: 'food' },
   { id: 'ng_180', text: 'How many calories does the average Thanksgiving meal contain (hundreds)?',    correctAnswer: 30, category: 'food' },
-  { id: 'ng_181', text: 'How many seeds does an average strawberry have?',                             correctAnswer: 45, category: 'food' }, // ~200 is too high; let's use sunflower:
   { id: 'ng_181', text: 'How many grams of protein are in a single large egg?',                        correctAnswer:  6, category: 'food' },
   { id: 'ng_182', text: 'How many percent of avocados sold in the US come from Mexico?',               correctAnswer: 89, category: 'food' },
   { id: 'ng_183', text: 'How many days does it take to make traditional aged balsamic vinegar (years)?', correctAnswer: 12, category: 'food' },
@@ -187,7 +185,6 @@ export const NUMBER_GUESSOR_PROMPTS: NumberPrompt[] = [
   { id: 'ng_192', text: 'How many Grammy Awards has Beyoncé won?',                                     correctAnswer: 32, category: 'pop_culture' },
   { id: 'ng_193', text: 'How many books are in Agatha Christie\'s Hercule Poirot series?',             correctAnswer: 42, category: 'pop_culture' },
   { id: 'ng_194', text: 'How many seasons did Game of Thrones run?',                                   correctAnswer:  8, category: 'pop_culture' },
-  { id: 'ng_195', text: 'How many episodes are in the entire Seinfeld run?',                           correctAnswer: 99, category: 'pop_culture' }, // actually 180; let's correct:
   { id: 'ng_195', text: 'How many seasons did Seinfeld run?',                                          correctAnswer:  9, category: 'pop_culture' },
   { id: 'ng_196', text: 'How many Pixar films had been made as of 2024?',                              correctAnswer: 28, category: 'pop_culture' },
   { id: 'ng_197', text: 'How many years apart were Michael Jackson and Elvis Presley born?',           correctAnswer: 20, category: 'pop_culture' },
@@ -228,7 +225,6 @@ export const NUMBER_GUESSOR_PROMPTS: NumberPrompt[] = [
   { id: 'ng_230', text: 'How many squares of any size are on a standard chessboard?',                  correctAnswer: 64, category: 'math' },
 
   // Technology & Modern World
-  { id: 'ng_231', text: 'How many characters were in the original Twitter character limit?',           correctAnswer: 99, category: 'science' }, // actually 140; use that:
   { id: 'ng_231', text: 'How many satellites does GPS rely on for positioning?',                       correctAnswer: 24, category: 'science' },
   { id: 'ng_232', text: 'How many countries have active space programs?',                              correctAnswer: 72, category: 'science' },
   { id: 'ng_233', text: 'How many astronauts have walked on the Moon?',                                correctAnswer: 12, category: 'science' },
@@ -351,3 +347,24 @@ export const NUMBER_GUESSOR_PROMPTS: NumberPrompt[] = [
   { id: 'ng_339', text: 'What percentage of household dust is dead skin cells?',                       correctAnswer: 70, category: 'science' },
   { id: 'ng_340', text: 'What percentage of the world\'s languages have no writing system?',           correctAnswer: 80, category: 'geography' }
 ];
+
+let allPrompts: NumberPrompt[] | null = null;
+
+/**
+ * Curated prompts + generated ones (computed / curated-fact tables), built
+ * lazily. Generated ids hash the text, so every device resolves the same id to
+ * the same prompt. Exact (case-insensitive) duplicates of curated text are skipped.
+ */
+export function getAllNumberPrompts(): NumberPrompt[] {
+  if (allPrompts) return allPrompts;
+  const seen = new Set(NUMBER_GUESSOR_PROMPTS.map((p) => p.text.toLowerCase()));
+  const out = NUMBER_GUESSOR_PROMPTS.slice();
+  for (const p of generateNumberPrompts()) {
+    const k = p.text.toLowerCase();
+    if (seen.has(k)) continue;
+    seen.add(k);
+    out.push(p);
+  }
+  allPrompts = out;
+  return out;
+}

@@ -19,7 +19,10 @@ import Svg, { Path, Circle } from "react-native-svg";
 import { colors, fonts, gradients, radii, spacing, type } from "../../src/theme";
 import { useRoomStore } from "../../src/stores/roomStore";
 import { useAuthStore } from "../../src/stores/authStore";
-import { PIE_CHARTS_PROMPTS, PieChartPrompt } from "../../src/data/pieCharts";
+import { getAllPieChartPrompts, PieChartPrompt } from "../../src/data/pieCharts";
+import { drawFresh, loadRecent } from "../../src/utils/deck";
+
+const PC_DECK_KEY = "pc";
 import HostWaitingPill from "../../src/components/HostWaitingPill";
 import GameHeader from "../../src/components/GameHeader";
 import GameLoadingScreen from "../../src/components/GameLoadingScreen";
@@ -92,8 +95,7 @@ function buildSession(
   defaultCount: number
 ): PieChartPrompt[] {
   const presetCount = Math.max(0, defaultCount - customPrompts.length);
-  const shuffled = shuffleArray(PIE_CHARTS_PROMPTS);
-  const presets = shuffled.slice(0, presetCount);
+  const presets = drawFresh(PC_DECK_KEY, getAllPieChartPrompts(), presetCount, (p) => p.id);
   return shuffleArray([...customPrompts, ...presets]);
 }
 
@@ -199,6 +201,11 @@ export default function PieChartsScreen() {
   const gs: GameState | null = room?.game_state ?? null;
   const phase = gs?.phase ?? null;
   const myId = user?.id ?? "";
+
+  // Hydrate this device's recently-used prompt list (keeps sessions fresh).
+  useEffect(() => {
+    loadRecent(PC_DECK_KEY);
+  }, []);
 
   // Host: initialise game on mount
   useEffect(() => {

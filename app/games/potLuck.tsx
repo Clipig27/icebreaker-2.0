@@ -15,7 +15,8 @@ import { LinearGradient } from "expo-linear-gradient";
 import { colors, fonts, gradients, radii, spacing, type } from "../../src/theme";
 import { useRoomStore } from "../../src/stores/roomStore";
 import { useAuthStore } from "../../src/stores/authStore";
-import { DEFAULT_QUESTIONS, PotLuckQuestion } from "../../src/data/potLuck";
+import { DEFAULT_QUESTIONS, PotLuckQuestion, getAllPotLuckQuestions } from "../../src/data/potLuck";
+import { getRecent, loadRecent, markUsed, pickFresh } from "../../src/utils/deck";
 import HostWaitingPill from "../../src/components/HostWaitingPill";
 import GameHeader from "../../src/components/GameHeader";
 import GameLoadingScreen from "../../src/components/GameLoadingScreen";
@@ -97,9 +98,13 @@ function shuffleArray<T>(arr: T[]): T[] {
 }
 
 function pickQuestion(usedIds: string[]): PotLuckQuestion | null {
-  const available = DEFAULT_QUESTIONS.filter((q) => !usedIds.includes(q.id));
-  if (available.length === 0) return DEFAULT_QUESTIONS[Math.floor(Math.random() * DEFAULT_QUESTIONS.length)];
-  return available[Math.floor(Math.random() * available.length)];
+  // Prefer questions not used this game or recently on this device; pickFresh
+  // falls back to the least-recently-used ones if the fresh supply runs out.
+  const all = getAllPotLuckQuestions();
+  const [q] = pickFresh(all, 1, (x) => x.id, [...getRecent("sp"), ...usedIds]);
+  const picked = q ?? DEFAULT_QUESTIONS[Math.floor(Math.random() * DEFAULT_QUESTIONS.length)] ?? null;
+  if (picked) markUsed("sp", [picked.id]);
+  return picked;
 }
 
 // ---------------------------------------------------------------------------
@@ -128,6 +133,11 @@ export default function PotLuckScreen() {
 
   const isMyTurn = phase === "live" && gs?.order?.[gs.seatPtr] === myId;
 
+  // Hydrate this device's recently-used question ids (host picks questions).
+  useEffect(() => {
+    loadRecent("sp");
+  }, []);
+
   // -----------------------------------------------------------------------
   // Host: initialise game on mount
   // -----------------------------------------------------------------------
@@ -135,6 +145,8 @@ export default function PotLuckScreen() {
     if (!isHost || !room) return;
     if (gs && gs.game === "potLuck" && gs.phase && (gs.phase as string) !== "starting") return;
 
+    // Wait for the device's recent-question history so question #1 is fresh too.
+    loadRecent("sp").then(() => {
     const order = shuffleArray(players.map((p) => p.user_id));
     const question = pickQuestion([]);
     const initialState: GameState = {
@@ -158,6 +170,7 @@ export default function PotLuckScreen() {
     mutateGameState((cur) => {
       if (cur?.phase && cur.phase !== "starting") return null;
       return initialState;
+    });
     });
   }, [isHost, room?.id]);
 

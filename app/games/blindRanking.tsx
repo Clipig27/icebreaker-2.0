@@ -31,6 +31,7 @@ import GradientCard from "../../src/components/GradientCard";
 import HeroGradient from "../../src/components/HeroGradient";
 import PlayerAvatar from "../../src/components/PlayerAvatar";
 import { competitionRanks } from "../../src/utils/rank";
+import { BANKS, BANK_KEYS, drawBankItems, preloadBankRecents } from "../../src/data/blindRankingBanks";
 
 // ---------------------------------------------------------------------------
 // Types
@@ -66,23 +67,9 @@ type GameState = {
 const { width: SCREEN_WIDTH } = Dimensions.get("window");
 
 // ---------------------------------------------------------------------------
-// Banks (18 categories, 50 items each)
+// Banks — see src/data/blindRankingBanks.ts (55 categories, 36–50 items each).
+// Items are drawn with device-level no-repeat tracking (key `br:<category>`).
 // ---------------------------------------------------------------------------
-
-const BANKS: Record<string, { label: string; emoji: string; items: string[] }> = {
-  artists: { label: "Legendary pop artists", emoji: "\u2605", items: ["Michael Jackson","Madonna","Prince","Whitney Houston","Beyonce","Mariah Carey","Elton John","David Bowie","Stevie Wonder","Freddie Mercury","Lady Gaga","Rihanna","Adele","Bruno Mars","Taylor Swift","Janet Jackson","George Michael","Tina Turner","Cher","Diana Ross","Britney Spears","Justin Timberlake","Usher","Katy Perry","Christina Aguilera","Elvis Presley","The Beatles","Stevie Nicks","Dolly Parton","Lionel Richie","Phil Collins","Billy Joel","Paul McCartney","Donna Summer","Aretha Franklin","Marvin Gaye","Sade","Annie Lennox","Kate Bush","Robbie Williams","Shakira","Celine Dion","Barbra Streisand","Gloria Estefan","Sting","Boy George","Cyndi Lauper","Lenny Kravitz","Seal","Sam Smith"] },
-  sports: { label: "Sports to watch live", emoji: "\u25C8", items: ["Soccer","Basketball","American Football","Tennis","Boxing","MMA","Baseball","Ice Hockey","Formula 1","Golf","Cricket","Rugby","Volleyball","Table Tennis","Badminton","Swimming","Track & Field","Gymnastics","Figure Skating","Skiing","Snowboarding","Surfing","Skateboarding","Cycling","Marathon","Wrestling","Fencing","Archery","Rowing","Sailing","Horse Racing","Darts","Snooker","Bowling","Climbing","Beach Volleyball","Handball","Water Polo","Diving","Curling","Lacrosse","Field Hockey","Sumo","Polo","Squash","Triathlon","Motocross","Drag Racing","Esports","Bull Riding"] },
-  fastfood: { label: "Fast food items", emoji: "\u25A3", items: ["Big Mac","Chicken nuggets","French fries","Whopper","Chicken sandwich","Cheeseburger","Tacos","Burrito","Pizza slice","Hot dog","Onion rings","Mozzarella sticks","Chicken wings","Quesadilla","Fish sandwich","Milkshake","Soft serve cone","Apple pie","Curly fries","Loaded nachos","Spicy chicken sandwich","Double cheeseburger","Bacon burger","Chili cheese fries","Breakfast burrito","Hash browns","Egg McMuffin","Pancakes","Waffle fries","Crispy chicken tenders","Sliders","Corn dog","Cheese pizza","Pepperoni pizza","Garlic bread","Cinnamon rolls","Donuts","Frozen lemonade","Iced coffee","Sweet tea","Coleslaw","Mac and cheese","Mashed potatoes","Biscuits","Jalapeno poppers","Cheese curds","Poutine","Churros","Soft pretzel","Fountain soda"] },
-  movies: { label: "Movies to rewatch forever", emoji: "\u25B6", items: ["The Godfather","Pulp Fiction","The Dark Knight","Forrest Gump","Inception","The Matrix","Goodfellas","Fight Club","Shawshank Redemption","Interstellar","Gladiator","Titanic","Jurassic Park","Back to the Future","Star Wars","Lord of the Rings","Harry Potter","The Lion King","Toy Story","Finding Nemo","Avengers","Spider-Man","Joker","Parasite","Whiplash","La La Land","The Departed","Django Unchained","Inglourious Basterds","No Country for Old Men","Mad Max: Fury Road","Blade Runner","Alien","The Shining","Jaws","Rocky","Die Hard","Terminator 2","The Truman Show","Eternal Sunshine","Good Will Hunting","Catch Me If You Can","The Wolf of Wall Street","Scarface","Casino","Heat","Se7en","The Silence of the Lambs","Saving Private Ryan","Schindlers List"] },
-  travel: { label: "Dream travel destinations", emoji: "\u2708", items: ["Tokyo","Paris","Rome","New York","Bali","Santorini","Maldives","Iceland","Kyoto","Barcelona","London","Dubai","Sydney","Cape Town","Rio de Janeiro","Bangkok","Amsterdam","Venice","Prague","Marrakech","Istanbul","Singapore","Hawaii","Swiss Alps","Patagonia","Banff","Machu Picchu","Petra","Great Barrier Reef","Serengeti","Norwegian Fjords","Grand Canyon","Vienna","Lisbon","Seoul","Hong Kong","Queenstown","Reykjavik","Florence","Dubrovnik","Phuket","Maui","Tuscany","Greek Islands","Costa Rica","New Zealand","Scotland Highlands","Kenya Safari","Antarctica","Galapagos"] },
-  snacks: { label: "Best snacks of all time", emoji: "\u25C9", items: ["Doritos","Cheetos","Pringles","Oreos","Lays chips","Goldfish","Pretzels","Popcorn","Trail mix","Cheez-Its","Ruffles","Takis","Sour Patch Kids","Skittles","M&Ms","Reeses","Kit Kat","Snickers","Twix","Gummy bears","Beef jerky","String cheese","Granola bars","Fruit snacks","Pop-Tarts","Rice Krispies Treats","Chips Ahoy","Nutter Butters","Animal crackers","Saltines","Ritz crackers","Wheat Thins","Triscuits","Veggie straws","Pita chips","Hummus","Guacamole","Salsa","Nachos","Ice cream sandwich","Push pop","Fruit Roll-Ups","Dunkaroos","Combos","Bugles","Funyuns","Sun Chips","Tostitos","Chex Mix","Hot Fries"] },
-  superpowers: { label: "Superpowers to have", emoji: "\u26A1", items: ["Flight","Invisibility","Super strength","Telepathy","Teleportation","Time travel","Mind reading","Super speed","Healing factor","Telekinesis","Shapeshifting","Immortality","X-ray vision","Invulnerability","Elemental control","Fire control","Ice control","Weather control","Force fields","Phasing through walls","Duplication","Size changing","Animal communication","Plant control","Electricity control","Magnetism","Gravity control","Dream walking","Memory manipulation","Luck manipulation","Probability control","Super intelligence","Photographic memory","Night vision","Echolocation","Underwater breathing","Regeneration","Energy blasts","Sound manipulation","Light manipulation","Portal creation","Astral projection","Empathy","Precognition","Mind control","Technopathy","Super agility","Wall-crawling","Density control","Time stop"] },
-  pizzas: { label: "Pizza toppings", emoji: "\u25B2", items: ["Pepperoni","Mushroom","Sausage","Extra cheese","Bacon","Onion","Green pepper","Black olives","Pineapple","Ham","Jalapeno","Spinach","Tomato","Garlic","Basil","Anchovies","Chicken","Ground beef","Salami","Prosciutto","Artichoke","Sun-dried tomato","Feta","Goat cheese","Ricotta","Arugula","Red onion","Banana pepper","Pesto drizzle","Hot honey","Buffalo chicken","BBQ chicken","Meatball","Capicola","Pancetta","Roasted red pepper","Caramelized onion","Truffle oil","Fresh mozzarella","Parmesan","Cheddar","Corn","Egg","Shrimp","Clams","Eggplant","Zucchini","Pickles","Pulled pork","Chili flakes"] },
-  candy: { label: "Candy & chocolate", emoji: "\u2726", items: ["Reeses Cups","Snickers","Kit Kat","Twix","M&Ms","Hersheys bar","Milky Way","3 Musketeers","Butterfinger","Skittles","Starburst","Sour Patch Kids","Swedish Fish","Gummy bears","Haribo","Sour Worms","Jolly Ranchers","Twizzlers","Red Vines","Nerds","Warheads","Airheads","Laffy Taffy","Tootsie Roll","Werthers","Lindt truffles","Ferrero Rocher","Toblerone","Kinder Bueno","Crunch bar","100 Grand","Almond Joy","Mounds","Whoppers","Junior Mints","Milk Duds","Hot Tamales","Mike and Ike","Dots","Now and Later","Pixy Stix","Pop Rocks","Ring Pop","Push Pop","Candy corn","Peeps","Cadbury Egg","York Peppermint","Andes Mints","Reeses Pieces"] },
-  hobbies: { label: "Hobbies to pick up", emoji: "\u273F", items: ["Photography","Painting","Cooking","Baking","Gardening","Hiking","Rock climbing","Yoga","Meditation","Reading","Writing","Playing guitar","Playing piano","Singing","Dancing","Pottery","Knitting","Woodworking","Calligraphy","Drawing","Chess","Video games","Board games","Cycling","Running","Swimming","Surfing","Skateboarding","Skiing","Fishing","Camping","Birdwatching","Astronomy","Coding","3D printing","Drone flying","Podcasting","DJing","Music production","Film making","Journaling","Scrapbooking","Coin collecting","Wine tasting","Coffee roasting","Home brewing","Bonsai","Origami","Magic tricks","Stand-up comedy"] },
-};
-
-const BANK_KEYS = Object.keys(BANKS);
 
 // ---------------------------------------------------------------------------
 // Helpers
@@ -134,6 +121,11 @@ export default function BlindRankingScreen() {
     AsyncStorage.getItem(CUSTOM_CATEGORIES_KEY).then((raw) => {
       if (raw) setCustomCategories(JSON.parse(raw));
     }).catch(() => {});
+  }, []);
+
+  // Hydrate per-category "recently drawn" lists so item draws avoid repeats.
+  useEffect(() => {
+    preloadBankRecents().catch(() => {});
   }, []);
 
   const saveCustomCategory = async () => {
@@ -317,17 +309,17 @@ export default function BlindRankingScreen() {
     const size = sizeOverride ?? selectedSize;
     if (!selectedCategory || !size) return;
     const isCustom = selectedCategory.startsWith("custom:");
-    let pool: string[], label: string, emoji: string;
+    let draw: string[], label: string, emoji: string;
     if (isCustom) {
       const cat = customCategories.find((c) => c.id === selectedCategory.replace("custom:", ""));
       if (!cat || cat.items.length < size) return;
-      pool = cat.items; label = cat.label; emoji = "\u270E";
+      draw = shuffle(cat.items).slice(0, size); label = cat.label; emoji = "\u270E";
     } else {
       const bank = BANKS[selectedCategory];
       if (!bank || bank.items.length < size) return;
-      pool = bank.items; label = bank.label; emoji = bank.emoji;
+      // Prefer items this device hasn't drawn recently for this category.
+      draw = drawBankItems(selectedCategory, size); label = bank.label; emoji = bank.emoji;
     }
-    const draw = shuffle(pool).slice(0, size);
     const placements: Record<string, (string | null)[]> = {};
     for (const p of players) {
       placements[p.user_id] = new Array(size).fill(null);

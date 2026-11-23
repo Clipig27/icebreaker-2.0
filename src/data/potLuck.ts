@@ -1,3 +1,5 @@
+import { generatePotLuckQuestions } from "./gen/potLuckGen";
+
 export interface PotLuckQuestion {
   id: string;
   text: string;
@@ -85,3 +87,16 @@ export const DEFAULT_QUESTIONS: PotLuckQuestion[] = [
   { id: 'h19', text: "What is the name for the fear of long words?", choices: ["Logophobia", "Hippopotomonstrosesquipedaliophobia", "Verbaphobia", "Megalophobia"], correctIndex: 1, difficulty: 'hard', startingPot: 3 },
   { id: 'h20', text: "What is the only naturally occurring liquid metal at room temperature?", choices: ["Lead", "Mercury", "Gallium", "Cesium"], correctIndex: 1, difficulty: 'hard', startingPot: 3 },
 ];
+
+let allQuestions: PotLuckQuestion[] | null = null;
+
+/** Curated questions + deterministic generated ones (built lazily on first use). */
+export function getAllPotLuckQuestions(): PotLuckQuestion[] {
+  if (!allQuestions) {
+    allQuestions = [
+      ...DEFAULT_QUESTIONS,
+      ...generatePotLuckQuestions(DEFAULT_QUESTIONS.map((q) => q.text)),
+    ];
+  }
+  return allQuestions;
+}

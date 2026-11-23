@@ -2,8 +2,10 @@
 // Talent Show — Prompt Banks
 // ─────────────────────────────────────────────────────────────────────────────
 
-/** Round 1 & 2 — standard 30-second performance challenges */
-export const TALENT_SHOW_PROMPTS: string[] = [
+import { generateTalentPrompts } from './gen/talentGen';
+
+/** Round 1 & 2 — hand-written 30-second performance challenges */
+export const CURATED_TALENT_SHOW_PROMPTS: string[] = [
   'Do a stand-up joke about lettuce',
   'Imitate a celebrity accepting an award',
   'Act like you just won the lottery',
@@ -211,6 +213,22 @@ export const TALENT_SHOW_PROMPTS: string[] = [
   'Act like your body is stiff and robotic',
   'Do an impression of someone trying to act cool but failing'
 ];
+
+/**
+ * Round 1 & 2 pool: curated prompts + template-generated ones (deterministic
+ * order, deduped case-insensitively so ids/indices are stable on every device).
+ */
+export const TALENT_SHOW_PROMPTS: string[] = (() => {
+  const seen = new Set<string>();
+  const out: string[] = [];
+  for (const p of [...CURATED_TALENT_SHOW_PROMPTS, ...generateTalentPrompts()]) {
+    const k = p.trim().toLowerCase();
+    if (seen.has(k)) continue;
+    seen.add(k);
+    out.push(p);
+  }
+  return out;
+})();
 
 /** Tiebreaker — quick 10-second bursts */
 export const TALENT_SHOW_TIEBREAK_PROMPTS: string[] = [

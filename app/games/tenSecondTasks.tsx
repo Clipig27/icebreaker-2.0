@@ -15,7 +15,8 @@ import * as Haptics from "expo-haptics";
 import { colors, fonts, gradients, radii, spacing, type } from "../../src/theme";
 import { useRoomStore } from "../../src/stores/roomStore";
 import { useAuthStore } from "../../src/stores/authStore";
-import { TASKS, Task } from "../../src/data/tenSecondTasks";
+import { getAllTasks, Task } from "../../src/data/tenSecondTasks";
+import { getRecent, loadRecent, markUsed, pickFresh } from "../../src/utils/deck";
 import HostWaitingPill from "../../src/components/HostWaitingPill";
 import GameHeader from "../../src/components/GameHeader";
 import GameLoadingScreen from "../../src/components/GameLoadingScreen";
@@ -84,10 +85,15 @@ function shuffleArray<T>(arr: T[]): T[] {
   return a;
 }
 
+const TS_DECK_KEY = "ts";
+
+// Prefers tasks not used this game AND not recently used on this device.
 function pickTask(usedIds: string[]): Task {
-  let available = TASKS.filter((t) => !usedIds.includes(t.id));
-  if (available.length === 0) available = [...TASKS];
-  return available[Math.floor(Math.random() * available.length)];
+  const all = getAllTasks();
+  const [task] = pickFresh(all, 1, (t) => t.id, [...getRecent(TS_DECK_KEY), ...usedIds]);
+  const picked = task ?? all[Math.floor(Math.random() * all.length)];
+  markUsed(TS_DECK_KEY, [picked.id]);
+  return picked;
 }
 
 function pickHolder(activeIds: string[], previousHolderId: string | null, isSuddenDeath: boolean): string {
@@ -172,6 +178,11 @@ export default function TenSecondTasksScreen() {
 
   const holderName = gs?.currentHolderId ? (playerMap[gs.currentHolderId] ?? "Player") : "...";
   const countdownLeft = useCountdown(phase === "countdown" ? (gs?.timerEnd ?? null) : null);
+
+  // Hydrate this device's recently-used task ids (keeps games fresh).
+  useEffect(() => {
+    loadRecent(TS_DECK_KEY);
+  }, []);
 
   // Haptic at 3 seconds
   const buzzedRef = useRef(false);

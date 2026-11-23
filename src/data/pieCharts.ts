@@ -4,6 +4,9 @@
 // isCustom marks prompts added by players in the setup phase.
 // ─────────────────────────────────────────────────────────────────────────────
 
+import { hashString } from '../utils/deck';
+import { generatePieChartTexts } from './gen/pieChartsGen';
+
 export interface PieChartPrompt {
   id: string;
   text: string;
@@ -314,3 +317,24 @@ export const PIE_CHARTS_PROMPTS: PieChartPrompt[] = [
   { id: 'pc279', text: 'Who is most likely to peak later in life and crush it?' },
   { id: 'pc280', text: 'Who is most likely to be the subject of a future documentary?' },
 ];
+
+let allPrompts: PieChartPrompt[] | null = null;
+
+/**
+ * Curated prompts + template-generated ones (built lazily on first use).
+ * Generated ids are a hash of the text, so they're stable across devices and
+ * sessions; exact (case-insensitive) duplicates of curated prompts are skipped.
+ */
+export function getAllPieChartPrompts(): PieChartPrompt[] {
+  if (allPrompts) return allPrompts;
+  const seen = new Set(PIE_CHARTS_PROMPTS.map((p) => p.text.toLowerCase()));
+  const out = PIE_CHARTS_PROMPTS.slice();
+  for (const text of generatePieChartTexts()) {
+    const k = text.toLowerCase();
+    if (seen.has(k)) continue;
+    seen.add(k);
+    out.push({ id: 'pcg_' + hashString(text).toString(36), text });
+  }
+  allPrompts = out;
+  return out;
+}
