@@ -2,22 +2,30 @@ import React, { useState, useEffect, useRef, useCallback } from "react";
 import {
   View,
   Text,
-  TouchableOpacity,
+  Pressable,
   StyleSheet,
-  SafeAreaView,
   ScrollView,
   ActivityIndicator,
   Animated,
 } from "react-native";
+import { SafeAreaView } from "react-native-safe-area-context";
 import { useRouter } from "expo-router";
 import { Ionicons } from "@expo/vector-icons";
-import { colors, fonts } from "../../src/theme";
+import { LinearGradient } from "expo-linear-gradient";
+import { colors, fonts, gradients, radii, spacing, type } from "../../src/theme";
 import { useRoomStore } from "../../src/stores/roomStore";
 import { useAuthStore } from "../../src/stores/authStore";
 import { DEFAULT_QUESTIONS, PotLuckQuestion } from "../../src/data/potLuck";
 import HostWaitingPill from "../../src/components/HostWaitingPill";
 import GameHeader from "../../src/components/GameHeader";
 import GameLoadingScreen from "../../src/components/GameLoadingScreen";
+import ScreenBackground from "../../src/components/ScreenBackground";
+import PrimaryAction, { PrimaryActionBar } from "../../src/components/PrimaryAction";
+import Eyebrow from "../../src/components/Eyebrow";
+import Pill from "../../src/components/Pill";
+import GradientCard from "../../src/components/GradientCard";
+import HeroGradient from "../../src/components/HeroGradient";
+import PlayerAvatar from "../../src/components/PlayerAvatar";
 import { competitionRanks } from "../../src/utils/rank";
 
 // ---------------------------------------------------------------------------
@@ -71,7 +79,8 @@ const TIMER_SECONDS = 15;
 const DEFAULT_TARGET = 10;
 const DEFAULT_POT_CAP = 7;
 
-const DIFF_COLOR = { easy: "#22C55E", medium: "#F59E0B", hard: "#EF4444" } as const;
+// Difficulty chip colours (lime / peach / soft red) — shown on the lavender hero card with dark text
+const DIFF_COLOR = { easy: "#C4F04D", medium: "#F6C9A8", hard: "#F5A3A3" } as const;
 const DIFF_LABEL = { easy: "EASY", medium: "MEDIUM", hard: "HARD" } as const;
 
 // ---------------------------------------------------------------------------
@@ -432,32 +441,42 @@ export default function PotLuckScreen() {
   // === INTRO ===
   if (phase === "intro") {
     return (
-      <SafeAreaView style={st.container}><GameHeader />
-        <ScrollView contentContainerStyle={st.introScroll}>
-          <Text style={st.bigEmoji}>{"\uD83E\uDDE0"}</Text>
-          <Text style={st.title}>Smarty Pot</Text>
-          <Text style={st.tagline}>Risk the growing pot or pass it on.</Text>
-          <View style={st.rulesBox}>
-            {[
-              ["\uD83D\uDCDA", "Each question has a difficulty: Easy, Medium, or Hard. Harder = bigger starting pot."],
-              ["\u23F1\uFE0F", "On your turn you have 15 seconds \u2014 answer or skip."],
-              ["\u2705", "Answer correctly = win the pot. Wrong = lose points equal to the pot."],
-              ["\u23ED\uFE0F", "Skip = pot grows by 1 and passes on. First to the target score wins!"],
-            ].map(([icon, text], i) => (
-              <View key={i} style={st.ruleCard}>
-                <Text style={st.ruleText}>{icon}  {text}</Text>
-              </View>
-            ))}
-          </View>
-          {isHost ? (
-            <TouchableOpacity style={st.primaryBtn} onPress={startFromIntro}>
-              <Text style={st.primaryBtnText}>Start Game</Text>
-            </TouchableOpacity>
+      <Shell
+        footer={
+          isHost ? (
+            <PrimaryAction label="Start Game" icon="play" onPress={startFromIntro} />
           ) : (
-            <Text style={st.wait}>Waiting for host to start...</Text>
-          )}
-        </ScrollView>
-      </SafeAreaView>
+            <WaitingNote label="Waiting for host to start..." />
+          )
+        }
+      >
+        <ScreenTitle title="Smarty Pot" subtitle="Risk the growing pot or pass it on." />
+        <HeroGradient>
+          <View style={st.heroRow}>
+            <View style={st.heroCopy}>
+              <Eyebrow tone="dark">{`First to ${gs.target ?? DEFAULT_TARGET} wins`}</Eyebrow>
+              <Text style={st.heroTitle}>Answer to win the pot. Skip to grow it.</Text>
+            </View>
+            <Text style={st.heroEmoji}>{"\uD83E\uDDE0"}</Text>
+          </View>
+        </HeroGradient>
+        <Eyebrow style={st.sectionEyebrow}>How it works</Eyebrow>
+        <View style={st.list}>
+          {[
+            ["\uD83D\uDCDA", "Each question has a difficulty: Easy, Medium, or Hard. Harder = bigger starting pot."],
+            ["\u23F1\uFE0F", "On your turn you have 15 seconds \u2014 answer or skip."],
+            ["\u2705", "Answer correctly = win the pot. Wrong = lose points equal to the pot."],
+            ["\u23ED\uFE0F", "Skip = pot grows by 1 and passes on. First to the target score wins!"],
+          ].map(([icon, text], i) => (
+            <GradientCard key={i} radius={radii.lg} contentStyle={st.ruleRow}>
+              <View style={st.ruleIcon}>
+                <Text style={st.ruleEmoji}>{icon}</Text>
+              </View>
+              <Text style={st.ruleText}>{text}</Text>
+            </GradientCard>
+          ))}
+        </View>
+      </Shell>
     );
   }
 
@@ -465,32 +484,32 @@ export default function PotLuckScreen() {
   if (phase === "rolling") {
     const order = gs.order ?? [];
     return (
-      <SafeAreaView style={st.container}><GameHeader />
-        <View style={st.rollingContainer}>
-          <Text style={st.rollingHeader}>SMARTY POT</Text>
-          <Text style={st.rollingSubHeader}>TURN ORDER</Text>
-          <View style={{ gap: 8, width: "100%" }}>
-            {order.map((pid, seat) => {
-              const isMe = pid === myId;
-              return (
-                <View key={pid} style={[st.rollItem, isMe && st.rollItemMe]}>
-                  <View style={[st.rollAvatar, isMe && { backgroundColor: colors.gold + "33" }]}>
-                    <Text style={[st.rollAvatarLetter, isMe && { color: colors.gold }]}>
-                      {(playerMap[pid]?.username ?? "?")[0].toUpperCase()}
-                    </Text>
-                  </View>
-                  <Text style={[st.rollSeat, isMe && { color: colors.gold }]}>{seat + 1}</Text>
-                  <Text style={[st.rollName, isMe && { color: colors.white }]}>
-                    {playerMap[pid]?.username ?? "Player"}
-                  </Text>
-                  {isMe && <Text style={st.rollYouTag}>YOU</Text>}
+      <Shell footer={<WaitingNote label="Starting in a moment..." />}>
+        <ScreenTitle title="Turn order" subtitle="Here's who goes when." />
+        <View style={st.list}>
+          {order.map((pid, seat) => {
+            const isMe = pid === myId;
+            return (
+              <GradientCard
+                key={pid}
+                radius={radii.lg}
+                borderColors={isMe ? SELECTED_BORDER : undefined}
+                fill={isMe ? SELECTED_FILL : undefined}
+                contentStyle={st.rankRow}
+              >
+                <View style={[st.numTile, seat === 0 && st.numTileOn]}>
+                  <Text style={[st.numTileText, seat === 0 && st.numTileTextOn]}>{seat + 1}</Text>
                 </View>
-              );
-            })}
-          </View>
-          <Text style={st.rollHint}>Starting in a moment...</Text>
+                <PlayerAvatar username={playerMap[pid]?.username ?? "Player"} size={36} />
+                <Text style={st.rankName} numberOfLines={1}>
+                  {playerMap[pid]?.username ?? "Player"}
+                </Text>
+                {isMe && <Pill tone="lavender" label="You" />}
+              </GradientCard>
+            );
+          })}
         </View>
-      </SafeAreaView>
+      </Shell>
     );
   }
 
@@ -501,54 +520,60 @@ export default function PotLuckScreen() {
     const diffColor = DIFF_COLOR[difficulty];
     const diffLabel = DIFF_LABEL[difficulty];
     const atCap = gs.pot >= gs.potCap;
-    const timerColor = timeLeft > 7 ? colors.success : timeLeft > 3 ? colors.warning : colors.danger;
+    const urgent = timeLeft <= 3;
 
     return (
-      <SafeAreaView style={st.container}><GameHeader />
-        <ScrollView contentContainerStyle={st.liveScroll}>
-          {/* Turn banner */}
-          <View style={[st.turnBanner, isMyTurn && st.turnBannerMe]}>
-            <View style={[st.turnAvatar, isMyTurn && { backgroundColor: colors.gold + "28" }]}>
-              <Text style={[st.turnAvatarLetter, isMyTurn && { color: colors.gold }]}>
-                {(currentActor ?? "?")[0].toUpperCase()}
-              </Text>
-            </View>
-            <View style={{ flex: 1, gap: 4 }}>
-              <Text style={[st.turnName, isMyTurn && { color: colors.gold }]}>
-                {isMyTurn ? "YOUR TURN" : `${currentActor}'s turn`}
-              </Text>
-              <View style={st.timerTrack}>
-                <View style={[st.timerFill, { width: `${(timeLeft / TIMER_SECONDS) * 100}%`, backgroundColor: timerColor }]} />
-              </View>
-            </View>
-            <View style={st.timerBubble}>
-              <Text style={[st.timerNum, { color: timerColor }]}>{timeLeft}</Text>
-              <Text style={[st.timerSec, { color: timerColor }]}>s</Text>
-            </View>
-          </View>
+      <Shell
+        footer={
+          isMyTurn ? (
+            actionSent ? (
+              <WaitingNote label="Locking in..." />
+            ) : (
+              <PrimaryAction
+                label={"Skip \u2014 pass to next player"}
+                icon="play-skip-forward"
+                variant="dark"
+                onPress={handleSkip}
+              />
+            )
+          ) : (
+            <WaitingNote label={`${currentActor} is deciding...`} />
+          )
+        }
+      >
+        <ScreenTitle
+          title={isMyTurn ? "Your turn!" : `${currentActor}'s turn`}
+          subtitle={
+            isMyTurn
+              ? actionSent
+                ? "Locking in..."
+                : `Answer for ${gs.pot} pt${gs.pot !== 1 ? "s" : ""} \u00B7 or skip`
+              : turnsAway <= 0
+                ? "You're up"
+                : turnsAway === 1
+                  ? "You're NEXT"
+                  : `You're ${turnsAway} turns away`
+          }
+          pill={isMyTurn ? "Your turn" : undefined}
+        />
 
-          {/* My score bar */}
-          <View style={st.scoreBar}>
-            <Text style={st.scoreLabel}>YOU</Text>
-            <Text style={st.scoreNum}>{gs.scores[myId] ?? 0}<Text style={st.scoreTarget}>/{gs.target}</Text></Text>
-            {deltaText && (
-              <Animated.Text
-                style={[
-                  st.deltaAnim,
-                  { color: deltaColor, opacity: deltaOpacity, transform: [{ translateY: deltaTranslateY }] },
-                ]}
-              >
-                {deltaText}
-              </Animated.Text>
-            )}
-          </View>
+        {/* Timer */}
+        <View style={st.countdown}>
+          <Text style={[st.countdownNum, urgent && { color: colors.danger }]}>{timeLeft}</Text>
+          <Eyebrow>Seconds left</Eyebrow>
+          <ProgressBar progress={timeLeft / TIMER_SECONDS} />
+        </View>
 
-          {/* Pot meter */}
-          <View style={[st.potMeter, atCap && st.potMax]}>
-            <Text style={[st.potLabel, atCap && { color: colors.danger }]}>
-              {atCap ? "MAX POT" : "POT"}
-            </Text>
-            <Text style={[st.potNum, atCap && { color: colors.danger }]}>{gs.pot}</Text>
+        {/* Pot + my score */}
+        <View style={st.statRow}>
+          <GradientCard
+            style={st.flex1}
+            radius={radii.lg}
+            borderColors={atCap ? DANGER_BORDER : undefined}
+            contentStyle={st.statContent}
+          >
+            <Text style={[st.statValue, atCap && { color: colors.danger }]}>{gs.pot}</Text>
+            <Eyebrow style={atCap ? { color: colors.danger } : undefined}>{atCap ? "Max pot" : "Pot"}</Eyebrow>
             <View style={st.potTrack}>
               {Array.from({ length: gs.potCap }).map((_, i) => (
                 <View
@@ -560,60 +585,77 @@ export default function PotLuckScreen() {
                 />
               ))}
             </View>
-          </View>
+          </GradientCard>
+          <GradientCard style={st.flex1} radius={radii.lg} contentStyle={st.statContent}>
+            <Text style={st.statValue}>
+              {gs.scores[myId] ?? 0}
+              <Text style={st.statTarget}>/{gs.target}</Text>
+            </Text>
+            <Eyebrow>Your score</Eyebrow>
+            {deltaText && (
+              <Animated.Text
+                style={[
+                  st.deltaAnim,
+                  { color: deltaColor, opacity: deltaOpacity, transform: [{ translateY: deltaTranslateY }] },
+                ]}
+              >
+                {deltaText}
+              </Animated.Text>
+            )}
+          </GradientCard>
+        </View>
 
-          {/* Difficulty badge */}
-          <View style={[st.diffBadge, { backgroundColor: diffColor + "1A", borderColor: diffColor + "55" }]}>
-            <View style={[st.diffDot, { backgroundColor: diffColor }]} />
-            <Text style={[st.diffText, { color: diffColor }]}>{diffLabel}</Text>
-            <Text style={[st.diffPots, { color: diffColor + "AA" }]}>starts at {q?.startingPot ?? 1}pt</Text>
-          </View>
-
-          {/* Question */}
-          <View style={st.qCard}>
+        {/* Question */}
+        <HeroGradient>
+          <View style={st.qHero}>
+            <View style={st.qHeroHead}>
+              <View style={[st.diffChip, { backgroundColor: diffColor }]}>
+                <Text style={st.diffText}>{diffLabel}</Text>
+              </View>
+              <Text style={st.diffPots}>starts at {q?.startingPot ?? 1}pt</Text>
+            </View>
             <Text style={st.qText}>{q?.text ?? ""}</Text>
           </View>
+        </HeroGradient>
 
-          {/* Choices / spectate */}
-          {isMyTurn ? (
-            <>
-              <Text style={st.actionHint}>
-                {actionSent ? "Locking in..." : `Answer for ${gs.pot} pt${gs.pot !== 1 ? "s" : ""} \u00B7 or skip`}
-              </Text>
-              <View style={st.choicesGrid}>
-                {(q?.choices ?? []).map((choice, i) => (
-                  <TouchableOpacity
-                    key={i}
-                    style={[st.choiceBtn, actionSent && st.choiceBtnOff]}
-                    onPress={() => handleAnswer(i)}
-                    disabled={actionSent}
-                    activeOpacity={0.65}
-                  >
-                    <View style={st.choiceLetterWrap}>
-                      <Text style={st.choiceLetter}>{String.fromCharCode(65 + i)}</Text>
+        {/* Choices / spectate */}
+        {isMyTurn ? (
+          <>
+            <Eyebrow style={st.sectionEyebrow}>Pick your answer</Eyebrow>
+            <View style={st.list}>
+              {(q?.choices ?? []).map((choice, i) => (
+                <Pressable
+                  key={i}
+                  onPress={() => handleAnswer(i)}
+                  disabled={actionSent}
+                  accessibilityRole="button"
+                  style={({ pressed }) => [actionSent && st.choiceOff, pressed && st.pressed]}
+                >
+                  <GradientCard radius={radii.lg} contentStyle={st.choiceRow}>
+                    <View style={st.numTile}>
+                      <Text style={[st.numTileText, { color: colors.highlight }]}>{String.fromCharCode(65 + i)}</Text>
                     </View>
                     <Text style={st.choiceText} numberOfLines={2}>{choice}</Text>
-                  </TouchableOpacity>
-                ))}
-              </View>
-              {!actionSent && (
-                <TouchableOpacity style={st.skipBtn} onPress={handleSkip} activeOpacity={0.7}>
-                  <Text style={st.skipBtnText}>SKIP — pass to next player</Text>
-                </TouchableOpacity>
-              )}
-            </>
-          ) : (
-            <View style={st.spectate}>
-              <Text style={st.spectateText}>
-                <Text style={{ color: colors.gold }}>{currentActor}</Text> is deciding
-              </Text>
-              <Text style={st.upNext}>
-                {turnsAway <= 0 ? "you're up" : turnsAway === 1 ? "you're NEXT" : `${turnsAway} turns away`}
-              </Text>
+                    <Ionicons name="chevron-forward" size={16} color={colors.highlight} />
+                  </GradientCard>
+                </Pressable>
+              ))}
             </View>
-          )}
-        </ScrollView>
-      </SafeAreaView>
+          </>
+        ) : (
+          <GradientCard radius={radii.lg} contentStyle={st.rankRow}>
+            <PlayerAvatar username={currentActor ?? "?"} size={40} />
+            <View style={st.flex1}>
+              <Eyebrow>Now deciding</Eyebrow>
+              <Text style={st.rankName} numberOfLines={1}>{currentActor}</Text>
+            </View>
+            <Pill
+              tone={turnsAway === 1 ? "lavender" : "dark"}
+              label={turnsAway <= 0 ? "You're up" : turnsAway === 1 ? "You're next" : `${turnsAway} turns away`}
+            />
+          </GradientCard>
+        )}
+      </Shell>
     );
   }
 
@@ -625,38 +667,36 @@ export default function PotLuckScreen() {
     const ranks = competitionRanks(sorted, (p) => p.score);
 
     return (
-      <SafeAreaView style={st.container}><GameHeader />
-        <ScrollView contentContainerStyle={st.revealScroll}>
-          <View style={st.revealCard}>
-            <Text style={st.revealLabel}>ANSWER</Text>
-            <Text style={st.revealAnswer}>{gs.revealInfo?.answer ?? "\u2014"}</Text>
-            <Text style={st.revealNote}>
-              {gs.revealInfo?.scored ? `${gs.revealInfo.by} took the pot!` : "Everyone skipped \u2014 pot voided"}
-            </Text>
-          </View>
-
-          <View style={st.standingsCard}>
-            <Text style={st.standingsHeader}>STANDINGS</Text>
-            {sorted.map((p, i) => (
-              <View key={p.uid} style={[st.standingRow, ranks[i] === 1 && st.standingRowFirst]}>
-                <Text style={[st.standingRank, ranks[i] === 1 && { color: colors.gold }]}>#{ranks[i]}</Text>
-                <Text style={st.standingName} numberOfLines={1}>{p.username}</Text>
-                <Text style={[st.standingScore, ranks[i] === 1 && { color: colors.gold }]}>{p.score}</Text>
-              </View>
-            ))}
-            <Text style={st.targetNote}>First to {gs.target} wins</Text>
-          </View>
-
-          {isHost ? (
-            <TouchableOpacity style={st.primaryBtn} onPress={handleNextQuestion} activeOpacity={0.8}>
-              <Text style={st.primaryBtnText}>NEXT QUESTION</Text>
-              <Ionicons name="arrow-forward" size={20} color={colors.white} />
-            </TouchableOpacity>
+      <Shell
+        footer={
+          isHost ? (
+            <PrimaryAction label="Next Question" icon="arrow-forward" onPress={handleNextQuestion} />
           ) : (
-            <Text style={st.wait}>Waiting for host to continue...</Text>
-          )}
-        </ScrollView>
-      </SafeAreaView>
+            <WaitingNote label="Waiting for host to continue..." />
+          )
+        }
+      >
+        <ScreenTitle
+          title={gs.revealInfo?.scored ? `${gs.revealInfo.by} took the pot!` : "Pot voided"}
+          subtitle={gs.revealInfo?.scored ? "Correct answer!" : "Everyone skipped \u2014 pot voided"}
+        />
+        <HeroGradient>
+          <View style={st.answerHero}>
+            <Eyebrow tone="dark">Answer</Eyebrow>
+            <Text style={st.answerText}>{gs.revealInfo?.answer ?? "\u2014"}</Text>
+          </View>
+        </HeroGradient>
+
+        <View style={st.sectionHead}>
+          <Eyebrow>Standings</Eyebrow>
+          <Pill tone="dark" label={`First to ${gs.target} wins`} />
+        </View>
+        <View style={st.list}>
+          {sorted.map((p, i) => (
+            <StandingRow key={p.uid} rank={ranks[i]} name={p.username} score={p.score} isMe={p.uid === myId} />
+          ))}
+        </View>
+      </Shell>
     );
   }
 
@@ -671,45 +711,143 @@ export default function PotLuckScreen() {
     const ranks = competitionRanks(sorted, (p) => p.score);
 
     return (
-      <SafeAreaView style={st.container}><GameHeader />
-        <ScrollView contentContainerStyle={st.gameOverScroll}>
-          <Ionicons name="trophy" size={48} color={colors.warning} />
-          <Text style={st.gameOverTitle}>{iWon ? "YOU WIN!" : `${winnerName} WINS!`}</Text>
-
-          <View style={[st.standingsCard, st.gameOverStandings]}>
-            {sorted.map((p, i) => (
-              <View key={p.uid} style={[st.standingRow, ranks[i] === 1 && st.standingRowFirst]}>
-                <Text style={[st.standingRank, ranks[i] === 1 && { color: colors.gold }]}>{ranks[i]}</Text>
-                <Text style={st.standingName} numberOfLines={1}>{p.username}</Text>
-                <Text style={[st.standingScore, ranks[i] === 1 && { color: colors.gold }]}>{p.score}</Text>
-              </View>
-            ))}
-          </View>
-
-          {isHost ? (
-            <View style={{ gap: 10, width: "100%" }}>
-              <TouchableOpacity style={st.primaryBtn} onPress={() => startGame("potLuck")} activeOpacity={0.7}>
-                <Ionicons name="refresh" size={20} color={colors.white} />
-                <Text style={st.primaryBtnText}>Play Again</Text>
-              </TouchableOpacity>
-              <TouchableOpacity style={st.secondaryBtn} onPress={handleBackToLobby} activeOpacity={0.7}>
-                <Text style={st.secondaryBtnText}>Back to Lobby</Text>
-              </TouchableOpacity>
+      <Shell
+        footer={
+          isHost ? (
+            <View style={st.footerStack}>
+              <PrimaryAction
+                label="Play Again"
+                icon="refresh"
+                iconPosition="left"
+                onPress={() => startGame("potLuck")}
+              />
+              <PrimaryAction label="Back to Lobby" variant="dark" onPress={handleBackToLobby} />
             </View>
           ) : (
-            <HostWaitingPill label="Waiting for host..." style={{ marginTop: 0, marginBottom: 20 }} />
-          )}
-        </ScrollView>
-      </SafeAreaView>
+            <View style={st.centerRow}>
+              <HostWaitingPill label="Waiting for host..." />
+            </View>
+          )
+        }
+      >
+        <ScreenTitle
+          title={iWon ? "YOU WIN!" : `${winnerName} WINS!`}
+          subtitle="Final standings"
+          pill="Final results"
+        />
+        <GradientCard fill={gradients.hero} borderColors={HERO_BORDER} contentStyle={st.winnerContent}>
+          <View style={[st.numTile, st.numTileHero]}>
+            <Text style={[st.numTileText, st.numTileTextHero]}>1</Text>
+          </View>
+          <PlayerAvatar username={winnerName ?? "?"} size={48} />
+          <View style={st.flex1}>
+            <Eyebrow tone="dark">Winner</Eyebrow>
+            <Text style={st.winnerName} numberOfLines={1}>
+              {winnerName}
+            </Text>
+          </View>
+          <Ionicons name="trophy" size={30} color={colors.onPrimary} />
+        </GradientCard>
+
+        <Eyebrow style={st.sectionEyebrow}>Leaderboard</Eyebrow>
+        <View style={st.list}>
+          {sorted.map((p, i) => (
+            <StandingRow key={p.uid} rank={ranks[i]} name={p.username} score={p.score} isMe={p.uid === myId} />
+          ))}
+        </View>
+      </Shell>
     );
   }
 
   return (
-    <SafeAreaView style={st.container}><GameHeader />
-      <View style={st.centered}>
-        <Text style={st.loadingText}>Unknown phase: {phase}</Text>
-      </View>
+    <Shell>
+      <Text style={st.loadingText}>Unknown phase: {phase}</Text>
+    </Shell>
+  );
+}
+
+// ---------------------------------------------------------------------------
+// Presentational helpers (no game logic)
+// ---------------------------------------------------------------------------
+
+const HERO_BORDER = ["rgba(255,255,255,0.55)", "rgba(255,255,255,0.12)"] as const;
+const DANGER_BORDER = ["rgba(239,68,68,0.6)", "rgba(239,68,68,0.1)"] as const;
+const SELECTED_BORDER = [colors.highlight, colors.highlightGradientEnd] as const;
+const SELECTED_FILL = ["rgba(184,174,232,0.20)", "rgba(184,174,232,0.05)"] as const;
+
+/** Screen frame: background, room toolbar, scrolling body and pinned footer. */
+function Shell({ children, footer }: { children: React.ReactNode; footer?: React.ReactNode }) {
+  return (
+    <SafeAreaView style={st.container} edges={["top", "left", "right"]}>
+      <ScreenBackground />
+      <GameHeader />
+      <ScrollView
+        contentContainerStyle={[st.scroll, !footer && st.scrollNoFooter]}
+        showsVerticalScrollIndicator={false}
+      >
+        {children}
+      </ScrollView>
+      {footer ? <PrimaryActionBar>{footer}</PrimaryActionBar> : null}
     </SafeAreaView>
+  );
+}
+
+function ScreenTitle({ title, subtitle, pill }: { title: string; subtitle?: string; pill?: string }) {
+  return (
+    <View style={st.titleBlock}>
+      <View style={st.eyebrowRow}>
+        <Eyebrow tone="lavender">Smarty Pot</Eyebrow>
+        {pill ? <Pill tone="peach" label={pill} /> : null}
+      </View>
+      <Text style={type.title}>{title}</Text>
+      {subtitle ? <Text style={type.subtitle}>{subtitle}</Text> : null}
+    </View>
+  );
+}
+
+function WaitingNote({ label }: { label: string }) {
+  return (
+    <View style={st.waiting}>
+      <ActivityIndicator size="small" color={colors.highlight} />
+      <Text style={st.waitingText} numberOfLines={1}>
+        {label}
+      </Text>
+    </View>
+  );
+}
+
+function ProgressBar({ progress }: { progress: number }) {
+  return (
+    <View style={st.progressTrack}>
+      <LinearGradient
+        colors={gradients.primaryButton}
+        start={{ x: 0, y: 0 }}
+        end={{ x: 1, y: 0 }}
+        style={[st.progressFill, { width: `${Math.min(1, Math.max(0, progress)) * 100}%` }]}
+      />
+    </View>
+  );
+}
+
+function StandingRow({ rank, name, score, isMe }: { rank: number; name: string; score: number; isMe: boolean }) {
+  const first = rank === 1;
+  return (
+    <GradientCard
+      radius={radii.lg}
+      borderColors={isMe ? SELECTED_BORDER : undefined}
+      fill={isMe ? SELECTED_FILL : undefined}
+      contentStyle={st.rankRow}
+    >
+      <View style={[st.numTile, first && st.numTileOn]}>
+        <Text style={[st.numTileText, first && st.numTileTextOn]}>{rank}</Text>
+      </View>
+      <PlayerAvatar username={name} size={36} />
+      <Text style={st.rankName} numberOfLines={1}>{name}</Text>
+      <View style={st.scoreCol}>
+        <Text style={[st.rankScore, first && { color: colors.goldLight }]}>{score}</Text>
+        <Text style={st.rankScoreLabel}>PTS</Text>
+      </View>
+    </GradientCard>
   );
 }
 
@@ -719,142 +857,153 @@ export default function PotLuckScreen() {
 
 const st = StyleSheet.create({
   container: { flex: 1, backgroundColor: colors.background },
-  centered: { flex: 1, justifyContent: "center", alignItems: "center", padding: 24, gap: 12 },
+  scroll: {
+    flexGrow: 1,
+    paddingHorizontal: spacing.screen,
+    paddingTop: spacing.lg,
+    paddingBottom: spacing.xl,
+    gap: spacing.lg,
+  },
+  scrollNoFooter: { paddingBottom: 48 },
+  flex1: { flex: 1 },
+  list: { gap: spacing.sm },
+  centerRow: { alignItems: "center" },
+  footerStack: { gap: spacing.md },
+  pressed: { opacity: 0.85, transform: [{ scale: 0.98 }] },
   loadingText: { fontFamily: fonts.medium, fontSize: 16, color: colors.gray400, marginTop: 16 },
-  bigEmoji: { fontSize: 64, marginBottom: 16 },
-  title: { fontFamily: fonts.extrabold, fontSize: 28, color: colors.white, marginBottom: 8 },
-  tagline: { fontFamily: fonts.regular, fontSize: 15, color: colors.gray400, marginBottom: 32, textAlign: "center" },
-  wait: { fontFamily: fonts.regular, fontSize: 15, color: colors.gray400, textAlign: "center" },
 
-  introScroll: { flexGrow: 1, alignItems: "center", justifyContent: "center", paddingVertical: 40, paddingHorizontal: 24 },
-  rulesBox: { width: "100%", marginBottom: 32 },
-  ruleCard: { backgroundColor: colors.surface, borderRadius: 12, padding: 14, marginBottom: 8 },
-  ruleText: { fontFamily: fonts.regular, fontSize: 14, color: colors.white, lineHeight: 20 },
-
-  // Rolling
-  rollingContainer: { flex: 1, paddingHorizontal: 20, paddingTop: 40, alignItems: "center", gap: 8 },
-  rollingHeader: { fontFamily: fonts.extrabold, fontSize: 22, color: colors.gold, letterSpacing: 2, textAlign: "center" },
-  rollingSubHeader: { fontFamily: fonts.bold, fontSize: 12, color: colors.gray500, letterSpacing: 3, textAlign: "center", marginBottom: 16 },
-  rollItem: {
-    flexDirection: "row", alignItems: "center", gap: 10, backgroundColor: colors.surface, borderRadius: 12,
-    borderWidth: 1, borderColor: colors.surfaceLight, paddingHorizontal: 14, paddingVertical: 13,
+  // Title block
+  titleBlock: { gap: spacing.sm },
+  eyebrowRow: { flexDirection: "row", alignItems: "center", gap: spacing.sm, flexWrap: "wrap" },
+  sectionEyebrow: { marginTop: spacing.xs },
+  sectionHead: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+    marginTop: spacing.xs,
   },
-  rollItemMe: { borderColor: colors.gold, backgroundColor: "#1A1600" },
-  rollAvatar: { width: 34, height: 34, borderRadius: 17, alignItems: "center", justifyContent: "center", backgroundColor: colors.surfaceLight },
-  rollAvatarLetter: { fontFamily: fonts.extrabold, fontSize: 14, color: colors.gray400 },
-  rollSeat: { fontFamily: fonts.extrabold, fontSize: 16, color: colors.gray500, width: 22, textAlign: "center" },
-  rollName: { flex: 1, fontFamily: fonts.bold, fontSize: 15, color: colors.gray400 },
-  rollYouTag: { fontFamily: fonts.extrabold, fontSize: 10, color: colors.gold, letterSpacing: 2 },
-  rollHint: { fontFamily: fonts.regular, fontSize: 14, color: colors.gray500, marginTop: 24 },
 
-  // Live
-  liveScroll: { flexGrow: 1, paddingHorizontal: 20, paddingTop: 12, paddingBottom: 40, gap: 12 },
-  turnBanner: {
-    flexDirection: "row", alignItems: "center", gap: 10, backgroundColor: colors.surface, borderRadius: 14,
-    borderWidth: 1.5, borderColor: colors.surfaceLight, paddingHorizontal: 14, paddingVertical: 12,
+  // Waiting note (footer)
+  waiting: {
+    minHeight: 56,
+    borderRadius: radii.pill,
+    backgroundColor: colors.surface,
+    borderWidth: 1,
+    borderColor: colors.cardBorder,
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "center",
+    gap: 10,
+    paddingHorizontal: 20,
   },
-  turnBannerMe: { borderColor: colors.gold, backgroundColor: "#1E1A0A" },
-  turnAvatar: { width: 40, height: 40, borderRadius: 20, alignItems: "center", justifyContent: "center", backgroundColor: colors.surfaceLight },
-  turnAvatarLetter: { fontFamily: fonts.extrabold, fontSize: 17, color: colors.gray400 },
-  turnName: { fontFamily: fonts.extrabold, fontSize: 15, color: colors.white },
-  timerTrack: { height: 4, backgroundColor: colors.surfaceLight, borderRadius: 2, overflow: "hidden" },
-  timerFill: { height: "100%", borderRadius: 2 },
-  timerBubble: { flexDirection: "row", alignItems: "baseline", gap: 1 },
-  timerNum: { fontFamily: fonts.extrabold, fontSize: 22 },
-  timerSec: { fontFamily: fonts.bold, fontSize: 11 },
+  waitingText: { flexShrink: 1, fontFamily: fonts.semibold, fontSize: 15, color: colors.gray300 },
 
-  scoreBar: { flexDirection: "row", alignItems: "center", gap: 8, paddingHorizontal: 4, position: "relative" },
-  deltaAnim: { fontFamily: fonts.extrabold, fontSize: 18, position: "absolute", right: 4 },
-  scoreLabel: { fontFamily: fonts.extrabold, fontSize: 11, color: colors.gray500, letterSpacing: 2 },
-  scoreNum: { fontFamily: fonts.extrabold, fontSize: 18, color: colors.white },
-  scoreTarget: { fontFamily: fonts.medium, fontSize: 14, color: colors.gray500 },
+  // Hero
+  heroRow: { flexDirection: "row", alignItems: "center", padding: 22, gap: spacing.md },
+  heroCopy: { flex: 1, gap: 6 },
+  heroTitle: { fontFamily: fonts.extrabold, fontSize: 24, lineHeight: 29, color: colors.onPrimary },
+  heroEmoji: { fontSize: 56 },
 
-  potMeter: {
-    backgroundColor: colors.surface, borderRadius: 12, borderWidth: 1, borderColor: colors.surfaceLight,
-    padding: 14, alignItems: "center", gap: 6,
+  // Rules
+  ruleRow: { flexDirection: "row", alignItems: "center", gap: spacing.md, padding: spacing.lg },
+  ruleIcon: {
+    width: 40,
+    height: 40,
+    borderRadius: radii.md,
+    backgroundColor: colors.highlightSoft,
+    alignItems: "center",
+    justifyContent: "center",
   },
-  potMax: { borderColor: colors.danger + "66" },
-  potLabel: { fontFamily: fonts.extrabold, fontSize: 11, color: colors.gray500, letterSpacing: 2 },
-  potNum: { fontFamily: fonts.extrabold, fontSize: 28, color: colors.white },
-  potTrack: { flexDirection: "row", gap: 6 },
-  potDot: { width: 12, height: 12, borderRadius: 6, backgroundColor: colors.surfaceLight },
-  potDotOn: { backgroundColor: colors.primary },
+  ruleEmoji: { fontSize: 20 },
+  ruleText: { flex: 1, fontFamily: fonts.medium, fontSize: 14, lineHeight: 20, color: colors.white },
+
+  // Ranked rows / number tiles
+  rankRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: spacing.md,
+    paddingVertical: 12,
+    paddingHorizontal: spacing.lg,
+  },
+  rankName: { flex: 1, fontFamily: fonts.bold, fontSize: 16, color: colors.white },
+  numTile: {
+    width: 36,
+    height: 36,
+    borderRadius: radii.sm,
+    backgroundColor: colors.surfaceLight,
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  numTileOn: { backgroundColor: colors.highlight },
+  numTileHero: { backgroundColor: colors.onPrimary },
+  numTileText: { fontFamily: fonts.extrabold, fontSize: 16, color: colors.white },
+  numTileTextOn: { color: colors.onPrimary },
+  numTileTextHero: { color: colors.highlight },
+  scoreCol: { alignItems: "flex-end" },
+  rankScore: { fontFamily: fonts.extrabold, fontSize: 20, color: colors.white, fontVariant: ["tabular-nums"] },
+  rankScoreLabel: { ...type.eyebrow, fontSize: 9, letterSpacing: 1 },
+
+  // Timer
+  countdown: { alignItems: "center", gap: spacing.xs },
+  countdownNum: {
+    fontFamily: fonts.extrabold,
+    fontSize: 72,
+    lineHeight: 80,
+    letterSpacing: -2,
+    color: colors.white,
+    fontVariant: ["tabular-nums"],
+  },
+  progressTrack: {
+    alignSelf: "stretch",
+    height: 6,
+    borderRadius: radii.pill,
+    backgroundColor: colors.surfaceLight,
+    overflow: "hidden",
+    marginTop: spacing.md,
+  },
+  progressFill: { height: "100%", borderRadius: radii.pill },
+
+  // Stat cards (pot / score)
+  statRow: { flexDirection: "row", gap: spacing.md },
+  statContent: { padding: spacing.lg, gap: 4 },
+  statValue: { fontFamily: fonts.extrabold, fontSize: 34, color: colors.white, fontVariant: ["tabular-nums"] },
+  statTarget: { fontFamily: fonts.semibold, fontSize: 16, color: colors.gray500 },
+  deltaAnim: { fontFamily: fonts.extrabold, fontSize: 20, position: "absolute", right: spacing.lg, top: spacing.lg },
+  potTrack: { flexDirection: "row", flexWrap: "wrap", gap: 5, marginTop: 6 },
+  potDot: { width: 10, height: 10, borderRadius: 5, backgroundColor: colors.surfaceLight },
+  potDotOn: { backgroundColor: colors.highlight },
   potDotMax: { backgroundColor: colors.danger },
 
-  diffBadge: {
-    flexDirection: "row", alignItems: "center", gap: 6, alignSelf: "flex-start",
-    paddingHorizontal: 10, paddingVertical: 5, borderRadius: 8, borderWidth: 1,
+  // Question hero
+  qHero: { padding: 22, gap: spacing.md },
+  qHeroHead: { flexDirection: "row", alignItems: "center", gap: spacing.sm },
+  diffChip: {
+    borderRadius: radii.pill,
+    paddingHorizontal: 10,
+    paddingVertical: 4,
+    borderWidth: 1,
+    borderColor: "rgba(14,12,26,0.25)",
   },
-  diffDot: { width: 6, height: 6, borderRadius: 3 },
-  diffText: { fontFamily: fonts.extrabold, fontSize: 11, letterSpacing: 1 },
-  diffPots: { fontFamily: fonts.medium, fontSize: 11 },
+  diffText: { fontFamily: fonts.bold, fontSize: 11, letterSpacing: 0.8, color: colors.onPrimary },
+  diffPots: { fontFamily: fonts.semibold, fontSize: 12, color: "rgba(14,12,26,0.65)" },
+  qText: { fontFamily: fonts.extrabold, fontSize: 24, lineHeight: 30, color: colors.onPrimary },
 
-  qCard: {
-    backgroundColor: colors.surface, borderRadius: 14, borderWidth: 1, borderColor: colors.surfaceLight,
-    padding: 20,
+  // Choices
+  choiceRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: spacing.md,
+    paddingVertical: 14,
+    paddingHorizontal: spacing.lg,
   },
-  qText: { fontFamily: fonts.bold, fontSize: 18, color: colors.white, textAlign: "center", lineHeight: 26 },
-  actionHint: { fontFamily: fonts.medium, fontSize: 13, color: colors.gray400, textAlign: "center" },
-
-  choicesGrid: { flexDirection: "row", flexWrap: "wrap", gap: 10, justifyContent: "center" },
-  choiceBtn: {
-    width: "47%", backgroundColor: colors.surface, borderRadius: 12, borderWidth: 1,
-    borderColor: colors.surfaceLight, padding: 14, flexDirection: "row", alignItems: "center", gap: 10,
-  },
-  choiceBtnOff: { opacity: 0.4 },
-  choiceLetterWrap: {
-    width: 28, height: 28, borderRadius: 14, backgroundColor: colors.surfaceLight,
-    alignItems: "center", justifyContent: "center",
-  },
-  choiceLetter: { fontFamily: fonts.extrabold, fontSize: 13, color: colors.primaryLight },
-  choiceText: { flex: 1, fontFamily: fonts.medium, fontSize: 14, color: colors.white },
-
-  skipBtn: {
-    alignItems: "center", paddingVertical: 14, borderRadius: 12,
-    borderWidth: 1, borderColor: colors.surfaceLight,
-  },
-  skipBtnText: { fontFamily: fonts.bold, fontSize: 13, color: colors.gray400 },
-
-  spectate: { alignItems: "center", gap: 8, paddingVertical: 20 },
-  spectateText: { fontFamily: fonts.medium, fontSize: 16, color: colors.gray400 },
-  upNext: { fontFamily: fonts.bold, fontSize: 14, color: colors.primaryLight },
+  choiceOff: { opacity: 0.45 },
+  choiceText: { flex: 1, fontFamily: fonts.semibold, fontSize: 16, color: colors.white },
 
   // Reveal
-  revealScroll: { flexGrow: 1, paddingHorizontal: 20, paddingTop: 24, paddingBottom: 40, gap: 16 },
-  revealCard: {
-    backgroundColor: colors.surface, borderRadius: 16, borderWidth: 1, borderColor: colors.surfaceLight,
-    padding: 24, alignItems: "center", gap: 8,
-  },
-  revealLabel: { fontFamily: fonts.extrabold, fontSize: 11, color: colors.gray500, letterSpacing: 2 },
-  revealAnswer: { fontFamily: fonts.extrabold, fontSize: 22, color: colors.white, textAlign: "center" },
-  revealNote: { fontFamily: fonts.medium, fontSize: 14, color: colors.gray400 },
-
-  standingsCard: {
-    backgroundColor: colors.surface, borderRadius: 14, borderWidth: 1, borderColor: colors.surfaceLight,
-    padding: 16, gap: 8,
-  },
-  standingsHeader: { fontFamily: fonts.extrabold, fontSize: 11, color: colors.gray500, letterSpacing: 2, marginBottom: 4 },
-  standingRow: {
-    flexDirection: "row", alignItems: "center", gap: 10, paddingVertical: 6,
-    borderBottomWidth: 1, borderBottomColor: colors.surfaceLight,
-  },
-  standingRowFirst: { borderBottomColor: colors.gold + "33" },
-  standingRank: { fontFamily: fonts.bold, fontSize: 14, color: colors.gray500, width: 28 },
-  standingName: { flex: 1, fontFamily: fonts.semibold, fontSize: 15, color: colors.white },
-  standingScore: { fontFamily: fonts.bold, fontSize: 16, color: colors.white },
-  targetNote: { fontFamily: fonts.regular, fontSize: 12, color: colors.gray500, textAlign: "center", marginTop: 4 },
+  answerHero: { padding: 24, gap: spacing.sm, minHeight: 120, justifyContent: "center" },
+  answerText: { fontFamily: fonts.extrabold, fontSize: 30, lineHeight: 36, color: colors.onPrimary },
 
   // Game over
-  gameOverScroll: { flexGrow: 1, alignItems: "center", paddingHorizontal: 20, paddingTop: 40, paddingBottom: 40, gap: 16 },
-  gameOverTitle: { fontFamily: fonts.extrabold, fontSize: 32, color: colors.white },
-  // gameOverScroll centers its children, so without this the card shrinks to content and standingName (flex: 1) gets no width.
-  gameOverStandings: { alignSelf: "stretch" },
-
-  primaryBtn: {
-    flexDirection: "row", alignItems: "center", justifyContent: "center", gap: 8,
-    backgroundColor: colors.primary, borderRadius: 14, paddingVertical: 16, width: "100%",
-  },
-  primaryBtnText: { fontFamily: fonts.bold, fontSize: 16, color: colors.white },
-  secondaryBtn: { alignItems: "center", paddingVertical: 14, borderRadius: 14, borderWidth: 1, borderColor: colors.surfaceLight, width: "100%" },
-  secondaryBtnText: { fontFamily: fonts.bold, fontSize: 15, color: colors.gray400 },
+  winnerContent: { flexDirection: "row", alignItems: "center", gap: spacing.md, padding: 20 },
+  winnerName: { fontFamily: fonts.extrabold, fontSize: 24, color: colors.onPrimary },
 });

@@ -1,10 +1,17 @@
 import { useEffect, useRef } from "react";
-import { View, Text, Pressable, StyleSheet } from "react-native";
+import { View, Text, StyleSheet, ScrollView, ActivityIndicator } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { useLocalSearchParams, useRouter } from "expo-router";
 import { Ionicons } from "@expo/vector-icons";
-import { colors, fonts } from "../../src/theme";
+import { colors, fonts, radii, spacing, type } from "../../src/theme";
 import { useRoomStore, GameType } from "../../src/stores/roomStore";
+import ScreenBackground from "../../src/components/ScreenBackground";
+import PrimaryAction, { PrimaryActionBar } from "../../src/components/PrimaryAction";
+import Eyebrow from "../../src/components/Eyebrow";
+import Pill from "../../src/components/Pill";
+import GradientCard from "../../src/components/GradientCard";
+import HeroGradient from "../../src/components/HeroGradient";
+import PlayerAvatar from "../../src/components/PlayerAvatar";
 
 const GAME_INFO: Record<string, { name: string; icon: string; color: string; description: string }> = {
   talentShow: {
@@ -69,83 +76,125 @@ export default function GameScreen() {
   };
 
   return (
-    <SafeAreaView style={s.safe}>
-      <View style={s.header}>
-        <View style={[s.iconBox, { backgroundColor: info.color + "20" }]}>
-          <Ionicons name={info.icon as any} size={28} color={info.color} />
-        </View>
-        <Text style={s.title}>{info.name}</Text>
-      </View>
-
-      <View style={s.body}>
-        <View style={s.card}>
-          <Text style={s.cardTitle}>How to Play</Text>
-          <Text style={s.cardDesc}>{info.description}</Text>
-        </View>
-
-        <View style={s.card}>
-          <Text style={s.cardTitle}>Players ({players.length})</Text>
-          {players.map((p) => (
-            <View key={p.id} style={s.playerRow}>
-              <Text style={s.playerName}>{p.username}</Text>
-              <Text style={s.playerScore}>{p.score} pts</Text>
+    <SafeAreaView style={s.safe} edges={["top", "left", "right"]}>
+      <ScreenBackground />
+      <ScrollView contentContainerStyle={s.scroll} showsVerticalScrollIndicator={false}>
+        <View style={s.titleBlock}>
+          <View style={s.eyebrowRow}>
+            <Eyebrow tone="lavender">{info.name}</Eyebrow>
+            {room?.code ? <Pill tone="peach" label={`Room ${room.code}`} /> : null}
+          </View>
+          <View style={s.titleRow}>
+            <View style={s.iconBox}>
+              <Ionicons name={info.icon as any} size={26} color={colors.highlight} />
             </View>
+            <Text style={[type.title, s.flex1]}>{info.name}</Text>
+          </View>
+          <Text style={type.subtitle}>Getting the game ready...</Text>
+        </View>
+
+        <HeroGradient>
+          <View style={s.hero}>
+            <Eyebrow tone="dark">How to play</Eyebrow>
+            <Text style={s.heroText}>{info.description}</Text>
+          </View>
+        </HeroGradient>
+
+        <View style={s.sectionHead}>
+          <Eyebrow>Players</Eyebrow>
+          <Pill tone="dark" label={`${players.length}`} />
+        </View>
+        <View style={s.list}>
+          {players.map((p) => (
+            <GradientCard key={p.id} radius={radii.lg} contentStyle={s.playerRow}>
+              <PlayerAvatar username={p.username} size={36} />
+              <Text style={s.playerName} numberOfLines={1}>{p.username}</Text>
+              <Text style={s.playerScore}>{p.score} pts</Text>
+            </GradientCard>
           ))}
         </View>
 
-        <View style={s.card}>
-          <Text style={s.cardTitle}>Room: {room?.code}</Text>
-          <Text style={s.phase}>Phase: {phase}</Text>
+        <View style={s.statRow}>
+          <GradientCard style={s.flex1} radius={radii.lg} contentStyle={s.statContent}>
+            <Text style={s.statValue} numberOfLines={1}>{room?.code ?? "—"}</Text>
+            <Eyebrow>Room</Eyebrow>
+          </GradientCard>
+          <GradientCard style={s.flex1} radius={radii.lg} contentStyle={s.statContent}>
+            <Text style={s.statValueSm} numberOfLines={1}>{phase}</Text>
+            <Eyebrow>Phase</Eyebrow>
+          </GradientCard>
         </View>
-      </View>
+      </ScrollView>
 
-      {isHost && (
-        <View style={s.footer}>
-          <Pressable style={s.endBtn} onPress={handleEndGame}>
-            <Text style={s.endBtnText}>End Game</Text>
-          </Pressable>
+      <PrimaryActionBar>
+        <View style={s.waiting}>
+          <ActivityIndicator size="small" color={colors.highlight} />
+          <Text style={s.waitingText} numberOfLines={1}>
+            Loading {info.name}...
+          </Text>
         </View>
-      )}
+        {isHost && <PrimaryAction label="End Game" variant="dark" onPress={handleEndGame} />}
+      </PrimaryActionBar>
     </SafeAreaView>
   );
 }
 
 const s = StyleSheet.create({
   safe: { flex: 1, backgroundColor: colors.background },
-  header: { alignItems: "center", paddingTop: 24, paddingBottom: 16 },
+  scroll: {
+    flexGrow: 1,
+    paddingHorizontal: spacing.screen,
+    paddingTop: spacing.xl,
+    paddingBottom: spacing.xl,
+    gap: spacing.lg,
+  },
+  flex1: { flex: 1 },
+  list: { gap: spacing.sm },
+  titleBlock: { gap: spacing.sm },
+  eyebrowRow: { flexDirection: "row", alignItems: "center", gap: spacing.sm, flexWrap: "wrap" },
+  titleRow: { flexDirection: "row", alignItems: "center", gap: spacing.md },
   iconBox: {
-    width: 64,
-    height: 64,
-    borderRadius: 20,
+    width: 52,
+    height: 52,
+    borderRadius: radii.md,
+    backgroundColor: colors.highlightSoft,
+    borderWidth: 1,
+    borderColor: colors.cardBorder,
     alignItems: "center",
     justifyContent: "center",
-    marginBottom: 12,
   },
-  title: { fontFamily: fonts.bold, fontSize: 26, color: colors.white },
-  body: { flex: 1, paddingHorizontal: 24, gap: 16 },
-  card: {
-    backgroundColor: colors.surface,
-    borderRadius: 16,
-    padding: 20,
+  hero: { padding: 22, gap: spacing.sm },
+  heroText: { fontFamily: fonts.bold, fontSize: 17, lineHeight: 24, color: colors.onPrimary },
+  sectionHead: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+    marginTop: spacing.xs,
   },
-  cardTitle: { fontFamily: fonts.bold, fontSize: 16, color: colors.white, marginBottom: 8 },
-  cardDesc: { fontFamily: fonts.regular, fontSize: 14, color: colors.gray400, lineHeight: 20 },
   playerRow: {
     flexDirection: "row",
-    justifyContent: "space-between",
-    paddingVertical: 6,
-  },
-  playerName: { fontFamily: fonts.semibold, fontSize: 15, color: colors.white },
-  playerScore: { fontFamily: fonts.bold, fontSize: 15, color: colors.primaryLight },
-  phase: { fontFamily: fonts.regular, fontSize: 14, color: colors.gray500 },
-  footer: { paddingHorizontal: 24, paddingBottom: 32 },
-  endBtn: {
-    paddingVertical: 16,
-    borderRadius: 16,
     alignItems: "center",
-    borderWidth: 2,
-    borderColor: "rgba(239,68,68,0.3)",
-    backgroundColor: "rgba(239,68,68,0.05)",
+    gap: spacing.md,
+    paddingVertical: 12,
+    paddingHorizontal: spacing.lg,
   },
-  endBtnText: { fontFamily: fonts.semibold, fontSize: 16, color: colors.danger },
+  playerName: { flex: 1, fontFamily: fonts.bold, fontSize: 16, color: colors.white },
+  playerScore: { fontFamily: fonts.bold, fontSize: 15, color: colors.highlight },
+  statRow: { flexDirection: "row", gap: spacing.md },
+  statContent: { padding: spacing.lg, gap: 4 },
+  statValue: { fontFamily: fonts.extrabold, fontSize: 28, letterSpacing: 1, color: colors.white },
+  statValueSm: { fontFamily: fonts.extrabold, fontSize: 20, lineHeight: 34, color: colors.white },
+  waiting: {
+    minHeight: 56,
+    borderRadius: radii.pill,
+    backgroundColor: colors.surface,
+    borderWidth: 1,
+    borderColor: colors.cardBorder,
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "center",
+    gap: 10,
+    paddingHorizontal: 20,
+  },
+  waitingText: { flexShrink: 1, fontFamily: fonts.semibold, fontSize: 15, color: colors.gray300 },
 });

@@ -2,22 +2,30 @@ import React, { useState, useEffect, useRef, useCallback } from "react";
 import {
   View,
   Text,
-  TouchableOpacity,
+  Pressable,
   StyleSheet,
-  SafeAreaView,
   ScrollView,
   ActivityIndicator,
 } from "react-native";
+import { SafeAreaView } from "react-native-safe-area-context";
 import { useRouter } from "expo-router";
 import { Ionicons } from "@expo/vector-icons";
+import { LinearGradient } from "expo-linear-gradient";
 import * as Haptics from "expo-haptics";
-import { colors, fonts } from "../../src/theme";
+import { colors, fonts, gradients, radii, spacing, type } from "../../src/theme";
 import { useRoomStore } from "../../src/stores/roomStore";
 import { useAuthStore } from "../../src/stores/authStore";
 import { TASKS, Task } from "../../src/data/tenSecondTasks";
 import HostWaitingPill from "../../src/components/HostWaitingPill";
 import GameHeader from "../../src/components/GameHeader";
 import GameLoadingScreen from "../../src/components/GameLoadingScreen";
+import ScreenBackground from "../../src/components/ScreenBackground";
+import PrimaryAction, { PrimaryActionBar } from "../../src/components/PrimaryAction";
+import Eyebrow from "../../src/components/Eyebrow";
+import Pill from "../../src/components/Pill";
+import GradientCard from "../../src/components/GradientCard";
+import HeroGradient from "../../src/components/HeroGradient";
+import PlayerAvatar from "../../src/components/PlayerAvatar";
 
 // ---------------------------------------------------------------------------
 // Types
@@ -55,7 +63,6 @@ type GameState = {
 
 const MAX_STACK = 5;
 const COUNTDOWN_MS = 3000;
-const TASK_COLORS = ["#F97316", "#06B6D4", "#A78BFA", "#EF4444", "#10B981"];
 
 function getTimerSeconds(turnNumber: number): number {
   if (turnNumber <= 3) return 10;
@@ -109,26 +116,32 @@ function useCountdown(timerEnd: number | null): number {
 
 function TaskStack({ stack, large }: { stack: StackItem[]; large?: boolean }) {
   return (
-    <View style={{ gap: large ? 10 : 8, width: "100%" }}>
+    <View style={st.list}>
       {stack.map((item, i) => {
-        const color = TASK_COLORS[i % TASK_COLORS.length];
         const isNewest = i === stack.length - 1;
+        if (isNewest) {
+          // Newest task is the hero moment
+          return (
+            <HeroGradient key={item.id} radius={radii.lg}>
+              <View style={st.taskHero}>
+                <View style={st.taskHeroHead}>
+                  <View style={[st.numTile, st.numTileHero]}>
+                    <Text style={[st.numTileText, st.numTileTextHero]}>{i + 1}</Text>
+                  </View>
+                  <Eyebrow tone="dark">{stack.length > 1 ? "New task" : "Your task"}</Eyebrow>
+                </View>
+                <Text style={[st.taskHeroText, large && st.taskHeroTextLg]}>{item.text}</Text>
+              </View>
+            </HeroGradient>
+          );
+        }
         return (
-          <View
-            key={item.id}
-            style={[
-              st.taskCard,
-              { borderColor: color + "88", backgroundColor: color + "14" },
-              isNewest && { borderColor: color, backgroundColor: color + "22" },
-            ]}
-          >
-            <View style={[st.taskNumBadge, { backgroundColor: color }]}>
-              <Text style={st.taskNumText}>{i + 1}</Text>
+          <GradientCard key={item.id} radius={radii.lg} contentStyle={st.taskRow}>
+            <View style={st.numTile}>
+              <Text style={st.numTileText}>{i + 1}</Text>
             </View>
-            <Text style={[st.taskText, large && st.taskTextLg, { color: isNewest ? colors.white : colors.gray300 }]}>
-              {item.text}
-            </Text>
-          </View>
+            <Text style={[st.taskText, large && st.taskTextLg]}>{item.text}</Text>
+          </GradientCard>
         );
       })}
     </View>
@@ -355,120 +368,159 @@ export default function TenSecondTasksScreen() {
   // === INTRO ===
   if (phase === "intro") {
     return (
-      <SafeAreaView style={st.container}><GameHeader />
-        <ScrollView contentContainerStyle={st.introScroll}>
-          <Text style={st.bigEmoji}>{"\u23F1\uFE0F"}</Text>
-          <Text style={st.title}>10 Second Tasks</Text>
-          <Text style={st.tagline}>Stack tasks. Beat the timer. Don't get buzzed.</Text>
-          <View style={st.rulesBox}>
-            {[
-              ["\uD83C\uDFAF", "One player performs a stack of tasks before time runs out."],
-              ["\u2795", "Each turn adds a new task. Max 5 at once."],
-              ["\uD83D\uDC4D", "Judges vote Pass or Fail. Majority Fail = you're out."],
-              ["\uD83C\uDFC6", "Last player standing wins!"],
-            ].map(([icon, text], i) => (
-              <View key={i} style={st.ruleCard}>
-                <Text style={st.ruleText}>{icon}  {text}</Text>
-              </View>
-            ))}
-          </View>
-          {gs.isSuddenDeath && (
-            <View style={st.warningCard}>
-              <Text style={st.warningText}>Only 2 players — Sudden Death!</Text>
-            </View>
-          )}
-          {isHost ? (
-            <TouchableOpacity style={st.primaryBtn} onPress={handleStartGame}>
-              <Text style={st.primaryBtnText}>Start Game</Text>
-            </TouchableOpacity>
+      <Shell
+        footer={
+          isHost ? (
+            <PrimaryAction label="Start Game" icon="play" onPress={handleStartGame} />
           ) : (
-            <Text style={st.wait}>Waiting for host to start...</Text>
+            <WaitingNote label="Waiting for host to start..." />
+          )
+        }
+      >
+        <ScreenTitle
+          title="10 Second Tasks"
+          subtitle="Stack tasks. Beat the timer. Don't get buzzed."
+          pill={gs.isSuddenDeath ? "Sudden death" : undefined}
+        />
+        <HeroGradient>
+          <View style={st.heroRow}>
+            <View style={st.heroCopy}>
+              <Eyebrow tone="dark">{"Up to 5 tasks \u00B7 1 survivor"}</Eyebrow>
+              <Text style={st.heroTitle}>Do it all before the clock hits zero.</Text>
+            </View>
+            <Text style={st.heroEmoji}>{"\u23F1\uFE0F"}</Text>
+          </View>
+        </HeroGradient>
+        <Eyebrow style={st.sectionEyebrow}>How it works</Eyebrow>
+        <View style={st.list}>
+          {[
+            ["\uD83C\uDFAF", "One player performs a stack of tasks before time runs out."],
+            ["\u2795", "Each turn adds a new task. Max 5 at once."],
+            ["\uD83D\uDC4D", "Judges vote Pass or Fail. Majority Fail = you're out."],
+            ["\uD83C\uDFC6", "Last player standing wins!"],
+          ].map(([icon, text], i) => (
+            <GradientCard key={i} radius={radii.lg} contentStyle={st.ruleRow}>
+              <View style={st.ruleIcon}>
+                <Text style={st.ruleEmoji}>{icon}</Text>
+              </View>
+              <Text style={st.ruleText}>{text}</Text>
+            </GradientCard>
+          ))}
+          {gs.isSuddenDeath && (
+            <GradientCard radius={radii.lg} borderColors={PEACH_BORDER} contentStyle={st.ruleRow}>
+              <View style={st.ruleIcon}>
+                <Text style={st.ruleEmoji}>{"⚠️"}</Text>
+              </View>
+              <Text style={st.warningText}>Only 2 players — Sudden Death!</Text>
+            </GradientCard>
           )}
-        </ScrollView>
-      </SafeAreaView>
+        </View>
+      </Shell>
     );
   }
 
   // === COUNTDOWN (shows tasks!) ===
   if (phase === "countdown") {
     return (
-      <SafeAreaView style={st.container}><GameHeader />
-        <ScrollView contentContainerStyle={st.countdownScroll}>
-          <Text style={st.countdownLabel}>{isHolder ? "GET READY!" : `${holderName} is up!`}</Text>
-          <Text style={st.countdownNum}>{countdownLeft}</Text>
-          <Text style={st.turnInfo}>Turn {gs.turnNumber} {"\u00B7"} {getTimerSeconds(gs.turnNumber)}s timer</Text>
-          {gs.isSuddenDeath && <Text style={st.suddenDeathBadge}>SUDDEN DEATH</Text>}
-          <Text style={st.stackLabelLg}>TASKS TO COMPLETE</Text>
-          <TaskStack stack={gs.stack} large />
-        </ScrollView>
-      </SafeAreaView>
+      <Shell>
+        <ScreenTitle
+          title={isHolder ? "Get ready!" : `${holderName} is up!`}
+          subtitle={`Turn ${gs.turnNumber} \u00B7 ${getTimerSeconds(gs.turnNumber)}s timer`}
+          pill={gs.isSuddenDeath ? "Sudden death" : `Turn ${gs.turnNumber}`}
+        />
+        <Countdown
+          value={countdownLeft}
+          label="Starting in"
+          progress={gs.timerDuration > 0 ? (countdownLeft * 1000) / gs.timerDuration : 0}
+        />
+        <Eyebrow style={st.sectionEyebrow}>Tasks to complete</Eyebrow>
+        <TaskStack stack={gs.stack} large />
+      </Shell>
     );
   }
 
   // === ACTIVE ===
   if (phase === "active") {
-    const timerColor = secondsLeft <= 3 ? colors.danger : secondsLeft <= 5 ? colors.warning : colors.success;
+    const urgent = secondsLeft <= 3;
+    const progress = gs.timerDuration > 0 ? (secondsLeft * 1000) / gs.timerDuration : 0;
 
     if (isHolder) {
       return (
-        <SafeAreaView style={st.container}><GameHeader />
-          <ScrollView contentContainerStyle={st.activeScroll}>
-            <View style={[st.timerCircle, { borderColor: timerColor }]}>
-              <Text style={[st.timerBig, { color: timerColor }]}>{secondsLeft}</Text>
-            </View>
-            <Text style={st.stackLabelLg}>YOUR TASKS</Text>
-            <TaskStack stack={gs.stack} large />
-            <TouchableOpacity style={st.doneBtn} onPress={handleDone} activeOpacity={0.7}>
-              <Text style={st.doneBtnText}>DONE!</Text>
-            </TouchableOpacity>
-          </ScrollView>
-        </SafeAreaView>
+        <Shell footer={<PrimaryAction label="DONE!" icon="checkmark" onPress={handleDone} />}>
+          <ScreenTitle
+            title="You're on!"
+            subtitle={`Turn ${gs.turnNumber} \u00B7 Do every task, then tap Done`}
+            pill={gs.isSuddenDeath ? "Sudden death" : `Turn ${gs.turnNumber}`}
+          />
+          <Countdown value={secondsLeft} label="Seconds left" progress={progress} urgent={urgent} />
+          <Eyebrow style={st.sectionEyebrow}>Your tasks</Eyebrow>
+          <TaskStack stack={gs.stack} large />
+        </Shell>
       );
     }
 
     return (
-      <SafeAreaView style={st.container}><GameHeader />
-        <ScrollView contentContainerStyle={st.activeScroll}>
-          <Text style={st.spectLabel}>{holderName} is performing!</Text>
-          {isEliminated && <Text style={st.juryBadge}>JURY</Text>}
-          <View style={[st.timerCircle, { borderColor: timerColor }]}>
-            <Text style={[st.timerBig, { color: timerColor }]}>{secondsLeft}</Text>
+      <Shell
+        footer={
+          <View style={st.footerStack}>
+            <Text style={st.voteCount}>{passCount} Pass {"\u00B7"} {failCount} Fail</Text>
+            <View style={st.voteRow}>
+              <Pressable
+                style={({ pressed }) => [st.voteBtn, myVote === "pass" && st.voteBtnPassOn, pressed && st.pressed]}
+                onPress={() => handleVote("pass")}
+                accessibilityRole="button"
+                accessibilityState={{ selected: myVote === "pass" }}
+              >
+                {myVote === "pass" ? (
+                  <LinearGradient
+                    colors={gradients.primaryButton}
+                    start={{ x: 0, y: 0 }}
+                    end={{ x: 0.6, y: 1 }}
+                    style={[StyleSheet.absoluteFill, st.pillRadius]}
+                    pointerEvents="none"
+                  />
+                ) : null}
+                <Ionicons name="thumbs-up" size={20} color={myVote === "pass" ? colors.onPrimary : colors.highlight} />
+                <Text style={[st.voteBtnText, myVote === "pass" && { color: colors.onPrimary }]}>PASS</Text>
+              </Pressable>
+              <Pressable
+                style={({ pressed }) => [st.voteBtn, st.voteBtnFail, myVote === "fail" && st.voteBtnFailOn, pressed && st.pressed]}
+                onPress={() => handleVote("fail")}
+                accessibilityRole="button"
+                accessibilityState={{ selected: myVote === "fail" }}
+              >
+                <Ionicons name="thumbs-down" size={20} color={myVote === "fail" ? colors.white : colors.danger} />
+                <Text style={st.voteBtnText}>FAIL</Text>
+              </Pressable>
+            </View>
           </View>
-          <Text style={st.stackLabelLg}>TASKS</Text>
-          <TaskStack stack={gs.stack} large />
-          <Text style={st.voteLabel}>VOTE</Text>
-          <View style={st.voteRow}>
-            <TouchableOpacity
-              style={[st.passBtn, myVote === "pass" && st.voteBtnActive]}
-              onPress={() => handleVote("pass")} activeOpacity={0.7}
-            >
-              <Ionicons name="thumbs-up" size={24} color={myVote === "pass" ? colors.white : colors.success} />
-              <Text style={[st.passBtnText, myVote === "pass" && { color: colors.white }]}>PASS</Text>
-            </TouchableOpacity>
-            <TouchableOpacity
-              style={[st.failBtn, myVote === "fail" && st.voteBtnActiveFail]}
-              onPress={() => handleVote("fail")} activeOpacity={0.7}
-            >
-              <Ionicons name="thumbs-down" size={24} color={myVote === "fail" ? colors.white : colors.danger} />
-              <Text style={[st.failBtnText, myVote === "fail" && { color: colors.white }]}>FAIL</Text>
-            </TouchableOpacity>
-          </View>
-          <Text style={st.voteCount}>{passCount} Pass {"\u00B7"} {failCount} Fail</Text>
-        </ScrollView>
-      </SafeAreaView>
+        }
+      >
+        <ScreenTitle
+          title={`${holderName} is performing!`}
+          subtitle={isEliminated ? "You're on the jury. Vote Pass or Fail." : "Vote Pass or Fail."}
+          pill={isEliminated ? "Jury" : gs.isSuddenDeath ? "Sudden death" : `Turn ${gs.turnNumber}`}
+        />
+        <Countdown value={secondsLeft} label="Seconds left" progress={progress} urgent={urgent} />
+        <Eyebrow style={st.sectionEyebrow}>Tasks</Eyebrow>
+        <TaskStack stack={gs.stack} large />
+      </Shell>
     );
   }
 
   // === JUDGING ===
   if (phase === "judging") {
     return (
-      <SafeAreaView style={st.container}><GameHeader />
-        <View style={st.centered}>
-          <Text style={st.judgingLabel}>{gs.timerExpired ? "TIME'S UP!" : `${holderName} is done!`}</Text>
-          <Text style={st.judgingSubtext}>Tallying votes...</Text>
-          <Text style={st.voteCount}>{passCount} Pass {"\u00B7"} {failCount} Fail</Text>
+      <Shell footer={<WaitingNote label="Tallying votes..." />}>
+        <ScreenTitle
+          title={gs.timerExpired ? "Time's up!" : `${holderName} is done!`}
+          subtitle="Tallying votes..."
+        />
+        <View style={st.statRow}>
+          <StatCard label="Pass" value={passCount} />
+          <StatCard label="Fail" value={failCount} danger />
         </View>
-      </SafeAreaView>
+      </Shell>
     );
   }
 
@@ -476,17 +528,37 @@ export default function TenSecondTasksScreen() {
   if (phase === "resolve") {
     const isPassed = gs.verdict === "pass";
     return (
-      <SafeAreaView style={st.container}><GameHeader />
-        <View style={st.centered}>
-          <Ionicons name={isPassed ? "checkmark-circle" : "close-circle"} size={64} color={isPassed ? colors.success : colors.danger} />
-          <Text style={st.resolveTitle}>{isPassed ? "PASS!" : "OUT!"}</Text>
-          <Text style={st.resolveName}>{holderName}</Text>
-          <Text style={st.resolveVotes}>
-            {gs.passCount} Pass {"\u00B7"} {gs.failCount} Fail
-            {gs.timerExpired ? " \u00B7 Timer expired" : ""}
+      <Shell>
+        <ScreenTitle
+          title="The verdict"
+          subtitle={`Turn ${gs.turnNumber}`}
+          pill={gs.timerExpired ? "Timer expired" : undefined}
+        />
+        <GradientCard
+          fill={isPassed ? gradients.hero : undefined}
+          borderColors={isPassed ? HERO_BORDER : DANGER_BORDER}
+          contentStyle={st.resultCard}
+        >
+          <Ionicons
+            name={isPassed ? "checkmark-circle" : "close-circle"}
+            size={64}
+            color={isPassed ? colors.onPrimary : colors.danger}
+          />
+          <Text style={[st.resultOutcome, { color: isPassed ? colors.onPrimary : colors.danger }]}>
+            {isPassed ? "PASS!" : "OUT!"}
           </Text>
+          <View style={st.resultNameRow}>
+            <PlayerAvatar username={holderName} size={32} />
+            <Text style={[st.resultName, { color: isPassed ? colors.onPrimary : colors.white }]} numberOfLines={1}>
+              {holderName}
+            </Text>
+          </View>
+        </GradientCard>
+        <View style={st.statRow}>
+          <StatCard label="Pass" value={gs.passCount} />
+          <StatCard label="Fail" value={gs.failCount} danger />
         </View>
-      </SafeAreaView>
+      </Shell>
     );
   }
 
@@ -497,52 +569,154 @@ export default function TenSecondTasksScreen() {
     const iWon = winnerId === myId;
 
     return (
-      <SafeAreaView style={st.container}><GameHeader />
-        <ScrollView contentContainerStyle={st.gameOverScroll}>
-          <Ionicons name="trophy" size={56} color={colors.warning} />
-          <Text style={st.gameOverTitle}>{iWon ? "YOU WIN!" : `${winnerName} WINS!`}</Text>
-          <Text style={st.gameOverSub}>{gs.turnNumber} turns played</Text>
-
-          <View style={st.eliminationCard}>
-            <Text style={st.eliminationTitle}>ELIMINATION ORDER</Text>
-            {gs.eliminationOrder.map((uid, i) => (
-              <View key={uid} style={st.eliminationRow}>
-                <Text style={st.eliminationNum}>#{gs.eliminationOrder.length - i}</Text>
-                <Text style={st.eliminationName}>{playerMap[uid] ?? "?"}</Text>
-                <Text style={st.eliminationTag}>OUT</Text>
-              </View>
-            ))}
-            <View style={st.eliminationRow}>
-              <Text style={[st.eliminationNum, { color: colors.gold }]}>#1</Text>
-              <Text style={[st.eliminationName, { color: colors.gold }]}>{winnerName}</Text>
-              <Ionicons name="trophy" size={16} color={colors.gold} />
-            </View>
-          </View>
-
-          {isHost ? (
-            <View style={{ gap: 10, width: "100%" }}>
-              <TouchableOpacity style={st.primaryBtn} onPress={() => startGame("tenSecondTasks")} activeOpacity={0.7}>
-                <Ionicons name="refresh" size={20} color={colors.white} />
-                <Text style={st.primaryBtnText}>Play Again</Text>
-              </TouchableOpacity>
-              <TouchableOpacity style={st.secondaryBtn} onPress={handleBackToLobby} activeOpacity={0.7}>
-                <Text style={st.secondaryBtnText}>Back to Lobby</Text>
-              </TouchableOpacity>
+      <Shell
+        footer={
+          isHost ? (
+            <View style={st.footerStack}>
+              <PrimaryAction
+                label="Play Again"
+                icon="refresh"
+                iconPosition="left"
+                onPress={() => startGame("tenSecondTasks")}
+              />
+              <PrimaryAction label="Back to Lobby" variant="dark" onPress={handleBackToLobby} />
             </View>
           ) : (
-            <HostWaitingPill label="Waiting for host..." />
-          )}
-        </ScrollView>
-      </SafeAreaView>
+            <View style={st.centerRow}>
+              <HostWaitingPill label="Waiting for host..." />
+            </View>
+          )
+        }
+      >
+        <ScreenTitle
+          title={iWon ? "YOU WIN!" : `${winnerName} WINS!`}
+          subtitle={`${gs.turnNumber} turns played`}
+          pill="Final results"
+        />
+        <GradientCard fill={gradients.hero} borderColors={HERO_BORDER} contentStyle={st.winnerContent}>
+          <View style={[st.numTile, st.numTileHero]}>
+            <Text style={[st.numTileText, st.numTileTextHero]}>1</Text>
+          </View>
+          <PlayerAvatar username={winnerName} size={48} />
+          <View style={st.flex1}>
+            <Eyebrow tone="dark">Last one standing</Eyebrow>
+            <Text style={st.winnerName} numberOfLines={1}>
+              {winnerName}
+            </Text>
+          </View>
+          <Ionicons name="trophy" size={30} color={colors.onPrimary} />
+        </GradientCard>
+
+        {gs.eliminationOrder.length > 0 && (
+          <>
+            <Eyebrow style={st.sectionEyebrow}>Elimination order</Eyebrow>
+            <View style={st.list}>
+              {gs.eliminationOrder.map((uid, i) => (
+                <GradientCard key={uid} radius={radii.lg} contentStyle={st.rankRow}>
+                  <View style={st.numTile}>
+                    <Text style={st.numTileText}>{gs.eliminationOrder.length - i}</Text>
+                  </View>
+                  <PlayerAvatar username={playerMap[uid] ?? "?"} size={36} />
+                  <Text style={st.rankName} numberOfLines={1}>{playerMap[uid] ?? "?"}</Text>
+                  <Text style={st.outTag}>OUT</Text>
+                </GradientCard>
+              ))}
+            </View>
+          </>
+        )}
+      </Shell>
     );
   }
 
   return (
-    <SafeAreaView style={st.container}><GameHeader />
-      <View style={st.centered}>
-        <Text style={st.loadingText}>Unknown phase: {phase}</Text>
-      </View>
+    <Shell>
+      <Text style={st.loadingText}>Unknown phase: {phase}</Text>
+    </Shell>
+  );
+}
+
+// ---------------------------------------------------------------------------
+// Presentational helpers (no game logic)
+// ---------------------------------------------------------------------------
+
+const HERO_BORDER = ["rgba(255,255,255,0.55)", "rgba(255,255,255,0.12)"] as const;
+const DANGER_BORDER = ["rgba(239,68,68,0.6)", "rgba(239,68,68,0.1)"] as const;
+const PEACH_BORDER = ["rgba(246,201,168,0.8)", "rgba(246,201,168,0.15)"] as const;
+
+/** Screen frame: background, room toolbar, scrolling body and pinned footer. */
+function Shell({ children, footer }: { children: React.ReactNode; footer?: React.ReactNode }) {
+  return (
+    <SafeAreaView style={st.container} edges={["top", "left", "right"]}>
+      <ScreenBackground />
+      <GameHeader />
+      <ScrollView
+        contentContainerStyle={[st.scroll, !footer && st.scrollNoFooter]}
+        showsVerticalScrollIndicator={false}
+      >
+        {children}
+      </ScrollView>
+      {footer ? <PrimaryActionBar>{footer}</PrimaryActionBar> : null}
     </SafeAreaView>
+  );
+}
+
+function ScreenTitle({ title, subtitle, pill }: { title: string; subtitle?: string; pill?: string }) {
+  return (
+    <View style={st.titleBlock}>
+      <View style={st.eyebrowRow}>
+        <Eyebrow tone="lavender">10 Second Tasks</Eyebrow>
+        {pill ? <Pill tone="peach" label={pill} /> : null}
+      </View>
+      <Text style={type.title}>{title}</Text>
+      {subtitle ? <Text style={type.subtitle}>{subtitle}</Text> : null}
+    </View>
+  );
+}
+
+function WaitingNote({ label }: { label: string }) {
+  return (
+    <View style={st.waiting}>
+      <ActivityIndicator size="small" color={colors.highlight} />
+      <Text style={st.waitingText} numberOfLines={1}>
+        {label}
+      </Text>
+    </View>
+  );
+}
+
+function Countdown({
+  value,
+  label,
+  progress,
+  urgent = false,
+}: {
+  value: number;
+  label: string;
+  progress: number;
+  urgent?: boolean;
+}) {
+  return (
+    <View style={st.countdown}>
+      <Text style={[st.countdownNum, urgent && { color: colors.danger }]}>{value}</Text>
+      <Eyebrow>{label}</Eyebrow>
+      <View style={st.progressTrack}>
+        <LinearGradient
+          colors={gradients.primaryButton}
+          start={{ x: 0, y: 0 }}
+          end={{ x: 1, y: 0 }}
+          style={[st.progressFill, { width: `${Math.min(1, Math.max(0, progress)) * 100}%` }]}
+        />
+      </View>
+    </View>
+  );
+}
+
+function StatCard({ label, value, danger = false }: { label: string; value: number; danger?: boolean }) {
+  return (
+    <GradientCard style={st.flex1} radius={radii.lg} contentStyle={st.statContent}>
+      <Text style={[st.statValue, danger && { color: colors.danger }]}>{value}</Text>
+      <Eyebrow>{label}</Eyebrow>
+    </GradientCard>
   );
 }
 
@@ -550,98 +724,152 @@ export default function TenSecondTasksScreen() {
 // Styles
 // ---------------------------------------------------------------------------
 
-const ORANGE = "#F97316";
-
 const st = StyleSheet.create({
   container: { flex: 1, backgroundColor: colors.background },
-  centered: { flex: 1, justifyContent: "center", alignItems: "center", padding: 24, gap: 12 },
+  scroll: {
+    flexGrow: 1,
+    paddingHorizontal: spacing.screen,
+    paddingTop: spacing.lg,
+    paddingBottom: spacing.xl,
+    gap: spacing.lg,
+  },
+  scrollNoFooter: { paddingBottom: 48 },
+  flex1: { flex: 1 },
+  list: { gap: spacing.sm },
+  centerRow: { alignItems: "center" },
+  footerStack: { gap: spacing.md },
+  pressed: { opacity: 0.85, transform: [{ scale: 0.98 }] },
+  pillRadius: { borderRadius: radii.pill },
   loadingText: { fontFamily: fonts.medium, fontSize: 16, color: colors.gray400, marginTop: 16 },
-  bigEmoji: { fontSize: 64, marginBottom: 16 },
-  title: { fontFamily: fonts.extrabold, fontSize: 28, color: colors.white, marginBottom: 8 },
-  tagline: { fontFamily: fonts.regular, fontSize: 15, color: colors.gray400, marginBottom: 32, textAlign: "center" },
-  wait: { fontFamily: fonts.regular, fontSize: 15, color: colors.gray400, textAlign: "center" },
 
-  introScroll: { flexGrow: 1, alignItems: "center", justifyContent: "center", paddingVertical: 40, paddingHorizontal: 24 },
-  rulesBox: { width: "100%", marginBottom: 24 },
-  ruleCard: { backgroundColor: colors.surface, borderRadius: 12, padding: 14, marginBottom: 8 },
-  ruleText: { fontFamily: fonts.regular, fontSize: 14, color: colors.white, lineHeight: 20 },
-  warningCard: { backgroundColor: ORANGE + "22", borderRadius: 12, borderWidth: 1, borderColor: ORANGE, padding: 12, marginBottom: 16 },
-  warningText: { fontFamily: fonts.bold, fontSize: 14, color: ORANGE, textAlign: "center" },
+  // Title block
+  titleBlock: { gap: spacing.sm },
+  eyebrowRow: { flexDirection: "row", alignItems: "center", gap: spacing.sm, flexWrap: "wrap" },
+  sectionEyebrow: { marginTop: spacing.xs },
+
+  // Waiting note (footer)
+  waiting: {
+    minHeight: 56,
+    borderRadius: radii.pill,
+    backgroundColor: colors.surface,
+    borderWidth: 1,
+    borderColor: colors.cardBorder,
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "center",
+    gap: 10,
+    paddingHorizontal: 20,
+  },
+  waitingText: { flexShrink: 1, fontFamily: fonts.semibold, fontSize: 15, color: colors.gray300 },
+
+  // Hero
+  heroRow: { flexDirection: "row", alignItems: "center", padding: 22, gap: spacing.md },
+  heroCopy: { flex: 1, gap: 6 },
+  heroTitle: { fontFamily: fonts.extrabold, fontSize: 24, lineHeight: 29, color: colors.onPrimary },
+  heroEmoji: { fontSize: 56 },
+
+  // Rules
+  ruleRow: { flexDirection: "row", alignItems: "center", gap: spacing.md, padding: spacing.lg },
+  ruleIcon: {
+    width: 40,
+    height: 40,
+    borderRadius: radii.md,
+    backgroundColor: colors.highlightSoft,
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  ruleEmoji: { fontSize: 20 },
+  ruleText: { flex: 1, fontFamily: fonts.medium, fontSize: 14, lineHeight: 20, color: colors.white },
+  warningText: { flex: 1, fontFamily: fonts.bold, fontSize: 15, lineHeight: 20, color: colors.peach },
 
   // Countdown
-  countdownScroll: { flexGrow: 1, alignItems: "center", paddingHorizontal: 20, paddingTop: 24, paddingBottom: 40, gap: 12 },
-  countdownLabel: { fontFamily: fonts.extrabold, fontSize: 28, color: colors.white },
-  countdownNum: { fontFamily: fonts.extrabold, fontSize: 80, color: ORANGE },
-  turnInfo: { fontFamily: fonts.medium, fontSize: 15, color: colors.gray400 },
-  suddenDeathBadge: { fontFamily: fonts.extrabold, fontSize: 13, color: colors.danger, letterSpacing: 3 },
+  countdown: { alignItems: "center", gap: spacing.xs, paddingTop: spacing.sm },
+  countdownNum: {
+    fontFamily: fonts.extrabold,
+    fontSize: 96,
+    lineHeight: 104,
+    letterSpacing: -3,
+    color: colors.white,
+    fontVariant: ["tabular-nums"],
+  },
+  progressTrack: {
+    alignSelf: "stretch",
+    height: 6,
+    borderRadius: radii.pill,
+    backgroundColor: colors.surfaceLight,
+    overflow: "hidden",
+    marginTop: spacing.md,
+  },
+  progressFill: { height: "100%", borderRadius: radii.pill },
 
   // Task stack
-  stackLabelLg: { fontFamily: fonts.extrabold, fontSize: 14, color: colors.gray400, letterSpacing: 1.5, alignSelf: "flex-start", marginTop: 4 },
-  taskCard: {
-    flexDirection: "row", alignItems: "center", gap: 14,
-    borderRadius: 14, borderWidth: 1.5, paddingHorizontal: 16, paddingVertical: 14, width: "100%",
+  taskRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: spacing.md,
+    paddingVertical: 14,
+    paddingHorizontal: spacing.lg,
   },
-  taskNumBadge: { width: 30, height: 30, borderRadius: 15, alignItems: "center", justifyContent: "center" },
-  taskNumText: { fontFamily: fonts.extrabold, fontSize: 14, color: colors.white },
-  taskText: { flex: 1, fontFamily: fonts.semibold, fontSize: 17, lineHeight: 24 },
-  taskTextLg: { fontSize: 19, lineHeight: 26 },
-
-  // Active
-  activeScroll: { flexGrow: 1, paddingHorizontal: 20, paddingTop: 12, paddingBottom: 40, gap: 12, alignItems: "center" },
-  spectLabel: { fontFamily: fonts.extrabold, fontSize: 22, color: colors.white },
-  juryBadge: { fontFamily: fonts.extrabold, fontSize: 11, color: colors.gray400, letterSpacing: 2, backgroundColor: colors.surface, paddingHorizontal: 10, paddingVertical: 4, borderRadius: 6 },
-  timerCircle: { width: 100, height: 100, borderRadius: 50, borderWidth: 4, alignItems: "center", justifyContent: "center" },
-  timerBig: { fontFamily: fonts.extrabold, fontSize: 36 },
-
-  // Done
-  doneBtn: { backgroundColor: colors.success, borderRadius: 16, paddingVertical: 20, width: "100%", alignItems: "center", marginTop: 8 },
-  doneBtnText: { fontFamily: fonts.extrabold, fontSize: 24, color: colors.white },
-
-  // Voting
-  voteLabel: { fontFamily: fonts.extrabold, fontSize: 13, color: colors.gray500, letterSpacing: 2 },
-  voteRow: { flexDirection: "row", gap: 12, width: "100%" },
-  passBtn: {
-    flex: 1, flexDirection: "row", alignItems: "center", justifyContent: "center", gap: 8,
-    backgroundColor: colors.success + "18", borderWidth: 1.5, borderColor: colors.success, borderRadius: 14, paddingVertical: 18,
+  taskText: { flex: 1, fontFamily: fonts.semibold, fontSize: 16, lineHeight: 22, color: colors.gray300 },
+  taskTextLg: { fontSize: 17, lineHeight: 23 },
+  taskHero: { padding: 20, gap: spacing.md },
+  taskHeroHead: { flexDirection: "row", alignItems: "center", gap: spacing.md },
+  taskHeroText: { fontFamily: fonts.extrabold, fontSize: 22, lineHeight: 28, color: colors.onPrimary },
+  taskHeroTextLg: { fontSize: 24, lineHeight: 31 },
+  numTile: {
+    width: 36,
+    height: 36,
+    borderRadius: radii.sm,
+    backgroundColor: colors.surfaceLight,
+    alignItems: "center",
+    justifyContent: "center",
   },
-  failBtn: {
-    flex: 1, flexDirection: "row", alignItems: "center", justifyContent: "center", gap: 8,
-    backgroundColor: colors.danger + "18", borderWidth: 1.5, borderColor: colors.danger, borderRadius: 14, paddingVertical: 18,
-  },
-  voteBtnActive: { backgroundColor: colors.success },
-  voteBtnActiveFail: { backgroundColor: colors.danger },
-  passBtnText: { fontFamily: fonts.bold, fontSize: 18, color: colors.success },
-  failBtnText: { fontFamily: fonts.bold, fontSize: 18, color: colors.danger },
-  voteCount: { fontFamily: fonts.medium, fontSize: 15, color: colors.gray400, textAlign: "center" },
+  numTileHero: { backgroundColor: colors.onPrimary },
+  numTileText: { fontFamily: fonts.extrabold, fontSize: 16, color: colors.white },
+  numTileTextHero: { color: colors.highlight },
 
-  // Judging
-  judgingLabel: { fontFamily: fonts.extrabold, fontSize: 28, color: colors.white },
-  judgingSubtext: { fontFamily: fonts.medium, fontSize: 16, color: colors.gray400 },
+  // Voting (spectators)
+  voteRow: { flexDirection: "row", gap: spacing.md },
+  voteBtn: {
+    flex: 1,
+    minHeight: 56,
+    borderRadius: radii.pill,
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "center",
+    gap: 8,
+    paddingHorizontal: 16,
+    backgroundColor: colors.surface,
+    borderWidth: 1.5,
+    borderColor: colors.highlight,
+  },
+  voteBtnPassOn: { borderColor: colors.highlight },
+  voteBtnFail: { borderColor: colors.danger },
+  voteBtnFailOn: { backgroundColor: colors.danger },
+  voteBtnText: { fontFamily: fonts.bold, fontSize: 16, letterSpacing: 0.5, color: colors.white },
+  voteCount: { fontFamily: fonts.medium, fontSize: 13, color: colors.gray400, textAlign: "center" },
+
+  // Stats
+  statRow: { flexDirection: "row", gap: spacing.md },
+  statContent: { padding: spacing.lg, gap: 4 },
+  statValue: { fontFamily: fonts.extrabold, fontSize: 30, color: colors.white, fontVariant: ["tabular-nums"] },
 
   // Resolve
-  resolveTitle: { fontFamily: fonts.extrabold, fontSize: 40, color: colors.white },
-  resolveName: { fontFamily: fonts.bold, fontSize: 22, color: colors.gray400 },
-  resolveVotes: { fontFamily: fonts.medium, fontSize: 15, color: colors.gray400 },
+  resultCard: { alignItems: "center", paddingVertical: 28, paddingHorizontal: 20, gap: spacing.sm },
+  resultOutcome: { fontFamily: fonts.extrabold, fontSize: 40, letterSpacing: -1 },
+  resultNameRow: { flexDirection: "row", alignItems: "center", gap: spacing.sm, maxWidth: "100%" },
+  resultName: { flexShrink: 1, fontFamily: fonts.extrabold, fontSize: 22 },
 
   // Game over
-  gameOverScroll: { flexGrow: 1, alignItems: "center", paddingHorizontal: 20, paddingTop: 32, paddingBottom: 40, gap: 16 },
-  gameOverTitle: { fontFamily: fonts.extrabold, fontSize: 32, color: colors.white },
-  gameOverSub: { fontFamily: fonts.medium, fontSize: 16, color: colors.gray400 },
-  eliminationCard: {
-    backgroundColor: colors.surface, borderRadius: 14, borderWidth: 1, borderColor: colors.surfaceLight,
-    padding: 16, gap: 8, width: "100%",
+  winnerContent: { flexDirection: "row", alignItems: "center", gap: spacing.md, padding: 20 },
+  winnerName: { fontFamily: fonts.extrabold, fontSize: 24, color: colors.onPrimary },
+  rankRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: spacing.md,
+    paddingVertical: 12,
+    paddingHorizontal: spacing.lg,
   },
-  eliminationTitle: { fontFamily: fonts.extrabold, fontSize: 11, color: colors.gray500, letterSpacing: 2, marginBottom: 4 },
-  eliminationRow: { flexDirection: "row", alignItems: "center", gap: 10, paddingVertical: 6 },
-  eliminationNum: { fontFamily: fonts.bold, fontSize: 14, color: colors.gray500, width: 28 },
-  eliminationName: { flex: 1, fontFamily: fonts.semibold, fontSize: 15, color: colors.white },
-  eliminationTag: { fontFamily: fonts.bold, fontSize: 11, color: colors.danger },
-
-  primaryBtn: {
-    flexDirection: "row", alignItems: "center", justifyContent: "center", gap: 8,
-    backgroundColor: colors.primary, borderRadius: 14, paddingVertical: 16, width: "100%",
-  },
-  primaryBtnText: { fontFamily: fonts.bold, fontSize: 16, color: colors.white },
-  secondaryBtn: { alignItems: "center", paddingVertical: 14, borderRadius: 14, borderWidth: 1, borderColor: colors.surfaceLight, width: "100%" },
-  secondaryBtnText: { fontFamily: fonts.bold, fontSize: 15, color: colors.gray400 },
+  rankName: { flex: 1, fontFamily: fonts.bold, fontSize: 16, color: colors.white },
+  outTag: { fontFamily: fonts.bold, fontSize: 12, letterSpacing: 1.2, color: colors.danger },
 });

@@ -2,10 +2,9 @@ import React, { useState, useEffect, useRef, useCallback } from "react";
 import {
   View,
   Text,
-  TouchableOpacity,
+  Pressable,
   TextInput,
   StyleSheet,
-  SafeAreaView,
   ScrollView,
   ActivityIndicator,
   Dimensions,
@@ -13,15 +12,24 @@ import {
   Platform,
   Alert,
 } from "react-native";
+import { SafeAreaView } from "react-native-safe-area-context";
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import { useRouter } from "expo-router";
 import { Ionicons } from "@expo/vector-icons";
-import { colors, fonts } from "../../src/theme";
+import { LinearGradient } from "expo-linear-gradient";
+import { colors, fonts, gradients, radii, spacing, type } from "../../src/theme";
 import { useRoomStore } from "../../src/stores/roomStore";
 import { useAuthStore } from "../../src/stores/authStore";
 import HostWaitingPill from "../../src/components/HostWaitingPill";
 import GameHeader from "../../src/components/GameHeader";
 import GameLoadingScreen from "../../src/components/GameLoadingScreen";
+import ScreenBackground from "../../src/components/ScreenBackground";
+import PrimaryAction, { PrimaryActionBar } from "../../src/components/PrimaryAction";
+import Eyebrow from "../../src/components/Eyebrow";
+import Pill from "../../src/components/Pill";
+import GradientCard from "../../src/components/GradientCard";
+import HeroGradient from "../../src/components/HeroGradient";
+import PlayerAvatar from "../../src/components/PlayerAvatar";
 import { competitionRanks } from "../../src/utils/rank";
 
 // ---------------------------------------------------------------------------
@@ -55,7 +63,6 @@ type GameState = {
 // Constants
 // ---------------------------------------------------------------------------
 
-const ACCENT = "#e8927c";
 const { width: SCREEN_WIDTH } = Dimensions.get("window");
 
 // ---------------------------------------------------------------------------
@@ -423,36 +430,50 @@ export default function BlindRankingScreen() {
     return <GameLoadingScreen name="Blind Ranking" icon="list" color="#A78BFA" />;
   }
 
+  const roundPill = `Round ${gs.currentGame ?? 1}/${gs.totalGames ?? 1}`;
+
   // === INTRO ===
   if (phase === "intro") {
     return (
-      <SafeAreaView style={st.container}><GameHeader />
-        <ScrollView contentContainerStyle={st.introScroll}>
-          <Text style={st.bigEmoji}>{"\u2263"}</Text>
-          <Text style={st.title}>Blind Ranking</Text>
-          <Text style={st.tagline}>Rank items blind {"\u2014"} lock each one in as it appears. No take-backs.</Text>
-          <View style={st.rulesBox}>
-            {[
-              ["\uD83C\uDFB2", "Items from a category appear one at a time in random order."],
-              ["\uD83D\uDCCC", "Place each item into a rank slot. Once placed, it's locked."],
-              ["\uD83D\uDC40", "You can't see what's coming next \u2014 trust your gut!"],
-              ["\uD83D\uDCCA", "After everyone finishes, rankings are compared side-by-side."],
-            ].map(([icon, text], i) => (
-              <View key={i} style={st.ruleCard}>
-                <Text style={st.ruleText}>{icon}  {text}</Text>
-              </View>
-            ))}
-          </View>
-          {isHost ? (
-            <TouchableOpacity style={st.primaryBtn} onPress={startFromIntro}>
-              <Text style={st.primaryBtnText}>Continue</Text>
-              <Ionicons name="arrow-forward" size={20} color={colors.white} />
-            </TouchableOpacity>
+      <Shell
+        footer={
+          isHost ? (
+            <PrimaryAction label="Continue" icon="arrow-forward" onPress={startFromIntro} />
           ) : (
-            <Text style={st.wait}>Waiting for host to start...</Text>
-          )}
-        </ScrollView>
-      </SafeAreaView>
+            <WaitingNote label="Waiting for host to start..." />
+          )
+        }
+      >
+        <ScreenTitle
+          title="Blind Ranking"
+          subtitle={`Rank items blind — lock each one in as it appears. No take-backs.`}
+        />
+        <HeroGradient>
+          <View style={st.heroContent}>
+            <View style={st.heroCopy}>
+              <Eyebrow tone="dark">No take-backs</Eyebrow>
+              <Text style={st.heroTitle}>Trust your gut. Lock it in.</Text>
+            </View>
+            <Text style={st.heroEmoji}>{"🙈"}</Text>
+          </View>
+        </HeroGradient>
+        <Eyebrow style={st.sectionEyebrow}>How it works</Eyebrow>
+        <View style={st.list}>
+          {[
+            ["🎲", "Items from a category appear one at a time in random order."],
+            ["📌", "Place each item into a rank slot. Once placed, it's locked."],
+            ["👀", "You can't see what's coming next — trust your gut!"],
+            ["📊", "After everyone finishes, rankings are compared side-by-side."],
+          ].map(([icon, text], i) => (
+            <GradientCard key={i} radius={radii.lg} contentStyle={st.ruleRow}>
+              <View style={st.ruleIcon}>
+                <Text style={st.ruleEmoji}>{icon}</Text>
+              </View>
+              <Text style={st.ruleText}>{text}</Text>
+            </GradientCard>
+          ))}
+        </View>
+      </Shell>
     );
   }
 
@@ -460,13 +481,20 @@ export default function BlindRankingScreen() {
   if (phase === "setup") {
     if (!isHost) {
       return (
-        <SafeAreaView style={st.container}><GameHeader />
-          <View style={st.centered}>
-            <Text style={st.bigEmoji}>{"\u2263"}</Text>
-            <Text style={st.title}>Blind Ranking</Text>
-            <Text style={st.wait}>Host is choosing the category and size.</Text>
-          </View>
-        </SafeAreaView>
+        <Shell footer={<WaitingNote label="Waiting for host..." />}>
+          <ScreenTitle
+            title="Blind Ranking"
+            subtitle="Host is choosing the category and size."
+            pill={(gs.totalGames ?? 1) > 1 ? roundPill : undefined}
+          />
+          <GradientCard contentStyle={st.centerCard}>
+            <View style={st.artTileLg}>
+              <Text style={st.artEmojiLg}>{"≣"}</Text>
+            </View>
+            <Eyebrow>Up next</Eyebrow>
+            <Text style={st.centerCardText}>A new category to rank blind.</Text>
+          </GradientCard>
+        </Shell>
       );
     }
 
@@ -475,115 +503,134 @@ export default function BlindRankingScreen() {
       const itemCount = customItems.split("\n").map((s) => s.trim()).filter(Boolean).length;
       const canSave = customName.trim().length > 0 && itemCount >= 5;
       return (
-        <SafeAreaView style={st.container}><GameHeader />
-          <KeyboardAvoidingView style={{ flex: 1 }} behavior={Platform.OS === "ios" ? "padding" : undefined}>
-            <ScrollView contentContainerStyle={st.editorScroll} keyboardShouldPersistTaps="handled">
-              <Text style={st.setupTitle}>{editingCategory ? "Edit Category" : "New Category"}</Text>
-              <Text style={st.setupSub}>Create your own ranking category.</Text>
-              <Text style={st.editorLabel}>CATEGORY NAME</Text>
-              <TextInput
-                style={st.editorInput}
-                placeholder="e.g. Best Marvel movies"
-                placeholderTextColor={colors.gray500}
-                value={customName}
-                onChangeText={setCustomName}
-              />
-              <Text style={st.editorLabel}>ITEMS (one per line, min 5)</Text>
-              <TextInput
-                style={[st.editorInput, { height: 180, textAlignVertical: "top" }]}
-                placeholder={"Iron Man\nEndgame\nSpider-Man\n..."}
-                placeholderTextColor={colors.gray500}
-                value={customItems}
-                onChangeText={setCustomItems}
-                multiline
-              />
-              <Text style={st.editorCount}>{itemCount} items</Text>
-              <TouchableOpacity
-                style={[st.primaryBtn, !canSave && { opacity: 0.4 }]}
+        <Shell
+          keyboard
+          footer={
+            <View style={st.footerStack}>
+              <PrimaryAction
+                label={editingCategory ? "Save Changes" : "Save Category"}
                 onPress={saveCustomCategory}
                 disabled={!canSave}
-              >
-                <Text style={st.primaryBtnText}>{editingCategory ? "Save Changes" : "Save Category"}</Text>
-              </TouchableOpacity>
-              <TouchableOpacity
+              />
+              <PrimaryAction
+                label="Cancel"
+                variant="dark"
                 onPress={() => { setShowCustomEditor(false); setEditingCategory(null); setCustomName(""); setCustomItems(""); }}
-                style={{ marginTop: 8, alignSelf: "center" }}
-              >
-                <Text style={st.backLink}>Cancel</Text>
-              </TouchableOpacity>
-            </ScrollView>
-          </KeyboardAvoidingView>
-        </SafeAreaView>
+              />
+            </View>
+          }
+        >
+          <ScreenTitle
+            title={editingCategory ? "Edit Category" : "New Category"}
+            subtitle="Create your own ranking category."
+          />
+          <View style={st.field}>
+            <Eyebrow>Category name</Eyebrow>
+            <TextInput
+              style={st.input}
+              placeholder="e.g. Best Marvel movies"
+              placeholderTextColor={colors.gray500}
+              value={customName}
+              onChangeText={setCustomName}
+            />
+          </View>
+          <View style={st.field}>
+            <View style={st.fieldLabelRow}>
+              <Eyebrow>Items (one per line, min 5)</Eyebrow>
+              <Text style={st.editorCount}>{itemCount} items</Text>
+            </View>
+            <TextInput
+              style={[st.input, st.inputMultiline]}
+              placeholder={"Iron Man\nEndgame\nSpider-Man\n..."}
+              placeholderTextColor={colors.gray500}
+              value={customItems}
+              onChangeText={setCustomItems}
+              multiline
+            />
+          </View>
+        </Shell>
       );
     }
 
     // Step 1: pick category
     if (!selectedCategory) {
       return (
-        <SafeAreaView style={st.container}><GameHeader />
-          <ScrollView contentContainerStyle={st.setupScroll}>
-            <Text style={st.bigEmoji}>{"\u2263"}</Text>
-            <Text style={st.setupTitle}>Pick a Category</Text>
-            <Text style={st.setupSub}>
-              {(gs.totalGames ?? 1) > 1
-                ? `Round ${gs.currentGame ?? 1} of ${gs.totalGames} \u2014 pick a category.`
-                : "Choose what everyone will rank."}
-            </Text>
-            <View style={st.catGrid}>
-              {BANK_KEYS.map((key) => {
-                const bank = BANKS[key];
-                return (
-                  <TouchableOpacity
-                    key={key}
-                    style={st.catCard}
-                    onPress={() => setSelectedCategory(key)}
-                    activeOpacity={0.7}
-                  >
-                    <Text style={st.catEmoji}>{bank.emoji}</Text>
+        <Shell>
+          <ScreenTitle
+            title="Pick a Category"
+            subtitle={
+              (gs.totalGames ?? 1) > 1
+                ? `Round ${gs.currentGame ?? 1} of ${gs.totalGames} — pick a category.`
+                : "Choose what everyone will rank."
+            }
+            pill={(gs.totalGames ?? 1) > 1 ? roundPill : undefined}
+          />
+          <View style={st.catGrid}>
+            {BANK_KEYS.map((key) => {
+              const bank = BANKS[key];
+              return (
+                <Pressable
+                  key={key}
+                  style={({ pressed }) => [st.catTileWrap, pressed && st.pressed]}
+                  onPress={() => setSelectedCategory(key)}
+                  accessibilityRole="button"
+                >
+                  <GradientCard radius={radii.lg} style={st.flex1} contentStyle={st.catCard}>
+                    <View style={st.catEmojiTile}>
+                      <Text style={st.catEmoji}>{bank.emoji}</Text>
+                    </View>
                     <Text style={st.catLabel} numberOfLines={2}>{bank.label}</Text>
-                  </TouchableOpacity>
-                );
-              })}
-            </View>
+                  </GradientCard>
+                </Pressable>
+              );
+            })}
+          </View>
 
-            {customCategories.length > 0 && (
-              <>
-                <Text style={st.customSectionTitle}>Your Categories</Text>
-                <View style={st.catGrid}>
-                  {customCategories.map((cat) => (
-                    <TouchableOpacity
-                      key={cat.id}
-                      style={[st.catCard, { borderColor: ACCENT + "66" }]}
-                      onPress={() => setSelectedCategory(`custom:${cat.id}`)}
-                      onLongPress={() => {
-                        Alert.alert(cat.label, `${cat.items.length} items`, [
-                          { text: "Play", onPress: () => setSelectedCategory(`custom:${cat.id}`) },
-                          { text: "Edit", onPress: () => startEditCategory(cat) },
-                          { text: "Delete", style: "destructive", onPress: () => deleteCustomCategory(cat.id) },
-                          { text: "Cancel", style: "cancel" },
-                        ]);
-                      }}
-                      activeOpacity={0.7}
+          {customCategories.length > 0 && (
+            <>
+              <Eyebrow tone="lavender" style={st.sectionEyebrow}>Your Categories</Eyebrow>
+              <View style={st.catGrid}>
+                {customCategories.map((cat) => (
+                  <Pressable
+                    key={cat.id}
+                    style={({ pressed }) => [st.catTileWrap, pressed && st.pressed]}
+                    onPress={() => setSelectedCategory(`custom:${cat.id}`)}
+                    onLongPress={() => {
+                      Alert.alert(cat.label, `${cat.items.length} items`, [
+                        { text: "Play", onPress: () => setSelectedCategory(`custom:${cat.id}`) },
+                        { text: "Edit", onPress: () => startEditCategory(cat) },
+                        { text: "Delete", style: "destructive", onPress: () => deleteCustomCategory(cat.id) },
+                        { text: "Cancel", style: "cancel" },
+                      ]);
+                    }}
+                    accessibilityRole="button"
+                  >
+                    <GradientCard
+                      radius={radii.lg}
+                      style={st.flex1}
+                      borderColors={SELECTED_BORDER}
+                      contentStyle={st.catCard}
                     >
-                      <Text style={st.catEmoji}>{"\u270E"}</Text>
+                      <View style={st.catEmojiTile}>
+                        <Text style={st.catEmoji}>{"✎"}</Text>
+                      </View>
                       <Text style={st.catLabel} numberOfLines={2}>{cat.label}</Text>
                       <Text style={st.catItemCount}>{cat.items.length} items</Text>
-                    </TouchableOpacity>
-                  ))}
-                </View>
-              </>
-            )}
+                    </GradientCard>
+                  </Pressable>
+                ))}
+              </View>
+            </>
+          )}
 
-            <TouchableOpacity
-              style={st.makeOwnBtn}
-              onPress={() => { setEditingCategory(null); setCustomName(""); setCustomItems(""); setShowCustomEditor(true); }}
-              activeOpacity={0.7}
-            >
-              <Ionicons name="add-circle-outline" size={20} color={colors.primaryLight} />
-              <Text style={st.makeOwnText}>Make Your Own</Text>
-            </TouchableOpacity>
-          </ScrollView>
-        </SafeAreaView>
+          <PrimaryAction
+            label="Make Your Own"
+            icon="add-circle-outline"
+            iconPosition="left"
+            variant="ghost"
+            onPress={() => { setEditingCategory(null); setCustomName(""); setCustomItems(""); setShowCustomEditor(true); }}
+          />
+        </Shell>
       );
     }
 
@@ -592,83 +639,68 @@ export default function BlindRankingScreen() {
     const bank = isCustomCat ? null : BANKS[selectedCategory];
     const customCat = isCustomCat ? customCategories.find((c) => c.id === selectedCategory.replace("custom:", "")) : null;
     const catLabel = customCat?.label ?? bank?.label ?? "";
-    const catEmoji = customCat ? "\u270E" : (bank?.emoji ?? "");
+    const catEmoji = customCat ? "✎" : (bank?.emoji ?? "");
     const catItemCount = customCat?.items.length ?? bank?.items.length ?? 0;
     if (!selectedSize) {
       // Filter size options based on available items
       const sizeOptions = ([5, 10] as const).filter((s) => catItemCount >= s);
       return (
-        <SafeAreaView style={st.container}><GameHeader />
-          <View style={st.centered}>
-            <Text style={st.bigEmoji}>{catEmoji}</Text>
-            <Text style={st.setupTitle}>{catLabel}</Text>
-            <Text style={st.setupSub}>How many items to rank?</Text>
-            <View style={st.sizeRow}>
-              {sizeOptions.map((size) => (
-                <TouchableOpacity
-                  key={size}
-                  style={st.sizeCard}
-                  onPress={() => {
-                    setSelectedSize(size);
-                    // Rounds are only picked for game 1; later games launch straight away.
-                    if ((gs.currentGame ?? 1) > 1) launchGame(gs.totalGames, gs.currentGame, size);
-                  }}
-                  activeOpacity={0.7}
-                >
-                  <Text style={st.sizeNum}>{size}</Text>
-                  <Text style={st.sizeLabel}>Top {size}</Text>
-                </TouchableOpacity>
-              ))}
-            </View>
-            <TouchableOpacity onPress={() => setSelectedCategory(null)} style={{ marginTop: 12 }}>
-              <Text style={st.backLink}>Change category</Text>
-            </TouchableOpacity>
+        <Shell>
+          <CategoryTitle emoji={catEmoji} label={catLabel} eyebrow="How many items to rank?" pill={(gs.totalGames ?? 1) > 1 ? roundPill : undefined} />
+          <View style={st.optionRow}>
+            {sizeOptions.map((size) => (
+              <OptionTile
+                key={size}
+                value={String(size)}
+                label={`Top ${size}`}
+                onPress={() => {
+                  setSelectedSize(size);
+                  // Rounds are only picked for game 1; later games launch straight away.
+                  if ((gs.currentGame ?? 1) > 1) launchGame(gs.totalGames, gs.currentGame, size);
+                }}
+              />
+            ))}
           </View>
-        </SafeAreaView>
+          <TextLink label="Change category" onPress={() => setSelectedCategory(null)} />
+        </Shell>
       );
     }
 
     // Games 2..N: rounds were already chosen in game 1 — launching (fallback button if it didn't).
     if ((gs.currentGame ?? 1) > 1) {
       return (
-        <SafeAreaView style={st.container}><GameHeader />
-          <View style={st.centered}>
-            <Text style={st.bigEmoji}>{catEmoji}</Text>
-            <Text style={st.setupTitle}>{catLabel}</Text>
-            <Text style={st.setupSub}>Top {selectedSize} {"·"} Game {gs.currentGame}/{gs.totalGames}</Text>
-            <View style={st.sizeRow}>
-              <TouchableOpacity style={st.sizeCard} onPress={() => launchGame(gs.totalGames, gs.currentGame)} activeOpacity={0.7}>
-                <Text style={st.sizeLabel}>Start</Text>
-              </TouchableOpacity>
-            </View>
-            <TouchableOpacity onPress={() => setSelectedSize(null)} style={{ marginTop: 12 }}>
-              <Text style={st.backLink}>Change size</Text>
-            </TouchableOpacity>
-          </View>
-        </SafeAreaView>
+        <Shell
+          footer={
+            <PrimaryAction label="Start" icon="play" onPress={() => launchGame(gs.totalGames, gs.currentGame)} />
+          }
+        >
+          <CategoryTitle
+            emoji={catEmoji}
+            label={catLabel}
+            eyebrow={`Top ${selectedSize} · Game ${gs.currentGame}/${gs.totalGames}`}
+            pill={roundPill}
+          />
+          <TextLink label="Change size" onPress={() => setSelectedSize(null)} />
+        </Shell>
       );
     }
 
     // Step 3: pick rounds
     return (
-      <SafeAreaView style={st.container}><GameHeader />
-        <View style={st.centered}>
-          <Text style={st.bigEmoji}>{catEmoji}</Text>
-          <Text style={st.setupTitle}>{catLabel}</Text>
-          <Text style={st.setupSub}>Top {selectedSize} {"\u00B7"} How many rounds?</Text>
-          <View style={st.sizeRow}>
-            {([1, 3, 5] as const).map((n) => (
-              <TouchableOpacity key={n} style={st.sizeCard} onPress={() => launchGame(n, gs.currentGame ?? 1)} activeOpacity={0.7}>
-                <Text style={st.sizeNum}>{n}</Text>
-                <Text style={st.sizeLabel}>{n === 1 ? "Round" : "Rounds"}</Text>
-              </TouchableOpacity>
-            ))}
-          </View>
-          <TouchableOpacity onPress={() => setSelectedSize(null)} style={{ marginTop: 12 }}>
-            <Text style={st.backLink}>Change size</Text>
-          </TouchableOpacity>
+      <Shell>
+        <CategoryTitle emoji={catEmoji} label={catLabel} eyebrow={`Top ${selectedSize} · How many rounds?`} />
+        <View style={st.optionRow}>
+          {([1, 3, 5] as const).map((n) => (
+            <OptionTile
+              key={n}
+              value={String(n)}
+              label={n === 1 ? "Round" : "Rounds"}
+              onPress={() => launchGame(n, gs.currentGame ?? 1)}
+            />
+          ))}
         </View>
-      </SafeAreaView>
+        <TextLink label="Change size" onPress={() => setSelectedSize(null)} />
+      </Shell>
     );
   }
 
@@ -678,59 +710,120 @@ export default function BlindRankingScreen() {
     const mySlots = gs.placements?.[myId] ?? new Array(gs.size).fill(null);
     const submittedCount = countInRoom(gs.roundSubmitted);
     const totalPlayers = players.length;
+    const filledCount = mySlots.filter((s: string | null) => s !== null).length;
+    const remaining = Math.max(0, gs.size - filledCount);
+    const progress = gs.size > 0 ? Math.min(1, filledCount / gs.size) : 0;
 
     return (
-      <SafeAreaView style={st.container}><GameHeader />
-        <ScrollView contentContainerStyle={st.playScroll}>
-          <Text style={st.playCatLabel}>
-            {gs.categoryEmoji} {gs.categoryLabel}
-            {gs.totalGames > 1 ? ` \u00B7 Game ${gs.currentGame}/${gs.totalGames}` : ""}
-          </Text>
-          <Text style={st.playProgress}>
-            Round {gs.currentRound + 1} / {gs.size} {"\u00B7"} {submittedCount}/{totalPlayers} placed
-          </Text>
-
-          {/* Current item card */}
-          {hasPlacedThisRound ? (
-            <View style={[st.nowPlacing, { borderColor: colors.success + "66" }]}>
-              <Text style={[st.nowPlacingLabel, { color: colors.success }]}>PLACED!</Text>
-              <Text style={st.nowPlacingItem}>{currentItem}</Text>
-              <Text style={st.nowPlacingHint}>Waiting for others... {submittedCount}/{totalPlayers}</Text>
-            </View>
+      <Shell
+        footer={
+          hasPlacedThisRound ? (
+            <WaitingNote done label={`Placed! Waiting for others... ${submittedCount}/${totalPlayers}`} />
           ) : (
-            <View style={st.nowPlacing}>
-              <Text style={st.nowPlacingLabel}>NOW PLACING</Text>
-              <Text style={st.nowPlacingItem}>{currentItem}</Text>
-              <Text style={st.nowPlacingHint}>Tap a slot below {"\u00B7"} {gs.size - gs.currentRound} items left</Text>
+            <PrimaryAction
+              label={`Rank ${remaining} more item${remaining !== 1 ? "s" : ""} (${filledCount}/${gs.size})`}
+              disabled
+            />
+          )
+        }
+      >
+        <View style={st.titleBlock}>
+          <View style={st.eyebrowRow}>
+            <Eyebrow tone="lavender">Blind Ranking</Eyebrow>
+            <Pill tone="peach" label={roundPill} />
+          </View>
+          <View style={st.promptRow}>
+            <View style={st.flex1}>
+              <Eyebrow>Your top {gs.size}</Eyebrow>
+              <Text style={[type.title, st.promptTitle]}>{gs.categoryLabel}</Text>
             </View>
-          )}
+            <View style={st.artTile}>
+              <Text style={st.artEmoji}>{gs.categoryEmoji}</Text>
+            </View>
+          </View>
+        </View>
 
-          {/* Slots */}
-          <Text style={st.slotsHeader}>Your Top {gs.size} Ranking</Text>
-          <View style={{ gap: 6 }}>
-            {mySlots.map((slotItem: string | null, idx: number) => {
-              const isFilled = slotItem !== null;
-              const canPlace = !isFilled && !hasPlacedThisRound;
-              return (
-                <TouchableOpacity
-                  key={idx}
-                  style={[st.slot, isFilled && st.slotFilled, canPlace && st.slotOpen]}
-                  onPress={() => canPlace && handlePlaceItem(idx)}
-                  activeOpacity={canPlace ? 0.6 : 1}
-                  disabled={!canPlace}
+        {/* Progress (no timer in this game: item count instead) */}
+        <View style={st.progressBlock}>
+          <View style={st.progressHead}>
+            <Text style={st.progressNum}>
+              {gs.currentRound + 1}
+              <Text style={st.progressDen}>/{gs.size}</Text>
+            </Text>
+            <Text style={st.progressMeta}>{submittedCount}/{totalPlayers} placed</Text>
+          </View>
+          <View style={st.progressTrack}>
+            <LinearGradient
+              colors={gradients.primaryButton}
+              start={{ x: 0, y: 0 }}
+              end={{ x: 1, y: 0 }}
+              style={[st.progressFill, { width: `${progress * 100}%` }]}
+            />
+          </View>
+        </View>
+
+        {/* Current item card */}
+        <HeroGradient>
+          <View style={st.nowPlacing}>
+            <Eyebrow tone="dark">{hasPlacedThisRound ? "PLACED!" : "NOW PLACING"}</Eyebrow>
+            <Text style={st.nowPlacingItem}>{currentItem}</Text>
+            <Text style={st.nowPlacingHint}>
+              {hasPlacedThisRound
+                ? `Waiting for others... ${submittedCount}/${totalPlayers}`
+                : `Tap a slot below · ${gs.size - gs.currentRound} items left`}
+            </Text>
+          </View>
+        </HeroGradient>
+
+        {/* Slots */}
+        <Eyebrow style={st.sectionEyebrow}>Your Top {gs.size} Ranking</Eyebrow>
+        <View style={st.list}>
+          {mySlots.map((slotItem: string | null, idx: number) => {
+            const isFilled = slotItem !== null;
+            const canPlace = !isFilled && !hasPlacedThisRound;
+            return (
+              <Pressable
+                key={idx}
+                onPress={() => canPlace && handlePlaceItem(idx)}
+                disabled={!canPlace}
+                accessibilityRole="button"
+                style={({ pressed }) => [pressed && canPlace && st.pressed]}
+              >
+                <GradientCard
+                  radius={radii.lg}
+                  borderColors={canPlace ? OPEN_BORDER : undefined}
+                  contentStyle={[st.slotRow, !isFilled && !canPlace && st.slotDim]}
                 >
-                  <Text style={[st.slotRank, isFilled && st.slotRankFilled]}>#{idx + 1}</Text>
+                  <View style={[st.numTile, isFilled ? st.numTileOn : st.numTileOpen]}>
+                    {isFilled ? (
+                      <Text style={st.numTileTextOn}>{idx + 1}</Text>
+                    ) : canPlace ? (
+                      <Ionicons name="add" size={18} color={colors.highlight} />
+                    ) : (
+                      <Text style={st.numTileText}>{idx + 1}</Text>
+                    )}
+                  </View>
                   {isFilled ? (
                     <Text style={st.slotItemText} numberOfLines={1}>{slotItem}</Text>
                   ) : (
-                    <Text style={st.slotEmpty}>{canPlace ? "Tap to place here" : "\u2014"}</Text>
+                    <Text style={st.slotEmpty} numberOfLines={1}>
+                      {canPlace ? `Place at #${idx + 1}` : "—"}
+                    </Text>
                   )}
-                </TouchableOpacity>
-              );
-            })}
-          </View>
-        </ScrollView>
-      </SafeAreaView>
+                  {isFilled ? (
+                    <View style={st.slotTag}>
+                      <Ionicons name="lock-closed" size={12} color={colors.gray500} />
+                      <Text style={st.slotTagMuted}>LOCKED</Text>
+                    </View>
+                  ) : canPlace ? (
+                    <Text style={st.slotTagText}>TAP</Text>
+                  ) : null}
+                </GradientCard>
+              </Pressable>
+            );
+          })}
+        </View>
+      </Shell>
     );
   }
 
@@ -756,37 +849,55 @@ export default function BlindRankingScreen() {
     const agreed = itemStats.filter((s) => s.spread <= 1).sort((a, b) => a.spread - b.spread).slice(0, 3);
 
     return (
-      <SafeAreaView style={st.container}><GameHeader />
-        <ScrollView contentContainerStyle={st.revealScroll}>
-          <Text style={st.revealTitle}>Results</Text>
-          <Text style={st.revealCatLabel}>{gs.categoryEmoji} {gs.categoryLabel} {"\u2014"} Top {gs.size}</Text>
+      <Shell
+        footer={
+          isHost ? (
+            <PrimaryAction label="Vote for Best List" icon="arrow-forward" onPress={advanceToVoting} />
+          ) : (
+            <WaitingNote label="Waiting for host to continue..." />
+          )
+        }
+      >
+        <ScreenTitle
+          title="Results"
+          subtitle={`${gs.categoryEmoji} ${gs.categoryLabel} — Top ${gs.size}`}
+          pill={roundPill}
+        />
 
-          {divisive.length > 0 && (
-            <View style={st.callout}>
-              <Text style={st.calloutTitle}>Most Divisive</Text>
-              {divisive.map((s, i) => (
-                <Text key={i} style={st.calloutItem}>{i + 1}. {s.item} (spread: {s.spread})</Text>
-              ))}
-            </View>
-          )}
-          {agreed.length > 0 && (
-            <View style={[st.callout, { borderColor: colors.success + "44" }]}>
-              <Text style={[st.calloutTitle, { color: colors.success }]}>Everyone Agrees</Text>
-              {agreed.map((s, i) => (
-                <Text key={i} style={st.calloutItem}>{i + 1}. {s.item}</Text>
-              ))}
-            </View>
-          )}
+        {divisive.length > 0 && (
+          <GradientCard radius={radii.lg} borderColors={WARN_BORDER} contentStyle={st.callout}>
+            <Eyebrow style={{ color: colors.warning }}>Most Divisive</Eyebrow>
+            {divisive.map((s, i) => (
+              <View key={i} style={st.calloutRow}>
+                <Text style={st.calloutNum}>{i + 1}</Text>
+                <Text style={st.calloutItem} numberOfLines={1}>{s.item}</Text>
+                <Text style={st.calloutMeta}>spread {s.spread}</Text>
+              </View>
+            ))}
+          </GradientCard>
+        )}
+        {agreed.length > 0 && (
+          <GradientCard radius={radii.lg} borderColors={SUCCESS_BORDER} contentStyle={st.callout}>
+            <Eyebrow style={{ color: colors.success }}>Everyone Agrees</Eyebrow>
+            {agreed.map((s, i) => (
+              <View key={i} style={st.calloutRow}>
+                <Text style={st.calloutNum}>{i + 1}</Text>
+                <Text style={st.calloutItem} numberOfLines={1}>{s.item}</Text>
+              </View>
+            ))}
+          </GradientCard>
+        )}
 
-          {/* Side-by-side table */}
-          <Text style={st.compTitle}>Side-by-Side</Text>
+        {/* Side-by-side table */}
+        <Eyebrow style={st.sectionEyebrow}>Side-by-Side</Eyebrow>
+        <GradientCard radius={radii.lg} contentStyle={st.compCard}>
           <ScrollView horizontal showsHorizontalScrollIndicator={false}>
             <View>
               <View style={st.compHeaderRow}>
                 <View style={st.compRankCol}><Text style={st.compHeaderText}>#</Text></View>
                 {pids.map((pid) => (
                   <View key={pid} style={[st.compPlayerCol, { width: colWidth }]}>
-                    <Text style={[st.compHeaderText, pid === myId && { color: ACCENT }]} numberOfLines={1}>
+                    <Text style={[st.compHeaderText, pid === myId && { color: colors.highlight }]} numberOfLines={1}>
                       {playerMap[pid]?.username ?? "Player"}
                     </Text>
                   </View>
@@ -794,27 +905,22 @@ export default function BlindRankingScreen() {
               </View>
               {Array.from({ length: gs.size }).map((_, rowIdx) => (
                 <View key={rowIdx} style={[st.compDataRow, rowIdx % 2 === 0 && st.compDataRowAlt]}>
-                  <View style={st.compRankCol}><Text style={st.compRankNum}>{rowIdx + 1}</Text></View>
+                  <View style={st.compRankCol}>
+                    <View style={st.compRankTile}>
+                      <Text style={st.compRankNum}>{rowIdx + 1}</Text>
+                    </View>
+                  </View>
                   {pids.map((pid) => (
                     <View key={pid} style={[st.compPlayerCol, { width: colWidth }]}>
-                      <Text style={st.compItemText} numberOfLines={1}>{(rankings[pid] ?? [])[rowIdx] ?? "\u2014"}</Text>
+                      <Text style={st.compItemText} numberOfLines={1}>{(rankings[pid] ?? [])[rowIdx] ?? "—"}</Text>
                     </View>
                   ))}
                 </View>
               ))}
             </View>
           </ScrollView>
-
-          {isHost ? (
-            <TouchableOpacity style={st.primaryBtn} onPress={advanceToVoting} activeOpacity={0.7}>
-              <Text style={st.primaryBtnText}>Vote for Best List</Text>
-              <Ionicons name="arrow-forward" size={20} color={colors.white} />
-            </TouchableOpacity>
-          ) : (
-            <Text style={st.wait}>Waiting for host to continue...</Text>
-          )}
-        </ScrollView>
-      </SafeAreaView>
+        </GradientCard>
+      </Shell>
     );
   }
 
@@ -824,38 +930,53 @@ export default function BlindRankingScreen() {
     const votesIn = countInRoom(gs.votedPlayerIds);
 
     if (iHaveVoted) {
+      const pct = players.length > 0 ? Math.min(100, (votesIn / players.length) * 100) : 0;
       return (
-        <SafeAreaView style={st.container}><GameHeader />
-          <View style={st.centered}>
-            <Ionicons name="checkmark-circle" size={48} color={colors.success} />
-            <Text style={st.title}>Vote submitted!</Text>
-            <Text style={st.wait}>{votesIn} / {players.length} voted</Text>
-          </View>
-        </SafeAreaView>
+        <Shell footer={<WaitingNote label={`${votesIn} / ${players.length} voted`} />}>
+          <ScreenTitle title="Vote submitted!" subtitle={`${votesIn} / ${players.length} voted`} pill={roundPill} />
+          <GradientCard contentStyle={st.centerCard}>
+            <View style={st.submittedIcon}>
+              <Ionicons name="checkmark" size={36} color={colors.highlight} />
+            </View>
+            <Eyebrow>Votes in</Eyebrow>
+            <View style={st.progressTrack}>
+              <LinearGradient
+                colors={gradients.primaryButton}
+                start={{ x: 0, y: 0 }}
+                end={{ x: 1, y: 0 }}
+                style={[st.progressFill, { width: `${pct}%` }]}
+              />
+            </View>
+          </GradientCard>
+        </Shell>
       );
     }
 
     return (
-      <SafeAreaView style={st.container}><GameHeader />
-        <ScrollView contentContainerStyle={st.voteScroll}>
-          <Text style={st.voteTitle}>Vote for the Best List</Text>
-          <Text style={st.voteSub}>Whose ranking do you think is best?</Text>
+      <Shell footer={<WaitingNote label={`${votesIn} / ${players.length} voted`} />}>
+        <ScreenTitle title="Vote for the Best List" subtitle="Whose ranking do you think is best?" pill={roundPill} />
+        <View style={st.list}>
           {players
             .filter((p) => p.user_id !== myId)
             .map((p) => (
-              <TouchableOpacity
+              <Pressable
                 key={p.user_id}
-                style={st.voteBtn}
                 onPress={() => handleVote(p.user_id)}
-                activeOpacity={0.75}
+                accessibilityRole="button"
+                style={({ pressed }) => [pressed && st.pressed]}
               >
-                <Text style={st.voteBtnText}>{p.username}</Text>
-                <Ionicons name="arrow-forward" size={16} color={colors.gray400} />
-              </TouchableOpacity>
+                <GradientCard radius={radii.lg} contentStyle={st.candidateRow}>
+                  <PlayerAvatar username={p.username} size={40} />
+                  <Text style={st.candidateName} numberOfLines={1}>{p.username}</Text>
+                  <View style={st.voteTag}>
+                    <Text style={st.slotTagText}>VOTE</Text>
+                    <Ionicons name="chevron-forward" size={16} color={colors.highlight} />
+                  </View>
+                </GradientCard>
+              </Pressable>
             ))}
-          <Text style={st.voteProg}>{votesIn} / {players.length} voted</Text>
-        </ScrollView>
-      </SafeAreaView>
+        </View>
+      </Shell>
     );
   }
 
@@ -877,42 +998,49 @@ export default function BlindRankingScreen() {
     const scoreRanks = competitionRanks(scoreSorted, (p) => p.score);
 
     return (
-      <SafeAreaView style={st.container}><GameHeader />
-        <ScrollView contentContainerStyle={st.voteResultScroll}>
-          <Text style={st.voteResultTitle}>Vote Results</Text>
-          {sorted.map((p, i) => (
-            <View key={p.uid} style={st.voteResultRow}>
-              <Text style={[st.voteResultRank, voteRanks[i] === 1 && { color: colors.gold }]}>#{voteRanks[i]}</Text>
-              <Text style={st.voteResultName}>{p.username}</Text>
-              <Text style={st.voteResultVotes}>{p.votes} vote{p.votes !== 1 ? "s" : ""}</Text>
-            </View>
-          ))}
-
-          {gs.totalGames > 1 && (
-            <>
-              <Text style={st.seriesHeader}>SERIES SCORES</Text>
-              {scoreSorted.map((p, i) => (
-                <View key={p.uid} style={st.voteResultRow}>
-                  <Text style={[st.voteResultRank, scoreRanks[i] === 1 && { color: colors.gold }]}>{scoreRanks[i]}</Text>
-                  <Text style={st.voteResultName}>{p.username}</Text>
-                  <Text style={st.voteResultVotes}>{p.score} pt{p.score !== 1 ? "s" : ""}</Text>
-                </View>
-              ))}
-            </>
-          )}
-
-          {isHost ? (
-            <TouchableOpacity style={st.primaryBtn} onPress={handleNextGameOrEnd} activeOpacity={0.7}>
-              <Text style={st.primaryBtnText}>
-                {gs.currentGame >= gs.totalGames ? "See Final Results" : "Next Round"}
-              </Text>
-              <Ionicons name="arrow-forward" size={20} color={colors.white} />
-            </TouchableOpacity>
+      <Shell
+        footer={
+          isHost ? (
+            <PrimaryAction
+              label={gs.currentGame >= gs.totalGames ? "See Final Results" : "Next Round"}
+              icon="arrow-forward"
+              onPress={handleNextGameOrEnd}
+            />
           ) : (
-            <Text style={st.wait}>Waiting for host...</Text>
-          )}
-        </ScrollView>
-      </SafeAreaView>
+            <WaitingNote label="Waiting for host..." />
+          )
+        }
+      >
+        <ScreenTitle title="Vote Results" subtitle={`${gs.categoryEmoji} ${gs.categoryLabel}`} pill={roundPill} />
+        <View style={st.list}>
+          {sorted.map((p, i) => (
+            <RankRow
+              key={p.uid}
+              rank={voteRanks[i]}
+              name={p.username}
+              isMe={p.uid === myId}
+              value={`${p.votes} vote${p.votes !== 1 ? "s" : ""}`}
+            />
+          ))}
+        </View>
+
+        {gs.totalGames > 1 && (
+          <>
+            <Eyebrow style={st.sectionEyebrow}>SERIES SCORES</Eyebrow>
+            <View style={st.list}>
+              {scoreSorted.map((p, i) => (
+                <RankRow
+                  key={p.uid}
+                  rank={scoreRanks[i]}
+                  name={p.username}
+                  isMe={p.uid === myId}
+                  value={`${p.score} pt${p.score !== 1 ? "s" : ""}`}
+                />
+              ))}
+            </View>
+          </>
+        )}
+      </Shell>
     );
   }
 
@@ -926,46 +1054,216 @@ export default function BlindRankingScreen() {
     const winner = sorted[0];
 
     return (
-      <SafeAreaView style={st.container}><GameHeader />
-        <ScrollView contentContainerStyle={st.gameOverScroll}>
-          <Ionicons name="trophy" size={48} color={colors.warning} />
-          <Text style={st.gameOverTitle}>
-            {winner?.uid === myId ? "You Win!" : `${winner?.username ?? "?"} Wins!`}
-          </Text>
-          {winner && <Text style={st.gameOverScore}>{winner.score} point{winner.score !== 1 ? "s" : ""}</Text>}
-
-          {sorted.map((p, i) => (
-            <View key={p.uid} style={[st.standingRow, p.uid === myId && st.standingRowMe]}>
-              <Text style={[st.standingRank, ranks[i] === 1 && { color: colors.gold }]}>#{ranks[i]}</Text>
-              <Text style={st.standingName}>{p.username}{p.uid === myId ? " (You)" : ""}</Text>
-              <Text style={st.standingScore}>{p.score} pts</Text>
-            </View>
-          ))}
-
-          {isHost ? (
-            <View style={{ gap: 10, width: "100%" }}>
-              <TouchableOpacity style={st.primaryBtn} onPress={() => startGame("blindRanking")} activeOpacity={0.7}>
-                <Ionicons name="refresh" size={20} color={colors.white} />
-                <Text style={st.primaryBtnText}>Play Again</Text>
-              </TouchableOpacity>
-              <TouchableOpacity style={st.secondaryBtn} onPress={handleBackToLobby} activeOpacity={0.7}>
-                <Text style={st.secondaryBtnText}>Back to Lobby</Text>
-              </TouchableOpacity>
+      <Shell
+        footer={
+          isHost ? (
+            <View style={st.footerStack}>
+              <PrimaryAction
+                label="Play Again"
+                icon="refresh"
+                iconPosition="left"
+                onPress={() => startGame("blindRanking")}
+              />
+              <PrimaryAction label="Back to Lobby" variant="dark" onPress={handleBackToLobby} />
             </View>
           ) : (
-            <HostWaitingPill label="Waiting for host..." style={{ marginTop: 0, marginBottom: 20 }} />
-          )}
-        </ScrollView>
-      </SafeAreaView>
+            <View style={st.centerRow}>
+              <HostWaitingPill label="Waiting for host..." style={{ marginTop: 0 }} />
+            </View>
+          )
+        }
+      >
+        <ScreenTitle
+          title={winner?.uid === myId ? "You Win!" : `${winner?.username ?? "?"} Wins!`}
+          subtitle="Final results"
+        />
+        {winner && (
+          <HeroGradient>
+            <View style={st.winnerContent}>
+              <View style={[st.numTile, st.numTileHero]}>
+                <Text style={st.numTileTextHero}>1</Text>
+              </View>
+              <PlayerAvatar username={winner.username} size={48} />
+              <View style={st.flex1}>
+                <Eyebrow tone="dark">Winner</Eyebrow>
+                <Text style={st.winnerName} numberOfLines={1}>{winner.username}</Text>
+                <Text style={st.winnerScore}>{winner.score} point{winner.score !== 1 ? "s" : ""}</Text>
+              </View>
+              <Ionicons name="trophy" size={30} color={colors.onPrimary} />
+            </View>
+          </HeroGradient>
+        )}
+
+        <Eyebrow style={st.sectionEyebrow}>Standings</Eyebrow>
+        <View style={st.list}>
+          {sorted.map((p, i) => (
+            <RankRow
+              key={p.uid}
+              rank={ranks[i]}
+              name={`${p.username}${p.uid === myId ? " (You)" : ""}`}
+              isMe={p.uid === myId}
+              value={`${p.score} pts`}
+            />
+          ))}
+        </View>
+      </Shell>
     );
   }
 
   return (
-    <SafeAreaView style={st.container}><GameHeader />
-      <View style={st.centered}>
-        <Text style={st.loadingText}>Unknown phase: {phase}</Text>
-      </View>
+    <Shell>
+      <Text style={st.loadingText}>Unknown phase: {phase}</Text>
+    </Shell>
+  );
+}
+
+// ---------------------------------------------------------------------------
+// Presentational helpers (no game logic)
+// ---------------------------------------------------------------------------
+
+const SELECTED_BORDER = [colors.highlight, colors.highlightGradientEnd] as const;
+const OPEN_BORDER = ["rgba(184,174,232,0.6)", "rgba(184,174,232,0.15)"] as const;
+const WARN_BORDER = ["rgba(245,158,11,0.6)", "rgba(245,158,11,0.1)"] as const;
+const SUCCESS_BORDER = ["rgba(16,185,129,0.6)", "rgba(16,185,129,0.1)"] as const;
+
+/** Screen frame: background, room toolbar, scrolling body and pinned footer. */
+function Shell({
+  children,
+  footer,
+  keyboard = false,
+}: {
+  children: React.ReactNode;
+  footer?: React.ReactNode;
+  keyboard?: boolean;
+}) {
+  const body = (
+    <>
+      <ScrollView
+        contentContainerStyle={[st.scroll, !footer && st.scrollNoFooter]}
+        showsVerticalScrollIndicator={false}
+        keyboardShouldPersistTaps="handled"
+      >
+        {children}
+      </ScrollView>
+      {footer ? <PrimaryActionBar>{footer}</PrimaryActionBar> : null}
+    </>
+  );
+  return (
+    <SafeAreaView style={st.container} edges={["top", "left", "right"]}>
+      <ScreenBackground />
+      <GameHeader />
+      {keyboard ? (
+        <KeyboardAvoidingView style={st.flex1} behavior={Platform.OS === "ios" ? "padding" : undefined}>
+          {body}
+        </KeyboardAvoidingView>
+      ) : (
+        body
+      )}
     </SafeAreaView>
+  );
+}
+
+function ScreenTitle({ title, subtitle, pill }: { title: string; subtitle?: string; pill?: string }) {
+  return (
+    <View style={st.titleBlock}>
+      <View style={st.eyebrowRow}>
+        <Eyebrow tone="lavender">Blind Ranking</Eyebrow>
+        {pill ? <Pill tone="peach" label={pill} /> : null}
+      </View>
+      <Text style={type.title}>{title}</Text>
+      {subtitle ? <Text style={type.subtitle}>{subtitle}</Text> : null}
+    </View>
+  );
+}
+
+function CategoryTitle({
+  emoji,
+  label,
+  eyebrow,
+  pill,
+}: {
+  emoji: string;
+  label: string;
+  eyebrow: string;
+  pill?: string;
+}) {
+  return (
+    <View style={st.titleBlock}>
+      <View style={st.eyebrowRow}>
+        <Eyebrow tone="lavender">Blind Ranking</Eyebrow>
+        {pill ? <Pill tone="peach" label={pill} /> : null}
+      </View>
+      <View style={st.promptRow}>
+        <View style={st.flex1}>
+          <Eyebrow>{eyebrow}</Eyebrow>
+          <Text style={[type.title, st.promptTitle]}>{label}</Text>
+        </View>
+        <View style={st.artTile}>
+          <Text style={st.artEmoji}>{emoji}</Text>
+        </View>
+      </View>
+    </View>
+  );
+}
+
+function OptionTile({ value, label, onPress }: { value: string; label: string; onPress: () => void }) {
+  return (
+    <Pressable
+      onPress={onPress}
+      accessibilityRole="button"
+      style={({ pressed }) => [st.optionWrap, pressed && st.pressed]}
+    >
+      <GradientCard radius={radii.lg} contentStyle={st.optionCard}>
+        <Text style={st.optionNum}>{value}</Text>
+        <Eyebrow>{label}</Eyebrow>
+      </GradientCard>
+    </Pressable>
+  );
+}
+
+function TextLink({ label, onPress }: { label: string; onPress: () => void }) {
+  return (
+    <Pressable onPress={onPress} accessibilityRole="button" style={st.textLink} hitSlop={8}>
+      <Text style={st.textLinkText}>{label}</Text>
+    </Pressable>
+  );
+}
+
+function WaitingNote({ label, done = false }: { label: string; done?: boolean }) {
+  return (
+    <View style={st.waiting}>
+      {done ? (
+        <Ionicons name="checkmark-circle" size={18} color={colors.highlight} />
+      ) : (
+        <ActivityIndicator size="small" color={colors.highlight} />
+      )}
+      <Text style={st.waitingText} numberOfLines={1}>
+        {label}
+      </Text>
+    </View>
+  );
+}
+
+function RankRow({
+  rank,
+  name,
+  value,
+  isMe = false,
+}: {
+  rank: number;
+  name: string;
+  value: string;
+  isMe?: boolean;
+}) {
+  const first = rank === 1;
+  return (
+    <GradientCard radius={radii.lg} borderColors={isMe ? SELECTED_BORDER : undefined} contentStyle={st.candidateRow}>
+      <View style={[st.numTile, first ? st.numTileOn : st.numTileMuted]}>
+        <Text style={first ? st.numTileTextOn : st.numTileText}>{rank}</Text>
+      </View>
+      <Text style={st.candidateName} numberOfLines={1}>{name}</Text>
+      <Text style={[st.rankValue, first && { color: colors.highlight }]}>{value}</Text>
+    </GradientCard>
   );
 }
 
@@ -975,138 +1273,240 @@ export default function BlindRankingScreen() {
 
 const st = StyleSheet.create({
   container: { flex: 1, backgroundColor: colors.background },
-  centered: { flex: 1, justifyContent: "center", alignItems: "center", padding: 24, gap: 12 },
+  scroll: {
+    flexGrow: 1,
+    paddingHorizontal: spacing.screen,
+    paddingTop: spacing.lg,
+    paddingBottom: spacing.xl,
+    gap: spacing.lg,
+  },
+  scrollNoFooter: { paddingBottom: 48 },
+  flex1: { flex: 1 },
+  list: { gap: spacing.sm },
+  centerRow: { alignItems: "center" },
+  footerStack: { gap: spacing.md },
+  pressed: { opacity: 0.85, transform: [{ scale: 0.98 }] },
   loadingText: { fontFamily: fonts.medium, fontSize: 16, color: colors.gray400, marginTop: 16 },
-  bigEmoji: { fontSize: 64, marginBottom: 16 },
-  title: { fontFamily: fonts.extrabold, fontSize: 28, color: colors.white, marginBottom: 8 },
-  tagline: { fontFamily: fonts.regular, fontSize: 15, color: colors.gray400, marginBottom: 32, textAlign: "center" },
-  wait: { fontFamily: fonts.regular, fontSize: 15, color: colors.gray400, textAlign: "center" },
 
-  introScroll: { flexGrow: 1, alignItems: "center", justifyContent: "center", paddingVertical: 40, paddingHorizontal: 24 },
-  rulesBox: { width: "100%", marginBottom: 32 },
-  ruleCard: { backgroundColor: colors.surface, borderRadius: 12, padding: 14, marginBottom: 8 },
-  ruleText: { fontFamily: fonts.regular, fontSize: 14, color: colors.white, lineHeight: 20 },
+  // Title block
+  titleBlock: { gap: spacing.sm },
+  eyebrowRow: { flexDirection: "row", alignItems: "center", gap: spacing.sm, flexWrap: "wrap" },
+  sectionEyebrow: { marginTop: spacing.xs },
+  promptRow: { flexDirection: "row", alignItems: "center", gap: spacing.md },
+  promptTitle: { marginTop: 6 },
+  artTile: {
+    width: 64,
+    height: 64,
+    borderRadius: radii.lg,
+    backgroundColor: colors.highlightSoft,
+    borderWidth: 1,
+    borderColor: colors.cardBorder,
+    alignItems: "center",
+    justifyContent: "center",
+    transform: [{ rotate: "6deg" }],
+  },
+  artEmoji: { fontSize: 32, color: colors.highlight },
+  artTileLg: {
+    width: 80,
+    height: 80,
+    borderRadius: radii.xl,
+    backgroundColor: colors.highlightSoft,
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  artEmojiLg: { fontSize: 40, color: colors.highlight },
 
-  // Setup
-  setupScroll: { flexGrow: 1, paddingHorizontal: 20, paddingTop: 24, paddingBottom: 40, alignItems: "center", gap: 12 },
-  setupTitle: { fontFamily: fonts.extrabold, fontSize: 24, color: colors.white },
-  setupSub: { fontFamily: fonts.regular, fontSize: 14, color: colors.gray400, textAlign: "center", marginBottom: 8 },
-  catGrid: { flexDirection: "row", flexWrap: "wrap", gap: 10, justifyContent: "center" },
-  catCard: {
-    width: "30%", backgroundColor: colors.surface, borderRadius: 12, borderWidth: 1, borderColor: colors.surfaceLight,
-    padding: 14, alignItems: "center", gap: 6,
-  },
-  catEmoji: { fontSize: 24 },
-  catLabel: { fontFamily: fonts.semibold, fontSize: 11, color: colors.white, textAlign: "center" },
-  sizeRow: { flexDirection: "row", gap: 16, marginTop: 16 },
-  sizeCard: {
-    width: 80, backgroundColor: colors.surface, borderRadius: 14, borderWidth: 1, borderColor: colors.surfaceLight,
-    padding: 16, alignItems: "center", gap: 4,
-  },
-  sizeNum: { fontFamily: fonts.extrabold, fontSize: 28, color: colors.white },
-  sizeLabel: { fontFamily: fonts.medium, fontSize: 12, color: colors.gray400 },
-  backLink: { fontFamily: fonts.medium, fontSize: 14, color: colors.primaryLight, textDecorationLine: "underline" },
-  customSectionTitle: { fontFamily: fonts.extrabold, fontSize: 13, color: ACCENT, letterSpacing: 1.5, marginTop: 16 },
-  catItemCount: { fontFamily: fonts.regular, fontSize: 10, color: colors.gray500 },
-  makeOwnBtn: {
-    flexDirection: "row", alignItems: "center", justifyContent: "center", gap: 8,
-    backgroundColor: colors.primary + "18", borderRadius: 12, borderWidth: 1, borderColor: colors.primary + "44",
-    paddingVertical: 14, marginTop: 12, width: "100%",
-  },
-  makeOwnText: { fontFamily: fonts.bold, fontSize: 14, color: colors.primaryLight },
-  editorScroll: { flexGrow: 1, paddingHorizontal: 20, paddingTop: 24, paddingBottom: 40, gap: 12 },
-  editorLabel: { fontFamily: fonts.extrabold, fontSize: 11, color: colors.gray500, letterSpacing: 1.5 },
-  editorInput: {
-    backgroundColor: colors.surface, borderWidth: 1, borderColor: colors.surfaceLight, borderRadius: 12,
-    paddingHorizontal: 14, paddingVertical: 12, fontSize: 14, color: colors.white, fontFamily: fonts.regular,
-  },
-  editorCount: { fontFamily: fonts.medium, fontSize: 12, color: colors.gray400, alignSelf: "flex-end" },
+  // Generic centered card
+  centerCard: { alignItems: "center", padding: 24, gap: spacing.md },
+  centerCardText: { fontFamily: fonts.medium, fontSize: 15, color: colors.gray300, textAlign: "center" },
 
-  // Playing
-  playScroll: { flexGrow: 1, paddingHorizontal: 20, paddingTop: 16, paddingBottom: 40, gap: 12 },
-  playCatLabel: { fontFamily: fonts.bold, fontSize: 14, color: colors.primaryLight },
-  playProgress: { fontFamily: fonts.medium, fontSize: 13, color: colors.gray400 },
-  nowPlacing: {
-    backgroundColor: colors.surface, borderRadius: 16, borderWidth: 1.5, borderColor: ACCENT,
-    padding: 20, alignItems: "center", gap: 6,
+  // Hero
+  heroContent: { flexDirection: "row", alignItems: "center", padding: 22, gap: spacing.md },
+  heroCopy: { flex: 1, gap: 6 },
+  heroTitle: { fontFamily: fonts.extrabold, fontSize: 24, lineHeight: 29, color: colors.onPrimary },
+  heroEmoji: { fontSize: 56 },
+
+  // Rules
+  ruleRow: { flexDirection: "row", alignItems: "center", gap: spacing.md, padding: spacing.lg },
+  ruleIcon: {
+    width: 40,
+    height: 40,
+    borderRadius: radii.md,
+    backgroundColor: colors.highlightSoft,
+    alignItems: "center",
+    justifyContent: "center",
   },
-  nowPlacingLabel: { fontFamily: fonts.extrabold, fontSize: 11, color: ACCENT, letterSpacing: 2 },
-  nowPlacingItem: { fontFamily: fonts.extrabold, fontSize: 24, color: colors.white },
-  nowPlacingHint: { fontFamily: fonts.regular, fontSize: 13, color: colors.gray400 },
-  slotsHeader: { fontFamily: fonts.bold, fontSize: 14, color: colors.gray400, marginTop: 4 },
-  slot: {
-    flexDirection: "row", alignItems: "center", gap: 12, backgroundColor: colors.surface,
-    borderRadius: 12, borderWidth: 1, borderColor: colors.surfaceLight, paddingHorizontal: 14, paddingVertical: 14,
+  ruleEmoji: { fontSize: 20 },
+  ruleText: { flex: 1, fontFamily: fonts.medium, fontSize: 14, lineHeight: 20, color: colors.white },
+
+  // Waiting note (footer)
+  waiting: {
+    minHeight: 56,
+    borderRadius: radii.pill,
+    backgroundColor: colors.surface,
+    borderWidth: 1,
+    borderColor: colors.cardBorder,
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "center",
+    gap: 10,
+    paddingHorizontal: 20,
   },
-  slotFilled: { borderColor: colors.surfaceLight, backgroundColor: colors.surface },
-  slotOpen: { borderColor: ACCENT + "66", borderStyle: "dashed" },
-  slotRank: { fontFamily: fonts.bold, fontSize: 14, color: colors.gray500, width: 30 },
-  slotRankFilled: { color: colors.gray400 },
-  slotItemText: { flex: 1, fontFamily: fonts.semibold, fontSize: 15, color: colors.white },
-  slotEmpty: { flex: 1, fontFamily: fonts.regular, fontSize: 14, color: colors.gray500 },
+  waitingText: { flexShrink: 1, fontFamily: fonts.semibold, fontSize: 15, color: colors.gray300 },
+
+  // Setup: category grid
+  catGrid: { flexDirection: "row", flexWrap: "wrap", gap: 10 },
+  catTileWrap: { width: "31%" },
+  catCard: { padding: 12, alignItems: "center", gap: 8, minHeight: 112 },
+  catEmojiTile: {
+    width: 44,
+    height: 44,
+    borderRadius: radii.md,
+    backgroundColor: colors.highlightSoft,
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  catEmoji: { fontSize: 22, color: colors.highlight },
+  catLabel: { fontFamily: fonts.semibold, fontSize: 12, lineHeight: 16, color: colors.white, textAlign: "center" },
+  catItemCount: { fontFamily: fonts.medium, fontSize: 10, color: colors.gray500 },
+
+  // Setup: size / rounds options
+  optionRow: { flexDirection: "row", gap: spacing.md },
+  optionWrap: { flex: 1 },
+  optionCard: { alignItems: "center", paddingVertical: 22, gap: 4 },
+  optionNum: { fontFamily: fonts.extrabold, fontSize: 40, color: colors.white, fontVariant: ["tabular-nums"] },
+  textLink: { alignSelf: "center", paddingVertical: spacing.sm },
+  textLinkText: { fontFamily: fonts.semibold, fontSize: 14, color: colors.highlight },
+
+  // Custom editor
+  field: { gap: spacing.sm },
+  fieldLabelRow: { flexDirection: "row", alignItems: "center", justifyContent: "space-between" },
+  input: {
+    backgroundColor: colors.surface,
+    borderWidth: 1,
+    borderColor: colors.cardBorder,
+    borderRadius: radii.lg,
+    paddingHorizontal: 16,
+    paddingVertical: 14,
+    fontSize: 15,
+    color: colors.white,
+    fontFamily: fonts.medium,
+  },
+  inputMultiline: { height: 180, textAlignVertical: "top" },
+  editorCount: { fontFamily: fonts.semibold, fontSize: 12, color: colors.highlight },
+
+  // Playing: progress
+  progressBlock: { gap: spacing.sm },
+  progressHead: { flexDirection: "row", alignItems: "flex-end", justifyContent: "space-between" },
+  progressNum: {
+    fontFamily: fonts.extrabold,
+    fontSize: 64,
+    lineHeight: 68,
+    letterSpacing: -2,
+    color: colors.white,
+    fontVariant: ["tabular-nums"],
+  },
+  progressDen: { fontSize: 28, color: colors.gray500, letterSpacing: 0 },
+  progressMeta: { ...type.eyebrow, marginBottom: 12 },
+  progressTrack: {
+    alignSelf: "stretch",
+    height: 6,
+    borderRadius: radii.pill,
+    backgroundColor: colors.surfaceLight,
+    overflow: "hidden",
+  },
+  progressFill: { height: "100%", borderRadius: radii.pill },
+
+  // Playing: now placing
+  nowPlacing: { padding: 22, gap: 6 },
+  nowPlacingItem: { fontFamily: fonts.extrabold, fontSize: 28, lineHeight: 34, color: colors.onPrimary },
+  nowPlacingHint: { fontFamily: fonts.medium, fontSize: 13, color: "rgba(14,12,26,0.65)" },
+
+  // Playing: slots
+  slotRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: spacing.md,
+    paddingVertical: 12,
+    paddingHorizontal: spacing.lg,
+  },
+  slotDim: { opacity: 0.55 },
+  numTile: {
+    width: 36,
+    height: 36,
+    borderRadius: radii.sm,
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  numTileOn: { backgroundColor: colors.highlight },
+  numTileOpen: {
+    borderWidth: 1.5,
+    borderStyle: "dashed",
+    borderColor: "rgba(184,174,232,0.55)",
+    backgroundColor: colors.highlightSoft,
+  },
+  numTileMuted: { backgroundColor: colors.surfaceLight },
+  numTileHero: { backgroundColor: colors.onPrimary },
+  numTileText: { fontFamily: fonts.extrabold, fontSize: 16, color: colors.white },
+  numTileTextOn: { fontFamily: fonts.extrabold, fontSize: 16, color: colors.onPrimary },
+  numTileTextHero: { fontFamily: fonts.extrabold, fontSize: 16, color: colors.highlight },
+  slotItemText: { flex: 1, fontFamily: fonts.bold, fontSize: 16, color: colors.white },
+  slotEmpty: { flex: 1, fontFamily: fonts.medium, fontSize: 15, color: colors.gray400 },
+  slotTag: { flexDirection: "row", alignItems: "center", gap: 4 },
+  slotTagMuted: { fontFamily: fonts.bold, fontSize: 11, letterSpacing: 1.2, color: colors.gray500 },
+  slotTagText: { fontFamily: fonts.bold, fontSize: 12, letterSpacing: 1.2, color: colors.highlight },
 
   // Reveal
-  revealScroll: { flexGrow: 1, paddingHorizontal: 20, paddingTop: 24, paddingBottom: 40, gap: 16 },
-  revealTitle: { fontFamily: fonts.extrabold, fontSize: 24, color: colors.white },
-  revealCatLabel: { fontFamily: fonts.medium, fontSize: 14, color: colors.gray400 },
-  callout: {
-    backgroundColor: colors.surface, borderRadius: 12, borderWidth: 1, borderColor: colors.warning + "44",
-    padding: 14, gap: 4,
+  callout: { padding: spacing.lg, gap: spacing.sm },
+  calloutRow: { flexDirection: "row", alignItems: "center", gap: spacing.sm },
+  calloutNum: { width: 18, fontFamily: fonts.bold, fontSize: 13, color: colors.gray500 },
+  calloutItem: { flex: 1, fontFamily: fonts.semibold, fontSize: 15, color: colors.white },
+  calloutMeta: { fontFamily: fonts.medium, fontSize: 12, color: colors.gray400 },
+  compCard: { paddingVertical: spacing.md, paddingHorizontal: spacing.sm },
+  compHeaderRow: {
+    flexDirection: "row",
+    paddingBottom: 10,
+    borderBottomWidth: 1,
+    borderBottomColor: colors.cardBorder,
   },
-  calloutTitle: { fontFamily: fonts.extrabold, fontSize: 14, color: colors.warning },
-  calloutItem: { fontFamily: fonts.regular, fontSize: 13, color: colors.gray300 },
-  compTitle: { fontFamily: fonts.bold, fontSize: 14, color: colors.gray400, marginTop: 4 },
-  compHeaderRow: { flexDirection: "row", paddingBottom: 8, borderBottomWidth: 1, borderBottomColor: colors.surfaceLight },
-  compRankCol: { width: 32, alignItems: "center" },
-  compPlayerCol: { alignItems: "center" },
-  compHeaderText: { fontFamily: fonts.bold, fontSize: 12, color: colors.gray400 },
-  compDataRow: { flexDirection: "row", paddingVertical: 8 },
-  compDataRowAlt: { backgroundColor: colors.surface },
-  compRankNum: { fontFamily: fonts.bold, fontSize: 13, color: colors.gray500 },
-  compItemText: { fontFamily: fonts.regular, fontSize: 12, color: colors.white, textAlign: "center" },
+  compRankCol: { width: 40, alignItems: "center", justifyContent: "center" },
+  compPlayerCol: { alignItems: "center", justifyContent: "center", paddingHorizontal: 4 },
+  compHeaderText: { ...type.eyebrow, fontSize: 11 },
+  compDataRow: { flexDirection: "row", paddingVertical: 8, borderRadius: radii.sm },
+  compDataRowAlt: { backgroundColor: "rgba(255,255,255,0.03)" },
+  compRankTile: {
+    width: 24,
+    height: 24,
+    borderRadius: 7,
+    backgroundColor: colors.highlightSoft,
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  compRankNum: { fontFamily: fonts.bold, fontSize: 12, color: colors.highlight },
+  compItemText: { fontFamily: fonts.medium, fontSize: 13, color: colors.white, textAlign: "center" },
 
-  // Voting
-  voteScroll: { flexGrow: 1, paddingHorizontal: 20, paddingTop: 24, paddingBottom: 40, gap: 12 },
-  voteTitle: { fontFamily: fonts.extrabold, fontSize: 22, color: colors.white },
-  voteSub: { fontFamily: fonts.regular, fontSize: 14, color: colors.gray400 },
-  voteBtn: {
-    flexDirection: "row", alignItems: "center", justifyContent: "space-between",
-    backgroundColor: colors.surface, borderRadius: 12, borderWidth: 1, borderColor: colors.surfaceLight,
-    paddingHorizontal: 16, paddingVertical: 14,
+  // Voting / ranked rows
+  candidateRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: spacing.md,
+    paddingVertical: 14,
+    paddingHorizontal: spacing.lg,
   },
-  voteBtnText: { fontFamily: fonts.bold, fontSize: 16, color: colors.white },
-  voteProg: { fontFamily: fonts.medium, fontSize: 14, color: colors.gray400, textAlign: "center" },
-
-  // Vote results
-  voteResultScroll: { flexGrow: 1, paddingHorizontal: 20, paddingTop: 24, paddingBottom: 40, gap: 12 },
-  voteResultTitle: { fontFamily: fonts.extrabold, fontSize: 22, color: colors.white },
-  voteResultRow: {
-    flexDirection: "row", alignItems: "center", gap: 10, backgroundColor: colors.surface,
-    borderRadius: 12, paddingHorizontal: 14, paddingVertical: 12, borderWidth: 1, borderColor: colors.surfaceLight,
+  candidateName: { flex: 1, fontFamily: fonts.bold, fontSize: 17, color: colors.white },
+  voteTag: { flexDirection: "row", alignItems: "center", gap: 2 },
+  rankValue: { fontFamily: fonts.bold, fontSize: 15, color: colors.gray300, fontVariant: ["tabular-nums"] },
+  submittedIcon: {
+    width: 72,
+    height: 72,
+    borderRadius: 36,
+    backgroundColor: colors.highlightSoft,
+    alignItems: "center",
+    justifyContent: "center",
   },
-  voteResultRank: { fontFamily: fonts.bold, fontSize: 14, color: colors.gray500, width: 28 },
-  voteResultName: { flex: 1, fontFamily: fonts.semibold, fontSize: 15, color: colors.white },
-  voteResultVotes: { fontFamily: fonts.bold, fontSize: 14, color: colors.gray400 },
-  seriesHeader: { fontFamily: fonts.extrabold, fontSize: 11, color: colors.gray500, letterSpacing: 2, marginTop: 12 },
 
   // Game over
-  gameOverScroll: { flexGrow: 1, alignItems: "center", paddingHorizontal: 20, paddingTop: 40, paddingBottom: 40, gap: 12 },
-  gameOverTitle: { fontFamily: fonts.extrabold, fontSize: 32, color: colors.white },
-  gameOverScore: { fontFamily: fonts.medium, fontSize: 16, color: colors.gray400 },
-  standingRow: {
-    flexDirection: "row", alignItems: "center", gap: 10, backgroundColor: colors.surface,
-    borderRadius: 12, paddingHorizontal: 14, paddingVertical: 12, borderWidth: 1, borderColor: colors.surfaceLight, width: "100%",
-  },
-  standingRowMe: { borderColor: colors.primary },
-  standingRank: { fontFamily: fonts.bold, fontSize: 14, color: colors.gray500, width: 28 },
-  standingName: { flex: 1, fontFamily: fonts.semibold, fontSize: 15, color: colors.white },
-  standingScore: { fontFamily: fonts.bold, fontSize: 16, color: colors.white },
-
-  primaryBtn: {
-    flexDirection: "row", alignItems: "center", justifyContent: "center", gap: 8,
-    backgroundColor: colors.primary, borderRadius: 14, paddingVertical: 16, width: "100%",
-  },
-  primaryBtnText: { fontFamily: fonts.bold, fontSize: 16, color: colors.white },
-  secondaryBtn: { alignItems: "center", paddingVertical: 14, borderRadius: 14, borderWidth: 1, borderColor: colors.surfaceLight, width: "100%" },
-  secondaryBtnText: { fontFamily: fonts.bold, fontSize: 15, color: colors.gray400 },
+  winnerContent: { flexDirection: "row", alignItems: "center", gap: spacing.md, padding: 20 },
+  winnerName: { fontFamily: fonts.extrabold, fontSize: 24, color: colors.onPrimary },
+  winnerScore: { fontFamily: fonts.semibold, fontSize: 13, color: "rgba(14,12,26,0.65)" },
 });
