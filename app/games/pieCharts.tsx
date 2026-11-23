@@ -572,8 +572,10 @@ export default function PieChartsScreen() {
               <GradientCard radius={radii.lg} contentStyle={s.candidateRow}>
                 <PlayerAvatar username={p.username} size={40} />
                 <View style={[s.legendDot, { backgroundColor: colorFor(p.user_id) }]} />
-                <Text style={s.candidateName} numberOfLines={1}>{p.username}</Text>
-                {p.user_id === myId && <Pill tone="dark" label="You" />}
+                <View style={s.candidateNameWrap}>
+                  <Text style={s.candidateNameText} numberOfLines={1}>{p.username}</Text>
+                  {p.user_id === myId && <Pill tone="dark" label="You" style={s.youPill} />}
+                </View>
                 <VoteTag />
               </GradientCard>
             </Pressable>
@@ -975,7 +977,10 @@ const s = StyleSheet.create({
     paddingVertical: 14,
     paddingHorizontal: spacing.lg,
   },
-  candidateName: { flex: 1, fontFamily: fonts.bold, fontSize: 17, color: colors.white },
+  // Name + inline "YOU" pill: pill sits right after the name, vertically centred.
+  candidateNameWrap: { flex: 1, flexDirection: "row", alignItems: "center", gap: spacing.sm, minWidth: 0 },
+  candidateNameText: { flexShrink: 1, fontFamily: fonts.bold, fontSize: 17, color: colors.white },
+  youPill: { alignSelf: "center" },
   voteTag: { flexDirection: "row", alignItems: "center", gap: 2 },
   voteTagText: { fontFamily: fonts.bold, fontSize: 12, letterSpacing: 1.2, color: colors.highlight },
 

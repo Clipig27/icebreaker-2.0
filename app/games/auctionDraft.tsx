@@ -8,6 +8,7 @@ import {
   ScrollView,
   ActivityIndicator,
   KeyboardAvoidingView,
+  Keyboard,
   Platform,
 } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
@@ -129,6 +130,11 @@ export default function AuctionDraftScreen() {
   const [customDraft, setCustomDraft] = useState("");
   const [customItems, setCustomItems] = useState<string[]>([]);
   const [launching, setLaunching] = useState(false);
+  const customScrollRef = useRef<React.ComponentRef<typeof ScrollView>>(null);
+  const customItemInputRef = useRef<React.ComponentRef<typeof TextInput>>(null);
+  // Latest draft for the "+" handler (fires on press-in, before any re-render).
+  const customDraftRef = useRef("");
+  customDraftRef.current = customDraft;
 
   // Bidding (local)
   const [bidAmount, setBidAmount] = useState(1);
@@ -311,8 +317,11 @@ export default function AuctionDraftScreen() {
   const customCheck = validateCustomTheme(customBase, customItems, playerCount);
 
   const addCustomItems = useCallback(() => {
-    const lines = splitItemLines(customDraft);
+    const lines = splitItemLines(customDraftRef.current);
+    // Keep the keyboard up on the item field so the host can keep adding.
+    customItemInputRef.current?.focus();
     if (lines.length === 0) return;
+    customDraftRef.current = "";
     setCustomItems((prev) => {
       const seen = new Set(prev.map((s) => s.toLowerCase()));
       const next = [...prev];
@@ -324,7 +333,14 @@ export default function AuctionDraftScreen() {
       return next;
     });
     setCustomDraft("");
-  }, [customDraft]);
+  }, []);
+
+  // New chip added -> keep the newest chips + the input in view above the footer.
+  useEffect(() => {
+    if (!customOpen) return;
+    const t = setTimeout(() => customScrollRef.current?.scrollToEnd({ animated: true }), 50);
+    return () => clearTimeout(t);
+  }, [customItems.length, customOpen]);
 
   const beginAuction = useCallback(async () => {
     if (!selectedTheme || launching) return;
@@ -518,9 +534,10 @@ export default function AuctionDraftScreen() {
       return (
         <Shell
           keyboard
+          scrollRef={customScrollRef}
           footer={
             <View style={st.footerStack}>
-              <Text style={[st.footerMsg, canStart && st.footerMsgOk]} numberOfLines={2}>
+              <Text style={[st.footerMsg, st.footerMsgFixed, canStart && st.footerMsgOk]} numberOfLines={2}>
                 {countCheck.message ?? customCheck.message ?? `Ready: ${customCheck.items.length} items for ${playerCount} players.`}
               </Text>
               <PrimaryAction
@@ -561,8 +578,31 @@ export default function AuctionDraftScreen() {
                 {customItems.length}/{customCheck.needed || "—"}
               </Text>
             </View>
+            {/* Chips sit ABOVE the input so, with the keyboard up, they stay in the
+                visible scroll area instead of being pushed under the pinned footer. */}
+            <View style={st.chipWrap}>
+              {customItems.length === 0 ? (
+                <Text style={st.chipEmpty}>No items yet. Add them one at a time below.</Text>
+              ) : (
+                customItems.map((it) => (
+                  <Pressable
+                    key={it}
+                    onPress={() => setCustomItems((prev) => prev.filter((x) => x !== it))}
+                    accessibilityRole="button"
+                    accessibilityLabel={`Remove ${it}`}
+                    style={({ pressed }) => [st.chip, pressed && st.pressed]}
+                  >
+                    <Text style={st.chipText} numberOfLines={1}>
+                      {CUSTOM_ITEM_EMOJI} {it}
+                    </Text>
+                    <Ionicons name="close" size={13} color={colors.gray400} />
+                  </Pressable>
+                ))
+              )}
+            </View>
             <View style={st.addRow}>
               <TextInput
+                ref={customItemInputRef}
                 testID="ad-custom-item"
                 style={[st.input, st.flex1]}
                 placeholder="Add an item"
@@ -570,35 +610,31 @@ export default function AuctionDraftScreen() {
                 value={customDraft}
                 onChangeText={setCustomDraft}
                 onSubmitEditing={addCustomItems}
+                onFocus={() => setTimeout(() => customScrollRef.current?.scrollToEnd({ animated: true }), 250)}
                 submitBehavior="submit"
                 returnKeyType="done"
+                // Autocorrect/predictive commits can land after the "+" tap and
+                // swallow it (or re-fill the cleared field); plain entry is safer.
+                autoCorrect={false}
+                spellCheck={false}
+                autoComplete="off"
                 maxLength={40}
               />
               <Pressable
                 testID="ad-custom-add"
                 accessibilityRole="button"
                 accessibilityLabel="Add item"
+                // Fire on touch-down: can't be cancelled by a keyboard/layout shift
+                // mid-press, so the first tap always adds.
+                onPressIn={addCustomItems}
+                // Accessibility activation only calls onPress; after a press-in add
+                // the draft ref is already empty so this is a no-op.
                 onPress={addCustomItems}
+                hitSlop={8}
                 style={({ pressed }) => [st.addBtn, pressed && st.pressed]}
               >
                 <Ionicons name="add" size={24} color={colors.onLavender} />
               </Pressable>
-            </View>
-            <View style={st.chipWrap}>
-              {customItems.map((it) => (
-                <Pressable
-                  key={it}
-                  onPress={() => setCustomItems((prev) => prev.filter((x) => x !== it))}
-                  accessibilityRole="button"
-                  accessibilityLabel={`Remove ${it}`}
-                  style={({ pressed }) => [st.chip, pressed && st.pressed]}
-                >
-                  <Text style={st.chipText} numberOfLines={1}>
-                    {CUSTOM_ITEM_EMOJI} {it}
-                  </Text>
-                  <Ionicons name="close" size={13} color={colors.gray400} />
-                </Pressable>
-              ))}
             </View>
           </View>
           <TextLink label="Back to themes" onPress={() => setCustomOpen(false)} />
@@ -1330,22 +1366,45 @@ function Shell({
   children,
   footer,
   keyboard = false,
+  scrollRef,
 }: {
   children: React.ReactNode;
   footer?: React.ReactNode;
   keyboard?: boolean;
+  scrollRef?: React.RefObject<React.ComponentRef<typeof ScrollView> | null>;
 }) {
+  // While the keyboard is up the footer sits right on top of it, so the
+  // home-indicator inset padding is wasted space that hides scroll content.
+  const [kbVisible, setKbVisible] = useState(false);
+  useEffect(() => {
+    if (!keyboard) return;
+    const showEvt = Platform.OS === "ios" ? "keyboardWillShow" : "keyboardDidShow";
+    const hideEvt = Platform.OS === "ios" ? "keyboardWillHide" : "keyboardDidHide";
+    const a = Keyboard.addListener(showEvt, () => setKbVisible(true));
+    const b = Keyboard.addListener(hideEvt, () => setKbVisible(false));
+    return () => {
+      a.remove();
+      b.remove();
+    };
+  }, [keyboard]);
+
   const body = (
     <>
       <ScrollView
+        ref={scrollRef}
         contentContainerStyle={[st.scroll, !footer && st.scrollNoFooter]}
         showsVerticalScrollIndicator={false}
         keyboardShouldPersistTaps="handled"
-        keyboardDismissMode="interactive"
+        // "interactive" lets the scroll view claim touches to track a keyboard
+        // drag, which can swallow the first tap on a button while the keyboard
+        // is up. Keyboard screens dismiss via tapping empty space instead.
+        keyboardDismissMode={keyboard ? "none" : "interactive"}
       >
         {children}
       </ScrollView>
-      {footer ? <PrimaryActionBar>{footer}</PrimaryActionBar> : null}
+      {footer ? (
+        <PrimaryActionBar style={keyboard && kbVisible ? st.footerKb : undefined}>{footer}</PrimaryActionBar>
+      ) : null}
     </>
   );
   return (
@@ -1515,6 +1574,10 @@ const st = StyleSheet.create({
     justifyContent: "center",
   },
   chipWrap: { flexDirection: "row", flexWrap: "wrap", gap: 6 },
+  chipEmpty: { fontFamily: fonts.medium, fontSize: 13, color: colors.gray500 },
+  footerKb: { paddingTop: spacing.sm, paddingBottom: spacing.sm },
+  // Reserve two lines so the Start button never jumps under a finger mid-tap.
+  footerMsgFixed: { minHeight: 36, textAlignVertical: "center" },
   chip: {
     flexDirection: "row",
     alignItems: "center",

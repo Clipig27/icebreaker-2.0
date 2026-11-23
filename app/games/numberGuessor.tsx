@@ -95,6 +95,7 @@ export default function NumberGuessorScreen() {
   const insets = useSafeAreaInsets();
   const { room, players, isHost, mutateGameState, startGame } = useRoomStore();
   const { user } = useAuthStore();
+  const myId = user?.id ?? "";
 
   const gs: GameState | null = room?.game_state ?? null;
   const rawPhase = gs?.phase ?? "starting";

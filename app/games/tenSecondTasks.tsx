@@ -120,7 +120,7 @@ function useCountdown(timerEnd: number | null): number {
 // Task List Component (reused in countdown + active)
 // ---------------------------------------------------------------------------
 
-function TaskStack({ stack, large }: { stack: StackItem[]; large?: boolean }) {
+function TaskStack({ stack, large, isPerformer = false }: { stack: StackItem[]; large?: boolean; isPerformer?: boolean }) {
   return (
     <View style={st.list}>
       {stack.map((item, i) => {
@@ -134,7 +134,7 @@ function TaskStack({ stack, large }: { stack: StackItem[]; large?: boolean }) {
                   <View style={[st.numTile, st.numTileHero]}>
                     <Text style={[st.numTileText, st.numTileTextHero]}>{i + 1}</Text>
                   </View>
-                  <Eyebrow tone="dark">{stack.length > 1 ? "New task" : "Your task"}</Eyebrow>
+                  <Eyebrow tone="dark">{stack.length > 1 ? "New task" : isPerformer ? "Your task" : "Task"}</Eyebrow>
                 </View>
                 <Text style={[st.taskHeroText, large && st.taskHeroTextLg]}>{item.text}</Text>
               </View>
@@ -170,7 +170,15 @@ export default function TenSecondTasksScreen() {
   const secondsLeft = useCountdown(gs?.timerEnd ?? null);
   const isTimerExpired = gs?.timerEnd ? Date.now() >= gs.timerEnd : false;
 
-  const isHolder = gs?.currentHolderId === myId;
+  // Strict performer check: only when we know who we are, a holder is actually
+  // assigned, and it's a phase where a performer exists. Prevents the performer
+  // UI ("You're on!" / "Your task") from flashing for anyone else during turn
+  // transitions or before auth/holder state is populated.
+  const isHolder =
+    !!myId &&
+    !!gs?.currentHolderId &&
+    gs.currentHolderId === myId &&
+    (phase === "countdown" || phase === "active" || phase === "judging" || phase === "resolve");
   const isEliminated = (gs?.eliminatedPlayerIds ?? []).includes(myId);
 
   const playerMap: Record<string, string> = {};
@@ -444,8 +452,8 @@ export default function TenSecondTasksScreen() {
           label="Starting in"
           progress={gs.timerDuration > 0 ? (countdownLeft * 1000) / gs.timerDuration : 0}
         />
-        <Eyebrow style={st.sectionEyebrow}>Tasks to complete</Eyebrow>
-        <TaskStack stack={gs.stack} large />
+        <Eyebrow style={st.sectionEyebrow}>{isHolder ? "Tasks to complete" : `${holderName}'s tasks`}</Eyebrow>
+        <TaskStack stack={gs.stack} large isPerformer={isHolder} />
       </Shell>
     );
   }
@@ -465,7 +473,7 @@ export default function TenSecondTasksScreen() {
           />
           <Countdown value={secondsLeft} label="Seconds left" progress={progress} urgent={urgent} />
           <Eyebrow style={st.sectionEyebrow}>Your tasks</Eyebrow>
-          <TaskStack stack={gs.stack} large />
+          <TaskStack stack={gs.stack} large isPerformer />
         </Shell>
       );
     }

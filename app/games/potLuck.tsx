@@ -49,6 +49,10 @@ type GameState = {
   // Turn order
   order: string[]; // userIds in seat order
   seatPtr: number; // index into order for current turn
+  // Monotonic turn counter: bumped on EVERY turn change (incl. same-seat turns
+  // and new questions). Timers and answer/skip writes are keyed on it so a
+  // stale timer can never act on a newer turn.
+  turnSeq?: number;
   // Question
   currentQuestion: PotLuckQuestion | null;
   usedQuestionIds: string[];
@@ -77,6 +81,9 @@ type GameState = {
 // ---------------------------------------------------------------------------
 
 const TIMER_SECONDS = 15;
+// Host backup auto-skip fires this long after its own local turn timer, so an
+// answer the player submitted right at the buzzer always reaches the server first.
+const HOST_GRACE_MS = 3000;
 const DEFAULT_TARGET = 10;
 const DEFAULT_POT_CAP = 7;
 
@@ -154,6 +161,7 @@ export default function PotLuckScreen() {
       game: "potLuck",
       order,
       seatPtr: 0,
+      turnSeq: 0,
       currentQuestion: question,
       usedQuestionIds: question ? [question.id] : [],
       pot: question?.startingPot ?? 1,
@@ -217,149 +225,225 @@ export default function PotLuckScreen() {
     ]).start(() => setDeltaText(null));
   }, [gs?.lastResult]);
 
-  // Reset actionSent when turn changes
   // -----------------------------------------------------------------------
+  // Turn identity. Every turn change bumps gs.turnSeq; seatPtr/phase are
+  // folded in so pre-turnSeq states still reset per turn.
+  // -----------------------------------------------------------------------
+  const turnSeq = gs?.turnSeq ?? 0;
+  const turnKey = `${phase}:${turnSeq}:${gs?.seatPtr ?? 0}`;
+
+  // actionSentRef mirrors actionSent synchronously so the buzzer timer can't
+  // auto-skip in the same tick that the player tapped an answer.
+  const actionSentRef = useRef(false);
+  const markActionSent = (v: boolean) => {
+    actionSentRef.current = v;
+    setActionSent(v);
+  };
+
+  // Reset per-turn local state when the turn changes
   useEffect(() => {
-    setActionSent(false);
-  }, [gs?.seatPtr, gs?.phase]);
+    markActionSent(false);
+  }, [turnKey]);
 
   // -----------------------------------------------------------------------
-  // Timer for live phase
+  // Handlers (answer/skip writes are guarded on the exact turn they were made for)
+  // -----------------------------------------------------------------------
+
+  const submitTurn = useCallback(
+    async (seq: number, patch: Partial<GameState>) => {
+      const ok = await mutateGameState((cur: GameState | null) => {
+        if (!cur || cur.phase !== "live") return null;
+        if ((cur.turnSeq ?? 0) !== seq) return null; // turn already moved on
+        if (cur.order[cur.seatPtr] !== myId) return null;
+        if (cur.turnAction || cur.turnSkip) return null; // first write wins
+        return { ...cur, ...patch };
+      });
+      if (!ok) {
+        // Write rejected or failed. If it's still this exact turn and nothing has
+        // been recorded, unlock so the player can try again.
+        const cur = useRoomStore.getState().room?.game_state as GameState | null;
+        if (
+          cur?.phase === "live" &&
+          (cur.turnSeq ?? 0) === seq &&
+          cur.order?.[cur.seatPtr] === myId &&
+          !cur.turnAction &&
+          !cur.turnSkip
+        ) {
+          markActionSent(false);
+        }
+      }
+    },
+    [mutateGameState, myId],
+  );
+
+  const handleAnswer = useCallback(
+    (choiceIdx: number) => {
+      if (!isMyTurn || actionSentRef.current) return;
+      markActionSent(true);
+      submitTurn(turnSeq, { turnAction: { playerId: myId, choiceIdx } });
+    },
+    [isMyTurn, turnSeq, myId, submitTurn],
+  );
+
+  const handleSkip = useCallback(() => {
+    if (!isMyTurn || actionSentRef.current) return;
+    markActionSent(true);
+    submitTurn(turnSeq, { turnSkip: myId });
+  }, [isMyTurn, turnSeq, myId, submitTurn]);
+
+  // Latest skip handler for the timer callback (avoids stale closures).
+  const skipRef = useRef(handleSkip);
+  skipRef.current = handleSkip;
+
+  // -----------------------------------------------------------------------
+  // Turn timer (local display + the active player's own auto-skip).
+  // Keyed on turnKey and driven entirely from inside the interval, so the
+  // auto-skip can only fire for the turn the timer was started for. (Previously
+  // a separate effect watched `timeLeft === 0`; that 0 lingered from the prior
+  // turn and instantly skipped the next player the moment their turn began.)
   // -----------------------------------------------------------------------
   useEffect(() => {
-    if (phase !== "live") {
-      if (timerRef.current) clearInterval(timerRef.current);
-      return;
-    }
+    if (timerRef.current) clearInterval(timerRef.current);
+    if (phase !== "live") return;
     setTimeLeft(TIMER_SECONDS);
-    let remaining = TIMER_SECONDS;
+    const startedAt = Date.now();
+    let fired = false;
     timerRef.current = setInterval(() => {
-      remaining -= 1;
-      if (remaining <= 0) {
-        if (timerRef.current) clearInterval(timerRef.current);
-        setTimeLeft(0);
-        return;
-      }
+      const remaining = Math.max(0, TIMER_SECONDS - Math.floor((Date.now() - startedAt) / 1000));
       setTimeLeft(remaining);
-    }, 1000);
+      if (remaining <= 0 && !fired) {
+        fired = true;
+        if (timerRef.current) clearInterval(timerRef.current);
+        if (!actionSentRef.current) skipRef.current();
+      }
+    }, 250);
     return () => {
       if (timerRef.current) clearInterval(timerRef.current);
     };
-  }, [phase, gs?.seatPtr]);
-
-  // Auto-skip when timer expires (only the active player)
-  useEffect(() => {
-    if (timeLeft === 0 && isMyTurn && !actionSent) {
-      handleSkip();
-    }
-  }, [timeLeft, isMyTurn, actionSent]);
+  }, [turnKey]);
 
   // -----------------------------------------------------------------------
-  // Host: process turn actions
+  // Host backup timeout: if the active player disconnects, the host skips for
+  // them a little after the turn window. Guarded on turnSeq + no recorded
+  // action, so a submitted answer always wins the race.
   // -----------------------------------------------------------------------
   useEffect(() => {
     if (!isHost || phase !== "live" || !gs) return;
+    const seq = turnSeq;
+    const t = setTimeout(() => {
+      mutateGameState((cur: GameState | null) => {
+        if (!cur || cur.phase !== "live") return null;
+        if ((cur.turnSeq ?? 0) !== seq) return null;
+        if (cur.turnAction || cur.turnSkip) return null;
+        const pid = cur.order[cur.seatPtr];
+        if (!pid) return null;
+        return { ...cur, turnSkip: pid };
+      });
+    }, TIMER_SECONDS * 1000 + HOST_GRACE_MS);
+    return () => clearTimeout(t);
+  }, [isHost, turnKey]);
 
-    // Handle answer
-    if (gs.turnAction) {
-      const { playerId, choiceIdx } = gs.turnAction;
-      const q = gs.currentQuestion;
-      if (!q) return;
+  // -----------------------------------------------------------------------
+  // Host: process turn actions. All math is done from the fresh server state
+  // inside the CAS mutator (never from this render's snapshot).
+  // -----------------------------------------------------------------------
+  useEffect(() => {
+    if (!isHost || phase !== "live" || !gs) return;
+    if (!gs.turnAction && !gs.turnSkip) return;
 
-      const isCorrect = choiceIdx === q.correctIndex;
-      const pot = gs.pot;
-      const currentScore = gs.scores[playerId] ?? 0;
-      const delta = isCorrect ? pot : -Math.min(pot, currentScore);
-      const newScore = Math.max(0, currentScore + delta);
-      const newScores = { ...gs.scores, [playerId]: newScore };
-      const correctAnswer = q.choices[q.correctIndex];
+    mutateGameState((cur: GameState | null) => {
+      if (!cur || cur.phase !== "live") return null;
+      const nextSeq = (cur.turnSeq ?? 0) + 1;
 
-      const result: LastResult = {
-        playerId,
-        kind: isCorrect ? "correct" : "wrong",
-        delta,
-        total: newScore,
-        potAt: pot,
-      };
-
-      if (isCorrect) {
-        // Correct: win pot, check for game win, go to reveal
-        const winner = newScore >= gs.target ? playerId : null;
-        mutateGameState((cur) => {
-          if (!cur || cur.phase !== "live" || !cur.turnAction) return null;
+      // Handle answer
+      if (cur.turnAction) {
+        const { playerId, choiceIdx } = cur.turnAction;
+        const q = cur.currentQuestion;
+        if (!q) return null;
+        const isCorrect = choiceIdx === q.correctIndex;
+        const pot = cur.pot;
+        const currentScore = cur.scores[playerId] ?? 0;
+        const delta = isCorrect ? pot : -Math.min(pot, currentScore);
+        const newScore = Math.max(0, currentScore + delta);
+        const result: LastResult = {
+          playerId,
+          kind: isCorrect ? "correct" : "wrong",
+          delta,
+          total: newScore,
+          potAt: pot,
+        };
+        const base = {
+          ...cur,
+          scores: { ...cur.scores, [playerId]: newScore },
+          turnAction: null,
+          turnSkip: null,
+          lastResult: result,
+          consecutiveSkips: 0,
+          turnSeq: nextSeq,
+        };
+        if (isCorrect) {
+          // Correct: win pot, check for game win, go to reveal
+          const winner = newScore >= cur.target ? playerId : null;
           return {
-            ...cur,
+            ...base,
             phase: winner ? ("gameover" as Phase) : ("reveal" as Phase),
-            scores: newScores,
-            turnAction: null,
-            lastResult: result,
-            revealInfo: { answer: correctAnswer, scored: true, by: playerMap[playerId]?.username ?? "Player" },
+            revealInfo: {
+              answer: q.choices[q.correctIndex],
+              scored: true,
+              by: playerMap[playerId]?.username ?? "Player",
+            },
             winnerId: winner,
-            consecutiveSkips: 0,
           };
-        });
-      } else {
+        }
         // Wrong: lose pot value, pot grows, pass to next player (stay in live)
-        const newPot = Math.min(pot + 1, gs.potCap);
-        const nextSeat = (gs.seatPtr + 1) % gs.order.length;
-        mutateGameState((cur) => {
-          if (!cur || cur.phase !== "live" || !cur.turnAction) return null;
-          return {
-            ...cur,
-            scores: newScores,
-            turnAction: null,
-            lastResult: result,
-            pot: newPot,
-            seatPtr: nextSeat,
-            consecutiveSkips: 0,
-          };
-        });
+        return {
+          ...base,
+          pot: Math.min(pot + 1, cur.potCap),
+          seatPtr: (cur.seatPtr + 1) % cur.order.length,
+        };
       }
-    }
 
-    // Handle skip
-    if (gs.turnSkip) {
-      const playerId = gs.turnSkip;
-      const newPot = Math.min(gs.pot + 1, gs.potCap);
-      const nextSeat = (gs.seatPtr + 1) % gs.order.length;
-      const newConsecutive = gs.consecutiveSkips + 1;
-
-      const result: LastResult = {
-        playerId,
-        kind: "skip",
-        delta: 0,
-        total: gs.scores[playerId] ?? 0,
-        potAt: gs.pot,
-      };
-
-      // If everyone skipped, void the pot and go to next question
-      if (newConsecutive >= gs.order.length) {
-        const q = pickQuestion(gs.usedQuestionIds);
-        mutateGameState((cur) => {
-          if (!cur || cur.phase !== "live" || !cur.turnSkip) return null;
+      // Handle skip
+      if (cur.turnSkip) {
+        const playerId = cur.turnSkip;
+        const newConsecutive = cur.consecutiveSkips + 1;
+        const result: LastResult = {
+          playerId,
+          kind: "skip",
+          delta: 0,
+          total: cur.scores[playerId] ?? 0,
+          potAt: cur.pot,
+        };
+        // If everyone skipped in a row, void the pot
+        if (newConsecutive >= cur.order.length) {
           return {
             ...cur,
             phase: "reveal" as Phase,
             turnSkip: null,
+            turnAction: null,
             lastResult: result,
             consecutiveSkips: 0,
-            revealInfo: { answer: cur.currentQuestion?.choices[cur.currentQuestion.correctIndex] ?? "", scored: false, by: "" },
+            turnSeq: nextSeq,
+            revealInfo: {
+              answer: cur.currentQuestion?.choices[cur.currentQuestion.correctIndex] ?? "",
+              scored: false,
+              by: "",
+            },
           };
-        });
-      } else {
-        mutateGameState((cur) => {
-          if (!cur || cur.phase !== "live" || !cur.turnSkip) return null;
-          return {
-            ...cur,
-            seatPtr: nextSeat,
-            pot: newPot,
-            consecutiveSkips: newConsecutive,
-            turnSkip: null,
-            lastResult: result,
-          };
-        });
+        }
+        return {
+          ...cur,
+          seatPtr: (cur.seatPtr + 1) % cur.order.length,
+          pot: Math.min(cur.pot + 1, cur.potCap),
+          consecutiveSkips: newConsecutive,
+          turnSkip: null,
+          turnAction: null,
+          lastResult: result,
+          turnSeq: nextSeq,
+        };
       }
-    }
+      return null;
+    });
   }, [gs?.turnAction, gs?.turnSkip, phase, isHost]);
 
   // -----------------------------------------------------------------------
@@ -377,32 +461,6 @@ export default function PotLuckScreen() {
   const orderLen = (gs?.order ?? []).length;
   const turnsAway = mySeat === -1 ? -1 : (mySeat - curSeat + orderLen) % orderLen;
 
-  // -----------------------------------------------------------------------
-  // Handlers
-  // -----------------------------------------------------------------------
-
-  const handleAnswer = useCallback(async (choiceIdx: number) => {
-    if (!isMyTurn || actionSent || !gs) return;
-    setActionSent(true);
-    await mutateGameState((cur) => {
-      if (!cur || cur.phase !== "live") return null;
-      if (cur.order[cur.seatPtr] !== myId) return null;
-      if (cur.turnAction || cur.turnSkip) return null;
-      return { ...cur, turnAction: { playerId: myId, choiceIdx } };
-    });
-  }, [isMyTurn, actionSent, gs, myId, mutateGameState]);
-
-  const handleSkip = useCallback(async () => {
-    if (!isMyTurn || actionSent || !gs) return;
-    setActionSent(true);
-    await mutateGameState((cur) => {
-      if (!cur || cur.phase !== "live") return null;
-      if (cur.order[cur.seatPtr] !== myId) return null;
-      if (cur.turnAction || cur.turnSkip) return null;
-      return { ...cur, turnSkip: myId };
-    });
-  }, [isMyTurn, actionSent, gs, myId, mutateGameState]);
-
   // Host: start from intro
   const startFromIntro = useCallback(async () => {
     await mutateGameState((cur) => {
@@ -413,7 +471,7 @@ export default function PotLuckScreen() {
     setTimeout(async () => {
       await mutateGameState((cur) => {
         if (!cur || cur.phase !== "rolling") return null;
-        return { ...cur, phase: "live" as Phase };
+        return { ...cur, phase: "live" as Phase, turnSeq: (cur.turnSeq ?? 0) + 1 };
       });
     }, 3000);
   }, [mutateGameState]);
@@ -431,6 +489,7 @@ export default function PotLuckScreen() {
         usedQuestionIds: [...cur.usedQuestionIds, q.id],
         pot: q.startingPot,
         seatPtr: (cur.seatPtr + 1) % cur.order.length,
+        turnSeq: (cur.turnSeq ?? 0) + 1,
         consecutiveSkips: 0,
         turnAction: null,
         turnSkip: null,
