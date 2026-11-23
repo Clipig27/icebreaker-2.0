@@ -6,6 +6,9 @@
 // tested / simulated (see scripts/auctionDraftSim.ts).
 // ---------------------------------------------------------------------------
 
+import { BankItem } from "./bank/items";
+import { ThemeRecipe, THEME_RECIPES, chooseRecipe, drawRecipePool, getThemeRecipe, recentCapFor, themeEligible } from "./bank/recipes";
+
 /** Placeholder display name — rename here and it changes everywhere. */
 export const AUCTION_GAME_NAME = "Bid Wars";
 
@@ -41,230 +44,78 @@ export type AuctionThemeInfo = {
 
 export type AuctionTheme = AuctionThemeInfo & { items: AuctionItem[] };
 
-/** Short helper to build an item list with stable ids. */
-function items(prefix: string, list: [string, string][]): AuctionItem[] {
-  return list.map(([emoji, name], i) => ({ id: `${prefix}${i + 1}`, name, emoji }));
+// Built-in themes come from the recipe engine (src/data/bank/recipes.ts) over
+// the shared tagged item bank (src/data/bank/items.ts). Item ids are stable
+// slugs of the bank name, so no-repeat tracking survives app restarts.
+
+function toAuctionItem(it: BankItem): AuctionItem {
+  return { id: it.id, name: it.name, emoji: it.emoji };
 }
 
-export const AUCTION_THEMES: AuctionTheme[] = [
-  {
-    id: "burger",
-    name: "Burger",
-    emoji: "🍔",
-    baseName: "Bun",
-    baseEmoji: "🍔",
-    itemNoun: "topping",
-    finishedNoun: "burger",
-    items: items("bg", [
-      ["🥩", "Beef patty"],
-      ["🍗", "Fried chicken"],
-      ["🥬", "Lettuce"],
-      ["🍅", "Tomato"],
-      ["🧀", "Cheese"],
-      ["🥓", "Bacon"],
-      ["🧅", "Onion rings"],
-      ["🥒", "Pickles"],
-      ["🍳", "Fried egg"],
-      ["🥑", "Avocado"],
-      ["🌶️", "Jalapeños"],
-      ["🍄", "Mushrooms"],
-      ["🍍", "Grilled pineapple"],
-      ["🍖", "BBQ sauce"],
-      ["🥔", "Hash brown"],
-      ["🍤", "Fried shrimp"],
-      ["🐖", "Pulled pork"],
-      ["🥗", "Coleslaw"],
-      ["🧄", "Garlic aioli"],
-      ["🍝", "Mac & cheese"],
-    ]),
-  },
-  {
-    id: "hotdog",
-    name: "Hot Dog",
-    emoji: "🌭",
-    baseName: "Hot dog bun",
-    baseEmoji: "🌭",
-    itemNoun: "topping",
-    finishedNoun: "hot dog",
-    items: items("hd", [
-      ["🌭", "Classic frank"],
-      ["🍖", "Bratwurst"],
-      ["🌶️", "Chili"],
-      ["🧀", "Cheese sauce"],
-      ["💛", "Mustard"],
-      ["🍅", "Ketchup"],
-      ["🥒", "Relish"],
-      ["🥬", "Sauerkraut"],
-      ["🧅", "Grilled onions"],
-      ["🫑", "Jalapeños"],
-      ["🥓", "Bacon wrap"],
-      ["🥗", "Coleslaw"],
-      ["🥔", "Crushed chips"],
-      ["🍝", "Mac & cheese"],
-      ["🥑", "Avocado"],
-      ["🍍", "Pineapple salsa"],
-      ["🍳", "Fried egg"],
-      ["🔥", "Sriracha"],
-      ["🧄", "Crispy garlic"],
-      ["🍟", "Fries on top"],
-    ]),
-  },
-  {
-    id: "smoothie",
-    name: "Smoothie",
-    emoji: "🥤",
-    baseName: "Blender",
-    baseEmoji: "🥤",
-    itemNoun: "ingredient",
-    finishedNoun: "smoothie",
-    items: items("sm", [
-      ["🍌", "Banana"],
-      ["🍓", "Strawberries"],
-      ["🫐", "Blueberries"],
-      ["🥭", "Mango"],
-      ["🍍", "Pineapple"],
-      ["🥬", "Spinach"],
-      ["🥜", "Peanut butter"],
-      ["🥛", "Greek yogurt"],
-      ["🍯", "Honey"],
-      ["🥥", "Coconut milk"],
-      ["🧊", "Ice"],
-      ["💪", "Protein powder"],
-      ["🌱", "Chia seeds"],
-      ["🥑", "Avocado"],
-      ["🍫", "Cocoa"],
-      ["🥝", "Kiwi"],
-      ["🍉", "Watermelon"],
-      ["🫚", "Ginger"],
-      ["🍵", "Matcha"],
-      ["🍒", "Cherries"],
-    ]),
-  },
-  {
-    id: "cursed",
-    name: "Cursed Combo",
-    emoji: "🤢",
-    baseName: "Mystery bowl",
-    baseEmoji: "🥣",
-    itemNoun: "ingredient",
-    finishedNoun: "cursed dish",
-    items: items("cc", [
-      ["🐟", "Sardines"],
-      ["🪱", "Gummy worms"],
-      ["🥚", "Mayo"],
-      ["🍦", "Ketchup ice cream"],
-      ["🥒", "Pickle juice"],
-      ["☁️", "Marshmallow fluff"],
-      ["🥣", "Hot sauce cereal"],
-      ["🍝", "Cold spaghetti"],
-      ["🧀", "Stinky blue cheese"],
-      ["🥦", "Broccoli milkshake"],
-      ["🐠", "Tuna jam"],
-      ["🧅", "Raw onion"],
-      ["🍮", "Mustard pudding"],
-      ["🍭", "Cotton candy chili"],
-      ["🥤", "Sauerkraut soda"],
-      ["🧄", "Garlic gummies"],
-      ["🫒", "Olive juice"],
-      ["🟢", "Canned peas"],
-      ["🍫", "Chocolate pickle"],
-      ["🦑", "Squid jelly beans"],
-    ]),
-  },
-  {
-    id: "house",
-    name: "Dream House",
-    emoji: "🏡",
-    baseName: "Empty lot",
-    baseEmoji: "🏗️",
-    itemNoun: "feature",
-    finishedNoun: "house",
-    items: items("dh", [
-      ["🏊", "Infinity pool"],
-      ["🎬", "Home theater"],
-      ["🌳", "Treehouse"],
-      ["🎳", "Bowling alley"],
-      ["🚪", "Secret passage"],
-      ["🌻", "Rooftop garden"],
-      ["🎮", "Game room"],
-      ["🛝", "Indoor slide"],
-      ["📚", "Library"],
-      ["♨️", "Hot tub"],
-      ["🏀", "Basketball court"],
-      ["🎙️", "Recording studio"],
-      ["🐠", "Aquarium wall"],
-      ["🔭", "Observatory"],
-      ["🏋️", "Home gym"],
-      ["🔥", "Giant fireplace"],
-      ["🤖", "Robot butler"],
-      ["🍨", "Ice cream bar"],
-      ["🚁", "Helipad"],
-      ["🎢", "Backyard rollercoaster"],
-    ]),
-  },
-  {
-    id: "bedroom",
-    name: "Dream Bedroom",
-    emoji: "🛏️",
-    baseName: "Empty room",
-    baseEmoji: "🚪",
-    itemNoun: "upgrade",
-    finishedNoun: "bedroom",
-    items: items("br", [
-      ["🛏️", "King-size bed"],
-      ["🪢", "Hammock"],
-      ["💡", "LED lights"],
-      ["🎮", "Gaming setup"],
-      ["🧊", "Mini fridge"],
-      ["👗", "Walk-in closet"],
-      ["🫘", "Bean bag"],
-      ["📽️", "Projector"],
-      ["🐠", "Aquarium"],
-      ["📚", "Bookshelf"],
-      ["🪴", "Jungle of plants"],
-      ["✨", "Skylight"],
-      ["🚪", "Secret door"],
-      ["🎶", "Record player"],
-      ["💺", "Massage chair"],
-      ["🍿", "Snack drawer"],
-      ["🔭", "Telescope"],
-      ["🐈", "Pet cat"],
-      ["🛁", "Ensuite bathroom"],
-      ["🌅", "Balcony"],
-    ]),
-  },
-  {
-    id: "vacation",
-    name: "Dream Vacation",
-    emoji: "🏝️",
-    baseName: "Passport",
-    baseEmoji: "🛂",
-    itemNoun: "perk",
-    finishedNoun: "vacation",
-    items: items("dv", [
-      ["✈️", "Private jet"],
-      ["🏝️", "Beach villa"],
-      ["🛳️", "Cruise"],
-      ["🦁", "Safari"],
-      ["⛷️", "Ski chalet"],
-      ["🗼", "Paris"],
-      ["🗾", "Tokyo"],
-      ["🎈", "Hot air balloon"],
-      ["🤿", "Scuba diving"],
-      ["🌌", "Northern lights"],
-      ["🎢", "Theme park"],
-      ["🚗", "Road trip"],
-      ["⛺", "Glamping"],
-      ["💆", "Spa day"],
-      ["🍽️", "Five-star buffet"],
-      ["🛥️", "Yacht"],
-      ["🎫", "Concert tickets"],
-      ["🏔️", "Mountain hike"],
-      ["👨‍🍳", "Personal chef"],
-      ["🐬", "Swim with dolphins"],
-    ]),
-  },
-];
+const eligibleCache = new Map<string, AuctionItem[]>();
+
+function makeTheme(t: ThemeRecipe): AuctionTheme {
+  return {
+    id: t.id,
+    name: t.name,
+    emoji: t.emoji,
+    baseName: t.bases[0][0],
+    baseEmoji: t.bases[0][1],
+    itemNoun: t.itemNoun,
+    finishedNoun: t.finishedNoun,
+    /** Every item this theme (any variant) can deal; built lazily. */
+    get items(): AuctionItem[] {
+      let hit = eligibleCache.get(t.id);
+      if (!hit) eligibleCache.set(t.id, (hit = themeEligible(t).map(toAuctionItem)));
+      return hit;
+    },
+  };
+}
+
+export const AUCTION_THEMES: AuctionTheme[] = THEME_RECIPES.map(makeTheme);
+
+/** Device recent-list key (deck.ts) for a built-in theme. */
+export function auctionRecentKey(themeId: string): string {
+  return `bidwars:${themeId}`;
+}
+
+/** How many recently dealt ids to remember for a theme. */
+export function auctionRecentCap(themeId: string): number {
+  const t = getThemeRecipe(themeId);
+  return t ? recentCapFor(t) : 0;
+}
+
+/**
+ * Host: deal a coherent pool for a built-in theme. Picks the base recipe or
+ * one of its variants (e.g. "Breakfast Burger"), a base (e.g. "Pretzel bun")
+ * and exactly playerCount × itemsPerPlayer items, avoiding `recent` ids.
+ * The returned info keeps the parent theme id; its name is the variant title.
+ */
+export function drawThemePool(
+  themeId: string,
+  playerCount: number,
+  recent: readonly string[] = [],
+  rng: () => number = Math.random
+): { info: AuctionThemeInfo; pool: AuctionItem[]; recipeKey: string } {
+  const theme = getThemeRecipe(themeId);
+  if (!theme) throw new Error(`drawThemePool: unknown theme ${themeId}`);
+  const count = playerCount * itemsPerPlayerFor(playerCount);
+  const recipe = chooseRecipe(theme, rng);
+  const { base, picks } = drawRecipePool(recipe, count, rng, recent);
+  return {
+    info: {
+      id: theme.id,
+      name: recipe.name,
+      emoji: recipe.emoji,
+      baseName: base[0],
+      baseEmoji: base[1],
+      itemNoun: recipe.itemNoun,
+      finishedNoun: recipe.finishedNoun,
+    },
+    pool: picks.map((p) => toAuctionItem(p.item)),
+    recipeKey: recipe.key,
+  };
+}
 
 /** Metadata for the Custom tile (items/base supplied by the host). */
 export const CUSTOM_THEME_INFO: AuctionThemeInfo = {

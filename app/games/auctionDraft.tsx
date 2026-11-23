@@ -48,7 +48,10 @@ import {
   bidBounds,
   buildCustomTheme,
   createAuction,
+  auctionRecentCap,
+  auctionRecentKey,
   drawPool,
+  drawThemePool,
   itemsPerPlayerFor,
   markDeparted,
   nextItem,
@@ -60,6 +63,7 @@ import {
   validateCustomTheme,
   validatePlayerCount,
 } from "../../src/data/auctionDraft";
+import { getRecent, loadRecent, markUsed } from "../../src/utils/deck";
 
 // ---------------------------------------------------------------------------
 // Types
@@ -158,6 +162,12 @@ export default function AuctionDraftScreen() {
       return initialState();
     }).catch(warn);
   }, [isHost, room?.id]);
+
+  // Hydrate this device's recently-dealt item ids so pools don't repeat
+  useEffect(() => {
+    if (!isHost) return;
+    for (const t of AUCTION_THEMES) loadRecent(auctionRecentKey(t.id)).catch(() => {});
+  }, [isHost]);
 
   // Players who left mid-auction are skipped (treated as passed / sat out)
   useEffect(() => {
@@ -321,25 +331,29 @@ export default function AuctionDraftScreen() {
     const order = players.map((p) => p.user_id);
     const n = order.length;
     if (!validatePlayerCount(n).ok) return;
-    let theme: AuctionTheme | undefined;
-    if (selectedTheme === CUSTOM_THEME_ID) {
-      const check = validateCustomTheme(customBase, customItems, n);
-      if (!check.ok) return;
-      theme = buildCustomTheme(customBase, check.items);
-    } else {
-      theme = AUCTION_THEMES.find((t) => t.id === selectedTheme);
-    }
-    if (!theme) return;
     let auctionState: AuctionState;
+    let info: AuctionThemeInfo;
     try {
-      const pool = drawPool(theme.items, n * itemsPerPlayerFor(n));
-      auctionState = createAuction(order, pool, Date.now());
+      if (selectedTheme === CUSTOM_THEME_ID) {
+        const check = validateCustomTheme(customBase, customItems, n);
+        if (!check.ok) return;
+        const theme: AuctionTheme = buildCustomTheme(customBase, check.items);
+        auctionState = createAuction(order, drawPool(theme.items, n * itemsPerPlayerFor(n)), Date.now());
+        info = themeInfo(theme);
+      } else {
+        if (!AUCTION_THEMES.some((t) => t.id === selectedTheme)) return;
+        // Built-in theme: coherent pool from the recipe engine, avoiding this device's recent items
+        const key = auctionRecentKey(selectedTheme);
+        const drawn = drawThemePool(selectedTheme, n, getRecent(key));
+        auctionState = createAuction(order, drawn.pool, Date.now());
+        info = drawn.info;
+        markUsed(key, drawn.pool.map((it) => it.id), auctionRecentCap(selectedTheme));
+      }
     } catch (e) {
       warn(e);
       return;
     }
     const names = Object.fromEntries(players.map((p) => [p.user_id, p.username]));
-    const info = themeInfo(theme);
     setLaunching(true);
     await mutateGameState((cur: GameState) => {
       if (!cur || cur.phase !== "setup") return null;
@@ -1460,7 +1474,7 @@ const st = StyleSheet.create({
   // Setup grid
   catGrid: { flexDirection: "row", flexWrap: "wrap", gap: 10 },
   catTileWrap: { width: "31%" },
-  catCard: { padding: 10, alignItems: "center", gap: 6, minHeight: 112 },
+  catCard: { padding: 8, alignItems: "center", gap: 4, minHeight: 100 },
   catEmojiTile: {
     width: 44,
     height: 44,
