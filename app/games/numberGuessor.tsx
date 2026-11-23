@@ -568,7 +568,7 @@ export default function NumberGuessorScreen() {
       <KeyboardAvoidingView
         style={styles.keyboardAvoid}
         behavior={Platform.OS === "ios" ? "padding" : undefined}
-        keyboardVerticalOffset={Platform.OS === "ios" ? insets.top : 0}
+        keyboardVerticalOffset={0}
       >
         <Animated.View
           style={[styles.guessBody, { opacity: fadeAnim, transform: [{ scale: scaleAnim }] }]}
@@ -594,8 +594,9 @@ export default function NumberGuessorScreen() {
             </Eyebrow>
             <Text
               style={[styles.questionText, styles.questionTextShrink]}
+              numberOfLines={4}
               adjustsFontSizeToFit
-              minimumFontScale={0.6}
+              minimumFontScale={0.7}
             >
               {prompt.text}
             </Text>
@@ -1058,12 +1059,12 @@ const styles = StyleSheet.create({
     paddingHorizontal: spacing.screen,
     paddingTop: spacing.lg,
     paddingBottom: spacing.sm,
-    gap: spacing.lg,
+    gap: spacing.md,
   },
   questionHero: {
-    flexShrink: 1,
+    flexShrink: 0,
     borderRadius: radii.xl,
-    padding: 22,
+    padding: 18,
     gap: spacing.sm,
     overflow: "hidden",
   },
@@ -1080,8 +1081,8 @@ const styles = StyleSheet.create({
   timerHead: { flexDirection: "row", alignItems: "flex-end", justifyContent: "space-between" },
   timerNum: {
     fontFamily: fonts.extrabold,
-    fontSize: 72,
-    lineHeight: 76,
+    fontSize: 60,
+    lineHeight: 64,
     letterSpacing: -3,
     color: colors.white,
     fontVariant: ["tabular-nums"],
@@ -1102,7 +1103,7 @@ const styles = StyleSheet.create({
   progressFill: { height: "100%", borderRadius: radii.pill, overflow: "hidden" },
   guessInput: {
     alignSelf: "stretch",
-    minHeight: 84,
+    minHeight: 72,
     backgroundColor: colors.surface,
     borderRadius: radii.xl,
     borderWidth: 1,
