@@ -22,6 +22,7 @@ import { NUMBER_GUESSOR_PROMPTS } from "../../src/data/numberGuessor";
 import { competitionRanks, joinNames, ordinal } from "../../src/utils/rank";
 import HostWaitingPill from "../../src/components/HostWaitingPill";
 import GameHeader from "../../src/components/GameHeader";
+import GameLoadingScreen from "../../src/components/GameLoadingScreen";
 
 // ---------------------------------------------------------------------------
 // Types
@@ -82,7 +83,7 @@ function formatPenalty(p: number): string {
 export default function NumberGuessorScreen() {
   const router = useRouter();
   const insets = useSafeAreaInsets();
-  const { room, players, isHost, mutateGameState } = useRoomStore();
+  const { room, players, isHost, mutateGameState, startGame } = useRoomStore();
   const { user } = useAuthStore();
 
   const gs: GameState | null = room?.game_state ?? null;
@@ -110,6 +111,21 @@ export default function NumberGuessorScreen() {
   // Navigate back to the lobby when the room returns to lobby (host + players).
   // Single place that leaves the game screen; fires once.
   // -------------------------------------------------------------------------
+  // Track wins/games played
+  const trackedGameRef = useRef(false);
+  useEffect(() => {
+    if (trackedGameRef.current || phase !== "game-over" || !gs) return;
+    trackedGameRef.current = true;
+    useAuthStore.getState().incrementGamesPlayed();
+    // Winner = lowest penalty
+    const entries = Object.entries(gs.penalties ?? {});
+    if (entries.length > 0) {
+      const minPenalty = Math.min(...entries.map(([, p]) => p as number));
+      const winners = entries.filter(([, p]) => p === minPenalty).map(([uid]) => uid);
+      if (winners.includes(myId)) useAuthStore.getState().incrementWins();
+    }
+  }, [phase]);
+
   const navigatedBackRef = useRef(false);
   useEffect(() => {
     if (navigatedBackRef.current) return;
@@ -234,7 +250,7 @@ export default function NumberGuessorScreen() {
   // Actions
   // -------------------------------------------------------------------------
 
-  const startGame = useCallback(async () => {
+  const beginGame = useCallback(async () => {
     const shuffled = shuffleArray(NUMBER_GUESSOR_PROMPTS);
     const selected = shuffled.slice(0, selectedRounds);
     const firstPrompt = selected[0];
@@ -514,7 +530,7 @@ export default function NumberGuessorScreen() {
               </TouchableOpacity>
             ))}
           </View>
-          <TouchableOpacity style={styles.primaryButton} onPress={startGame}>
+          <TouchableOpacity style={styles.primaryButton} onPress={beginGame}>
             <Ionicons name="play" size={20} color={colors.white} />
             <Text style={styles.primaryButtonText}>Start Game</Text>
           </TouchableOpacity>
@@ -852,10 +868,15 @@ export default function NumberGuessorScreen() {
         />
 
         {isHost && (
-          <TouchableOpacity style={styles.primaryButton} onPress={backToLobby}>
-            <Ionicons name="arrow-back" size={18} color={colors.white} />
-            <Text style={styles.primaryButtonText}>Back to Lobby</Text>
-          </TouchableOpacity>
+          <View style={{ gap: 10, width: "100%" }}>
+            <TouchableOpacity style={styles.primaryButton} onPress={() => startGame("numberGuessor")}>
+              <Ionicons name="refresh" size={18} color={colors.white} />
+              <Text style={styles.primaryButtonText}>Play Again</Text>
+            </TouchableOpacity>
+            <TouchableOpacity style={styles.secondaryButton} onPress={backToLobby}>
+              <Text style={styles.secondaryButtonText}>Back to Lobby</Text>
+            </TouchableOpacity>
+          </View>
         )}
 
         {!isHost && <HostWaitingPill />}
@@ -866,6 +887,10 @@ export default function NumberGuessorScreen() {
   // -------------------------------------------------------------------------
   // Main render
   // -------------------------------------------------------------------------
+
+  if (!gs || !phase || (phase as string) === "starting") {
+    return <GameLoadingScreen name="1 to 100" icon="calculator" color="#06B6D4" />;
+  }
 
   return (
     <SafeAreaView style={styles.safeArea}>
@@ -1051,6 +1076,19 @@ const styles = StyleSheet.create({
     fontFamily: fonts.bold,
     fontSize: 16,
     color: colors.white,
+  },
+  secondaryButton: {
+    alignItems: "center" as const,
+    paddingVertical: 14,
+    borderRadius: 14,
+    borderWidth: 1,
+    borderColor: colors.surfaceLight,
+    width: "100%" as any,
+  },
+  secondaryButtonText: {
+    fontFamily: fonts.bold,
+    fontSize: 15,
+    color: colors.gray400,
   },
   waitingCard: {
     flexDirection: "row",

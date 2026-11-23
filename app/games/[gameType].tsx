@@ -37,6 +37,12 @@ const GAME_INFO: Record<string, { name: string; icon: string; color: string; des
     color: "#A78BFA",
     description: "Items from a category appear one at a time — lock each into a rank slot without seeing what's next. Compare lists side-by-side, then vote for the best one!",
   },
+  tenSecondTasks: {
+    name: "10 Second Tasks",
+    icon: "timer",
+    color: "#F97316",
+    description: "One player holds the phone and performs a growing stack of silly tasks before the timer runs out. Judges vote pass or fail. Last player standing wins!",
+  },
 };
 
 export default function GameScreen() {

@@ -16,7 +16,8 @@ export type GameType =
   | "numberGuessor"
   | "pieCharts"
   | "potLuck"
-  | "blindRanking";
+  | "blindRanking"
+  | "tenSecondTasks";
 
 export type Room = {
   id: string;

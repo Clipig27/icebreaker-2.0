@@ -21,6 +21,7 @@ import { useAuthStore } from "../../src/stores/authStore";
 import { PIE_CHARTS_PROMPTS, PieChartPrompt } from "../../src/data/pieCharts";
 import HostWaitingPill from "../../src/components/HostWaitingPill";
 import GameHeader from "../../src/components/GameHeader";
+import GameLoadingScreen from "../../src/components/GameLoadingScreen";
 
 // ---------------------------------------------------------------------------
 // Types
@@ -176,7 +177,7 @@ function DonutChart({
 
 export default function PieChartsScreen() {
   const router = useRouter();
-  const { room, players, isHost, mutateGameState, endGame } = useRoomStore();
+  const { room, players, isHost, mutateGameState, endGame, startGame } = useRoomStore();
   const user = useAuthStore((s) => s.user);
 
   const [customInput, setCustomInput] = useState("");
@@ -208,6 +209,14 @@ export default function PieChartsScreen() {
   }, [isHost, room?.id]);
 
   // Navigate away if room returns to lobby
+  // Track games played (Pie Charts has no winner)
+  const trackedGameRef = useRef(false);
+  useEffect(() => {
+    if (trackedGameRef.current || phase !== "final-results") return;
+    trackedGameRef.current = true;
+    useAuthStore.getState().incrementGamesPlayed();
+  }, [phase]);
+
   const navigatedBackRef = useRef(false);
   useEffect(() => {
     if (navigatedBackRef.current) return;
@@ -340,14 +349,7 @@ export default function PieChartsScreen() {
 
   // Loading
   if (!gs || (gs.game as string) !== "pieCharts" || !phase || (phase as string) === "starting") {
-    return (
-      <SafeAreaView style={s.container}><GameHeader />
-        <View style={s.centered}>
-          <ActivityIndicator size="large" color={colors.primary} />
-          <Text style={s.loadingText}>Setting up the game...</Text>
-        </View>
-      </SafeAreaView>
-    );
+    return <GameLoadingScreen name="Pie Charts" icon="pie-chart" color="#EF4444" />;
   }
 
   // === INTRO ===
@@ -644,12 +646,17 @@ export default function PieChartsScreen() {
             );
           })}
           {isHost ? (
-            <TouchableOpacity style={s.primaryBtn} onPress={handleBackToLobby} activeOpacity={0.7}>
-              <Text style={s.primaryBtnText}>Back to Lobby</Text>
-              <Ionicons name="arrow-back" size={20} color={colors.white} />
-            </TouchableOpacity>
+            <View style={{ gap: 10, width: "100%" }}>
+              <TouchableOpacity style={s.primaryBtn} onPress={() => startGame("pieCharts")} activeOpacity={0.7}>
+                <Ionicons name="refresh" size={20} color={colors.white} />
+                <Text style={s.primaryBtnText}>Play Again</Text>
+              </TouchableOpacity>
+              <TouchableOpacity style={s.secondaryBtn} onPress={handleBackToLobby} activeOpacity={0.7}>
+                <Text style={s.secondaryBtnText}>Back to Lobby</Text>
+              </TouchableOpacity>
+            </View>
           ) : (
-            <HostWaitingPill label="Waiting for host to return to lobby..." style={{ marginTop: 0, marginBottom: 20 }} />
+            <HostWaitingPill label="Waiting for host..." style={{ marginTop: 0, marginBottom: 20 }} />
           )}
         </ScrollView>
       </SafeAreaView>
@@ -763,4 +770,9 @@ const s = StyleSheet.create({
     backgroundColor: colors.primary, borderRadius: 14, paddingVertical: 16, width: "100%",
   },
   primaryBtnText: { fontFamily: fonts.bold, fontSize: 16, color: colors.white },
+  secondaryBtn: {
+    alignItems: "center", paddingVertical: 14, borderRadius: 14,
+    borderWidth: 1, borderColor: colors.surfaceLight, width: "100%",
+  },
+  secondaryBtnText: { fontFamily: fonts.bold, fontSize: 15, color: colors.gray400 },
 });

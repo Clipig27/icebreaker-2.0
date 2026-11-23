@@ -21,6 +21,7 @@ import { useRoomStore } from "../../src/stores/roomStore";
 import { useAuthStore } from "../../src/stores/authStore";
 import HostWaitingPill from "../../src/components/HostWaitingPill";
 import GameHeader from "../../src/components/GameHeader";
+import GameLoadingScreen from "../../src/components/GameLoadingScreen";
 import { competitionRanks } from "../../src/utils/rank";
 
 // ---------------------------------------------------------------------------
@@ -102,7 +103,7 @@ const CUSTOM_CATEGORIES_KEY = "br_custom_categories";
 
 export default function BlindRankingScreen() {
   const router = useRouter();
-  const { room, players, isHost, mutateGameState, endGame } = useRoomStore();
+  const { room, players, isHost, mutateGameState, endGame, startGame } = useRoomStore();
   const user = useAuthStore((s) => s.user);
 
   const gs: GameState | null = room?.game_state ?? null;
@@ -211,6 +212,17 @@ export default function BlindRankingScreen() {
   }, [isHost, room?.id]);
 
   // Navigate away if room returns to lobby
+  // Track wins/games played
+  const trackedGameRef = useRef(false);
+  useEffect(() => {
+    if (trackedGameRef.current || phase !== "game-over" || !gs) return;
+    trackedGameRef.current = true;
+    useAuthStore.getState().incrementGamesPlayed();
+    const scores = gs.brScores ?? {};
+    const maxScore = Math.max(...Object.values(scores), 0);
+    if (maxScore > 0 && (scores[myId] ?? 0) === maxScore) useAuthStore.getState().incrementWins();
+  }, [phase]);
+
   const navigatedBackRef = useRef(false);
   useEffect(() => {
     if (navigatedBackRef.current) return;
@@ -408,14 +420,7 @@ export default function BlindRankingScreen() {
   // Loading
   // -----------------------------------------------------------------------
   if (!gs || (gs.game as string) !== "blindRanking" || !phase || (phase as string) === "starting") {
-    return (
-      <SafeAreaView style={st.container}><GameHeader />
-        <View style={st.centered}>
-          <ActivityIndicator size="large" color={colors.primary} />
-          <Text style={st.loadingText}>Setting up the game...</Text>
-        </View>
-      </SafeAreaView>
-    );
+    return <GameLoadingScreen name="Blind Ranking" icon="list" color="#A78BFA" />;
   }
 
   // === INTRO ===
@@ -938,12 +943,17 @@ export default function BlindRankingScreen() {
           ))}
 
           {isHost ? (
-            <TouchableOpacity style={st.primaryBtn} onPress={handleBackToLobby} activeOpacity={0.7}>
-              <Text style={st.primaryBtnText}>Back to Lobby</Text>
-              <Ionicons name="arrow-back" size={20} color={colors.white} />
-            </TouchableOpacity>
+            <View style={{ gap: 10, width: "100%" }}>
+              <TouchableOpacity style={st.primaryBtn} onPress={() => startGame("blindRanking")} activeOpacity={0.7}>
+                <Ionicons name="refresh" size={20} color={colors.white} />
+                <Text style={st.primaryBtnText}>Play Again</Text>
+              </TouchableOpacity>
+              <TouchableOpacity style={st.secondaryBtn} onPress={handleBackToLobby} activeOpacity={0.7}>
+                <Text style={st.secondaryBtnText}>Back to Lobby</Text>
+              </TouchableOpacity>
+            </View>
           ) : (
-            <HostWaitingPill label="Waiting for host to return to lobby..." style={{ marginTop: 0, marginBottom: 20 }} />
+            <HostWaitingPill label="Waiting for host..." style={{ marginTop: 0, marginBottom: 20 }} />
           )}
         </ScrollView>
       </SafeAreaView>
@@ -1097,4 +1107,6 @@ const st = StyleSheet.create({
     backgroundColor: colors.primary, borderRadius: 14, paddingVertical: 16, width: "100%",
   },
   primaryBtnText: { fontFamily: fonts.bold, fontSize: 16, color: colors.white },
+  secondaryBtn: { alignItems: "center", paddingVertical: 14, borderRadius: 14, borderWidth: 1, borderColor: colors.surfaceLight, width: "100%" },
+  secondaryBtnText: { fontFamily: fonts.bold, fontSize: 15, color: colors.gray400 },
 });

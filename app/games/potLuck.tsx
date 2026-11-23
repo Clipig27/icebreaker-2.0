@@ -17,6 +17,7 @@ import { useAuthStore } from "../../src/stores/authStore";
 import { DEFAULT_QUESTIONS, PotLuckQuestion } from "../../src/data/potLuck";
 import HostWaitingPill from "../../src/components/HostWaitingPill";
 import GameHeader from "../../src/components/GameHeader";
+import GameLoadingScreen from "../../src/components/GameLoadingScreen";
 import { competitionRanks } from "../../src/utils/rank";
 
 // ---------------------------------------------------------------------------
@@ -98,7 +99,7 @@ function pickQuestion(usedIds: string[]): PotLuckQuestion | null {
 
 export default function PotLuckScreen() {
   const router = useRouter();
-  const { room, players, isHost, mutateGameState, endGame } = useRoomStore();
+  const { room, players, isHost, mutateGameState, endGame, startGame } = useRoomStore();
   const user = useAuthStore((s) => s.user);
 
   const [actionSent, setActionSent] = useState(false);
@@ -154,6 +155,15 @@ export default function PotLuckScreen() {
   // -----------------------------------------------------------------------
   // Navigate away if room returns to lobby
   // -----------------------------------------------------------------------
+  // Track wins/games played
+  const trackedGameRef = useRef(false);
+  useEffect(() => {
+    if (trackedGameRef.current || phase !== "gameover" || !gs) return;
+    trackedGameRef.current = true;
+    useAuthStore.getState().incrementGamesPlayed();
+    if (gs.winnerId === myId) useAuthStore.getState().incrementWins();
+  }, [phase]);
+
   const navigatedBackRef = useRef(false);
   useEffect(() => {
     if (navigatedBackRef.current) return;
@@ -416,14 +426,7 @@ export default function PotLuckScreen() {
   // Loading
   // -----------------------------------------------------------------------
   if (!gs || (gs.game as string) !== "potLuck" || !phase || (phase as string) === "starting") {
-    return (
-      <SafeAreaView style={st.container}><GameHeader />
-        <View style={st.centered}>
-          <ActivityIndicator size="large" color={colors.primary} />
-          <Text style={st.loadingText}>Setting up the game...</Text>
-        </View>
-      </SafeAreaView>
-    );
+    return <GameLoadingScreen name="Smarty Pot" icon="trophy" color="#10B981" />;
   }
 
   // === INTRO ===
@@ -684,12 +687,17 @@ export default function PotLuckScreen() {
           </View>
 
           {isHost ? (
-            <TouchableOpacity style={st.primaryBtn} onPress={handleBackToLobby} activeOpacity={0.7}>
-              <Text style={st.primaryBtnText}>Back to Lobby</Text>
-              <Ionicons name="arrow-back" size={20} color={colors.white} />
-            </TouchableOpacity>
+            <View style={{ gap: 10, width: "100%" }}>
+              <TouchableOpacity style={st.primaryBtn} onPress={() => startGame("potLuck")} activeOpacity={0.7}>
+                <Ionicons name="refresh" size={20} color={colors.white} />
+                <Text style={st.primaryBtnText}>Play Again</Text>
+              </TouchableOpacity>
+              <TouchableOpacity style={st.secondaryBtn} onPress={handleBackToLobby} activeOpacity={0.7}>
+                <Text style={st.secondaryBtnText}>Back to Lobby</Text>
+              </TouchableOpacity>
+            </View>
           ) : (
-            <HostWaitingPill label="Waiting for host to return to lobby..." style={{ marginTop: 0, marginBottom: 20 }} />
+            <HostWaitingPill label="Waiting for host..." style={{ marginTop: 0, marginBottom: 20 }} />
           )}
         </ScrollView>
       </SafeAreaView>
@@ -847,4 +855,6 @@ const st = StyleSheet.create({
     backgroundColor: colors.primary, borderRadius: 14, paddingVertical: 16, width: "100%",
   },
   primaryBtnText: { fontFamily: fonts.bold, fontSize: 16, color: colors.white },
+  secondaryBtn: { alignItems: "center", paddingVertical: 14, borderRadius: 14, borderWidth: 1, borderColor: colors.surfaceLight, width: "100%" },
+  secondaryBtnText: { fontFamily: fonts.bold, fontSize: 15, color: colors.gray400 },
 });

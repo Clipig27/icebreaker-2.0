@@ -21,6 +21,7 @@ const GAMES: { id: GameType; name: string; icon: string; color: string }[] = [
   { id: "pieCharts", name: "Pie Charts", icon: "pie-chart", color: "#EF4444" },
   { id: "potLuck", name: "Smarty Pot", icon: "trophy", color: "#10B981" },
   { id: "blindRanking", name: "Blind Ranking", icon: "list", color: "#A78BFA" },
+  { id: "tenSecondTasks", name: "10 Second Tasks", icon: "timer", color: "#F97316" },
 ];
 
 // Pulsing dot component for online indicator
