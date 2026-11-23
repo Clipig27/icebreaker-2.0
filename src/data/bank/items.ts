@@ -8,8 +8,15 @@
 //   - Tags are fine-grained SLOT tags (patty, pizza_topping, destination, ...)
 //     plus a few MODIFIER tags used by theme variants (breakfast, spicy,
 //     tropical, green, meat, veggie, dessert, cabin, beach, snow, city,
-//     gamer, cozy, basketball, baseball, football, nature, coastal, zombie,
-//     alien). A slot only ever accepts items explicitly tagged for it.
+//     gamer, cozy, allsport, basketball, baseball, football, soccer, hockey,
+//     nature, coastal, zombie, alien). A slot only ever accepts items
+//     explicitly tagged for it.
+//   - VIBE tags keep base recipes coherent: Dream House / Dream Vacation base
+//     recipes only draw items WITHOUT a vibe tag (cabin/beach, beach/snow/city);
+//     vibe items are only drawn by their own variant.
+//   - SPORT tags: every game-day moment / gear / seat is tagged either
+//     `allsport` (fits any sport) or with each sport it truly fits
+//     (e.g. "Halftime show" = basketball football soccer — never baseball).
 //   - Items are shared between themes on purpose (e.g. Jalapeños is a burger,
 //     hot dog and pizza topping), so the bank stays compact.
 // ---------------------------------------------------------------------------
@@ -410,6 +417,7 @@ Treehouse|🌳|home_feature cabin
 Secret passage|🚪|home_feature
 Rooftop garden|🌻|home_feature
 Indoor slide|🛝|home_feature
+Indoor pool|🏊|home_feature
 Hot tub|♨️|home_feature cabin beach
 Basketball court|🏀|home_feature
 Aquarium wall|🐠|home_feature
@@ -590,6 +598,14 @@ New Zealand|🐑|destination
 Costa Rica|🦥|destination
 Galápagos Islands|🐢|destination
 Orlando|🎢|destination
+Patagonia|🏔️|destination
+Yellowstone|🦬|destination
+Petra|🏜️|destination
+Angkor Wat|🛕|destination
+Amazon rainforest|🌳|destination
+Victoria Falls|💦|destination
+Scottish Highlands|🏰|destination
+Tuscany|🍇|destination
 # --- dream vacation: lodging ---
 Beach villa|🏝️|lodging beach
 Overwater bungalow|🛖|lodging beach
@@ -611,6 +627,10 @@ Glamping tent|⛺|lodging festival_perk
 Houseboat|🛥️|lodging apocalypse_base
 Desert dome|🏜️|lodging
 Safari lodge|🦁|lodging
+Jungle eco-lodge|🌿|lodging
+Vineyard villa|🍇|lodging
+Countryside inn|🏡|lodging
+Lakeside cabin|🛶|lodging
 # --- dream vacation: activities ---
 Safari drive|🦁|activity
 Hot air balloon ride|🎈|activity
@@ -656,6 +676,9 @@ Cave exploring|🔦|activity
 River rafting|🚣|activity
 Horseback ride|🐎|activity
 Stargazing|🔭|activity
+Waterfall swim|💦|activity
+Canopy walk|🌳|activity
+Scenic train ride|🚂|activity
 # --- dream vacation: perks ---
 Private jet|✈️|travel_perk
 First-class seats|💺|travel_perk
@@ -703,32 +726,32 @@ Pulled pork sliders|🐖|gameday_snack
 BBQ ribs|🍖|gameday_snack
 Giant turkey leg|🍗|gameday_snack festival_food
 Mini corn dogs|🌭|gameday_snack festival_food
-Helmet sundae|🍨|gameday_snack
+Ice cream sundae|🍨|gameday_snack
 Queso dip|🧀|gameday_snack
 Guac & chips|🥑|gameday_snack
 Jalapeño poppers|🌶️|gameday_snack
 Pigs in a blanket|🌭|gameday_snack
 Sunflower seeds|🌻|gameday_snack roadtrip_snack
 Smoked brisket|🥩|gameday_snack
-# --- game day: moments ---
-Kiss cam appearance|😘|gameday_moment
-T-shirt cannon catch|👕|gameday_moment
-Jumbotron dance-off|🕺|gameday_moment
-Starting the wave|🌊|gameday_moment
-Mascot high-five|🙌|gameday_moment
-Halftime show|🎤|gameday_moment
-Overtime thriller|⏰|gameday_moment
-Fireworks after a win|🎆|gameday_moment
-Getting on TV|📺|gameday_moment
-Proposal on the Jumbotron|💍|gameday_moment
-Mascot race|🏃|gameday_moment
-Player autographs|✍️|gameday_moment
-Championship parade|🏆|gameday_moment
-Locker-room tour|🔑|gameday_moment
-Free tacos for the whole crowd|🌮|gameday_moment
-Confetti blast|🎊|gameday_moment
-Beating the rival|🥊|gameday_moment
-Bobblehead giveaway|🧸|gameday_moment
+# --- game day: moments (allsport = fits every sport; else each sport it fits) ---
+Kiss cam appearance|😘|gameday_moment allsport
+T-shirt cannon catch|👕|gameday_moment allsport
+Jumbotron dance-off|🕺|gameday_moment allsport
+Starting the wave|🌊|gameday_moment allsport
+Mascot high-five|🙌|gameday_moment allsport
+Halftime show|🎤|gameday_moment basketball football soccer
+Overtime thriller|⏰|gameday_moment basketball football hockey
+Fireworks after a win|🎆|gameday_moment baseball football soccer
+Getting on TV|📺|gameday_moment allsport
+Proposal on the Jumbotron|💍|gameday_moment allsport
+Mascot race|🏃|gameday_moment allsport
+Player autographs|✍️|gameday_moment allsport
+Championship parade|🏆|gameday_moment allsport
+Locker-room tour|🔑|gameday_moment allsport
+Free tacos for the whole crowd|🌮|gameday_moment allsport
+Confetti blast|🎊|gameday_moment allsport
+Beating the rival|🥊|gameday_moment allsport
+Bobblehead giveaway|🧸|gameday_moment allsport
 Half-court shot contest|🏀|gameday_moment basketball
 Buzzer-beater|⏱️|gameday_moment basketball
 Courtside celebrity sighting|🌟|gameday_moment basketball
@@ -747,28 +770,45 @@ Hail Mary touchdown|🏈|gameday_moment football
 Ice bucket shower for the coach|🧊|gameday_moment football
 Pregame tailgate party|🚙|gameday_moment football
 Marching band halftime|🥁|gameday_moment football
-Coin toss on the field|🪙|gameday_moment football
+Coin toss on the field|🪙|gameday_moment football soccer
 Touchdown dance|💃|gameday_moment football
 Pick-six|🏈|gameday_moment football
 Fourth-quarter comeback|🔥|gameday_moment football
+Last-minute winner|⚽|gameday_moment soccer
+Bicycle-kick goal|⚽|gameday_moment soccer
+Penalty shootout|🥅|gameday_moment soccer
+Stadium-wide chant|🎶|gameday_moment soccer
+Giant tifo reveal|🎨|gameday_moment soccer
+Free-kick screamer|⚽|gameday_moment soccer
+Hat-trick hat toss|🎩|gameday_moment hockey
+Zamboni ride|🧊|gameday_moment hockey
+Puck over the glass|🏒|gameday_moment hockey
+Shootout winner|🥅|gameday_moment hockey
+Goal horn blast|📯|gameday_moment hockey
 # --- game day: fan gear ---
-Foam finger|👆|sports_gear
-Face paint|🎨|sports_gear
-Team jersey|👕|sports_gear
-Rally towel|🧣|sports_gear
-Big-head cutout|🖼️|sports_gear
-Air horn|📯|sports_gear
-Cowbell|🔔|sports_gear
-Team scarf|🧣|sports_gear
-Lucky socks|🧦|sports_gear
-Stadium blanket|🛌|sports_gear
-Seat cushion|💺|sports_gear
-Binoculars|🔭|sports_gear roadtrip_gear nature apocalypse_supply
-Thundersticks|🎈|sports_gear
-Championship ring replica|💍|sports_gear
-Team cap|🧢|sports_gear
-Megaphone|📣|sports_gear
-Team pennant|🚩|sports_gear
+Foam finger|👆|sports_gear allsport
+Face paint|🎨|sports_gear allsport
+Team jersey|👕|sports_gear allsport
+Rally towel|🧣|sports_gear allsport
+Big-head cutout|🖼️|sports_gear allsport
+Air horn|📯|sports_gear allsport
+Cowbell|🔔|sports_gear allsport
+Team scarf|🧣|sports_gear allsport
+Lucky socks|🧦|sports_gear allsport
+Stadium blanket|🛌|sports_gear baseball football soccer
+Seat cushion|💺|sports_gear allsport
+Binoculars|🔭|sports_gear allsport roadtrip_gear nature apocalypse_supply
+Thundersticks|🎈|sports_gear allsport
+Championship ring replica|💍|sports_gear allsport
+Team cap|🧢|sports_gear allsport
+Megaphone|📣|sports_gear allsport
+Team pennant|🚩|sports_gear allsport
+Signed soccer ball|⚽|sports_gear soccer
+Supporters' flag|🚩|sports_gear soccer
+Vuvuzela|📯|sports_gear soccer
+Signed hockey stick|🏒|sports_gear hockey
+Signed puck|🏒|sports_gear hockey
+Knit team beanie|🧢|sports_gear hockey football
 Signed basketball|🏀|sports_gear basketball
 Mini hoop|🏀|sports_gear basketball
 Retro sneakers|👟|sports_gear basketball
@@ -779,19 +819,22 @@ Signed football|🏈|sports_gear football
 Portable grill|🔥|sports_gear football
 Cornhole set|🎯|sports_gear football roadtrip_gear
 Cooler|🧊|sports_gear football roadtrip_gear
-Hand warmers|🧤|sports_gear football
+Hand warmers|🧤|sports_gear football soccer
 Tailgate tent|⛺|sports_gear football
 # --- game day: seats & access ---
-Front-row seats|💺|gameday_seat
-Luxury suite|🛋️|gameday_seat
-Field-level club seats|🎟️|gameday_seat
-Press box visit|🎙️|gameday_seat
-VIP parking|🚗|gameday_seat
-Meet-and-greet with players|🤝|gameday_seat
-Free refills all game|🥤|gameday_seat
-Tunnel high-fives|🙌|gameday_seat
-Pregame warmup access|🏃|gameday_seat
-Season tickets|🎫|gameday_seat
+Front-row seats|💺|gameday_seat allsport
+Luxury suite|🛋️|gameday_seat allsport
+Field-level club seats|🎟️|gameday_seat baseball football soccer
+Press box visit|🎙️|gameday_seat allsport
+VIP parking|🚗|gameday_seat allsport
+Meet-and-greet with players|🤝|gameday_seat allsport
+Free refills all game|🥤|gameday_seat allsport
+Tunnel high-fives|🙌|gameday_seat allsport
+Pregame warmup access|🏃|gameday_seat allsport
+Season tickets|🎫|gameday_seat allsport
+Glass seats|🏒|gameday_seat hockey
+Seats behind the goal|🥅|gameday_seat hockey soccer
+Supporters' section|📣|gameday_seat soccer
 Courtside seats|🏀|gameday_seat basketball
 Seats behind the bench|🏀|gameday_seat basketball
 Seats behind home plate|⚾|gameday_seat baseball

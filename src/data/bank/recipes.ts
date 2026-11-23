@@ -5,8 +5,7 @@
 //   "patty:2-4"                          -> 2..4 items tagged `patty`
 //   "burger_topping,sauce,cheese+spicy:3-5" -> 3..5 items with one of those
 //                                            tags AND the `spicy` tag
-//   "gameday_moment-basketball-baseball-football:2-4"
-//                                         -> generic moments only
+//   "room-cabin-beach:3-5"                -> rooms with NO cabin/beach vibe
 // The engine fills exactly `count` distinct items, respecting every slot's
 // min/max, preferring items not in the device's recent list (pickFresh), and
 // is fully deterministic for a given rng. Pure: no React / RN imports.
@@ -64,7 +63,10 @@ export function slotAccepts(slot: Slot, item: BankItem): boolean {
 // Theme table (ids of the first 7 must stay stable: testIDs ad-theme-<id>)
 // ---------------------------------------------------------------------------
 
-const SPORTS = "-basketball-baseball-football";
+// Base recipes must be coherent on their own: they only draw vibe-neutral /
+// sport-neutral items; vibe- and sport-specific items are drawn by variants.
+const sportVariant = (sport: string) =>
+  `gameday_snack:3-4 gameday_moment,sports_gear,gameday_seat+${sport}:3-5 gameday_moment+allsport:2-3 sports_gear+allsport:1-2`;
 
 const DEFS: ThemeDef[] = [
   {
@@ -125,7 +127,7 @@ const DEFS: ThemeDef[] = [
     bases: [["Empty lot", "🏗️"], ["Hilltop lot", "⛰️"], ["Lakeside lot", "🏞️"]],
     itemNoun: "feature",
     finishedNoun: "house",
-    slots: "room:3-5 home_feature:3-5 home_amenity:2-4",
+    slots: "room-cabin-beach:3-5 home_feature-cabin-beach:3-5 home_amenity-cabin-beach:2-4",
     variants: [
       { id: "cabin", name: "Cabin House", emoji: "🌲", bases: [["Forest clearing", "🌲"], ["Snowy hillside", "🏔️"]], slots: "room,home_feature,home_amenity+cabin:4-6 room-beach:1-3 home_feature-beach:1-3 home_amenity-beach:1-2" },
       { id: "beach", name: "Beach House", emoji: "🏖️", bases: [["Beachfront lot", "🏖️"], ["Oceanfront cliff", "🌊"]], slots: "room,home_feature,home_amenity+beach:4-6 room-cabin:1-3 home_feature-cabin:1-3 home_amenity-cabin:1-2" },
@@ -151,10 +153,10 @@ const DEFS: ThemeDef[] = [
     bases: [["Passport", "🛂"], ["Suitcase", "🧳"], ["Boarding pass", "🎫"], ["Backpack", "🎒"]],
     itemNoun: "perk",
     finishedNoun: "vacation",
-    slots: "destination:2-4 lodging:1-3 activity:3-5 travel_perk:2-4",
+    slots: "destination-beach-snow-city:2-4 lodging-beach-snow-city:1-3 activity-beach-snow-city:3-5 travel_perk-beach-snow-city:2-4",
     variants: [
-      { id: "beach", name: "Beach Vacation", emoji: "🏖️", bases: [["Beach bag", "👜"], ["Passport", "🛂"]], slots: "destination+beach:2-3 lodging+beach:1-2 activity+beach:3-5 travel_perk-snow:2-3" },
-      { id: "snow", name: "Winter Getaway", emoji: "⛷️", bases: [["Ski pass", "🎿"], ["Passport", "🛂"]], slots: "destination+snow:2-3 lodging+snow:1-2 activity+snow:3-5 travel_perk-beach:2-3" },
+      { id: "beach", name: "Beach Vacation", emoji: "🏖️", bases: [["Beach bag", "👜"], ["Passport", "🛂"]], slots: "destination+beach:2-3 lodging+beach:1-2 activity+beach:3-5 travel_perk-snow-city:2-3" },
+      { id: "snow", name: "Winter Getaway", emoji: "⛷️", bases: [["Ski pass", "🎿"], ["Passport", "🛂"]], slots: "destination+snow:2-3 lodging+snow:1-2 activity+snow:3-5 travel_perk-beach-city:2-3" },
       { id: "city", name: "City Break", emoji: "🏙️", bases: [["Metro card", "🚇"], ["Passport", "🛂"]], slots: "destination+city:2-3 lodging+city:1-2 activity+city:3-5 travel_perk-snow-beach:2-3" },
     ],
   },
@@ -178,11 +180,13 @@ const DEFS: ThemeDef[] = [
     bases: [["Game day pass", "🎟️"], ["Stadium seat", "🏟️"], ["Tailgate spot", "🚙"]],
     itemNoun: "perk",
     finishedNoun: "game day",
-    slots: `gameday_snack:3-4 gameday_moment${SPORTS}:2-4 sports_gear${SPORTS}:2-3 gameday_seat${SPORTS}:1-2`,
+    slots: "gameday_snack:3-4 gameday_moment+allsport:2-4 sports_gear+allsport:2-3 gameday_seat+allsport:1-2",
     variants: [
-      { id: "basketball", name: "Basketball Night", emoji: "🏀", bases: [["Arena ticket", "🏟️"]], slots: `gameday_snack:3-4 gameday_moment,sports_gear,gameday_seat+basketball:3-5 gameday_moment${SPORTS}:2-3 sports_gear${SPORTS}:1-2` },
-      { id: "baseball", name: "Baseball Day", emoji: "⚾", bases: [["Ballpark ticket", "🎟️"]], slots: `gameday_snack:3-4 gameday_moment,sports_gear,gameday_seat+baseball:3-5 gameday_moment${SPORTS}:2-3 sports_gear${SPORTS}:1-2` },
-      { id: "football", name: "Football Sunday", emoji: "🏈", bases: [["Tailgate spot", "🚙"], ["Stadium ticket", "🎟️"]], slots: `gameday_snack:3-4 gameday_moment,sports_gear,gameday_seat+football:3-5 gameday_moment${SPORTS}:2-3 sports_gear${SPORTS}:1-2` },
+      { id: "basketball", name: "Basketball Night", emoji: "🏀", bases: [["Arena ticket", "🏟️"]], slots: sportVariant("basketball") },
+      { id: "baseball", name: "Baseball Day", emoji: "⚾", bases: [["Ballpark ticket", "🎟️"]], slots: sportVariant("baseball") },
+      { id: "football", name: "Football Sunday", emoji: "🏈", bases: [["Tailgate spot", "🚙"], ["Stadium ticket", "🎟️"]], slots: sportVariant("football") },
+      { id: "soccer", name: "Soccer Match", emoji: "⚽", bases: [["Match ticket", "🎟️"], ["Stadium seat", "🏟️"]], slots: sportVariant("soccer") },
+      { id: "hockey", name: "Hockey Night", emoji: "🏒", bases: [["Rink-side ticket", "🏒"], ["Arena ticket", "🏟️"]], slots: sportVariant("hockey") },
     ],
   },
   {
@@ -194,8 +198,8 @@ const DEFS: ThemeDef[] = [
     finishedNoun: "road trip",
     slots: "roadtrip_ride:0-1 roadtrip_stop:4-6 roadtrip_gear:2-4 roadtrip_snack:2-3",
     variants: [
-      { id: "coastal", name: "Coastal Road Trip", emoji: "🌊", slots: "roadtrip_ride:0-1 roadtrip_stop+coastal:3-4 roadtrip_stop-coastal-nature:1-2 roadtrip_gear:2-4 roadtrip_snack:2-3" },
-      { id: "parks", name: "National Parks Trip", emoji: "🏞️", bases: [["Park pass", "🎟️"], ["Car keys", "🔑"]], slots: "roadtrip_ride:0-1 roadtrip_stop+nature:4-5 roadtrip_stop-coastal:0-1 roadtrip_gear+nature:1-2 roadtrip_gear:1-2 roadtrip_snack:2-3" },
+      { id: "coastal", name: "Coastal Road Trip", emoji: "🌊", slots: "roadtrip_ride:0-1 roadtrip_stop+coastal:3-4 roadtrip_stop-coastal-nature:1-2 roadtrip_gear+coastal:1-2 roadtrip_gear-nature:1-2 roadtrip_snack:2-3" },
+      { id: "parks", name: "National Parks Trip", emoji: "🏞️", bases: [["Park pass", "🎟️"], ["Car keys", "🔑"]], slots: "roadtrip_ride:0-1 roadtrip_stop+nature:4-5 roadtrip_stop-coastal:0-1 roadtrip_gear+nature:1-2 roadtrip_gear-coastal:1-2 roadtrip_snack:2-3" },
     ],
   },
   {

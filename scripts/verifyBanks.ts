@@ -193,6 +193,21 @@ const STMT = /[A-Za-z0-9)"'!?.]$/;
   const cats: Record<string, number> = {};
   for (const p of all) cats[p.category] = (cats[p.category] ?? 0) + 1;
   console.log(`  answers in 1–100: ${all.length - bad}/${all.length}; categories ${JSON.stringify(cats)}`);
+  if (all.length < 800) fail(`1 to 100: only ${all.length} prompts (need ≥800)`);
+  // Dry lookup families must stay a small slice of the bank.
+  const FAMILIES: [string, RegExp][] = [
+    ["atomic numbers", /atomic number of/i],
+    ["Roman numerals", /Roman numeral/i],
+    ["month-day sums", /^How many days are in \w+ and \w+ combined/],
+    ["day of the year", /what day of the year is/i],
+    ["letter positions", /position is the letter/i],
+  ];
+  const famCounts = FAMILIES.map(([name, re]) => {
+    const n = all.filter((p) => re.test(p.text)).length;
+    if (n > 25) fail(`1 to 100: ${n} "${name}" prompts (cap 25)`);
+    return `${name} ${n}`;
+  });
+  console.log(`  lookup families (cap 25): ${famCounts.join(", ")}`);
 }
 
 // ── Pie Charts ──────────────────────────────────────────────────────────────

@@ -9,7 +9,9 @@
 
 import { generateNumberPrompts } from './gen/numberGuessorGen';
 
-export type NumberPromptCategory = 'geography' | 'sports' | 'science' | 'history' | 'math';
+export type NumberPromptCategory =
+  | 'geography' | 'sports' | 'science' | 'history' | 'math'
+  | 'nature' | 'food' | 'pop_culture' | 'movies' | 'music' | 'games' | 'everyday';
 
 export type NumberPrompt = {
   id: string;
@@ -222,7 +224,7 @@ export const NUMBER_GUESSOR_PROMPTS: NumberPrompt[] = [
   { id: 'ng_227', text: 'How many cards are dealt per player in a standard game of Bridge?',           correctAnswer: 13, category: 'math' },
   { id: 'ng_228', text: 'How many times does the digit 1 appear from 1 to 100?',                      correctAnswer: 21, category: 'math' },
   { id: 'ng_229', text: 'How many even numbers are between 1 and 100 (inclusive)?',                   correctAnswer: 50, category: 'math' },
-  { id: 'ng_230', text: 'How many squares of any size are on a standard chessboard?',                  correctAnswer: 64, category: 'math' },
+  { id: 'ng_230', text: 'How many squares are on a standard chessboard?',                  correctAnswer: 64, category: 'math' },
 
   // Technology & Modern World
   { id: 'ng_231', text: 'How many satellites does GPS rely on for positioning?',                       correctAnswer: 24, category: 'science' },

@@ -61,6 +61,33 @@ for (const it of bank) {
 }
 for (const t of known) check(RESERVED_TAGS.includes(t) || (tagUse.get(t) ?? 0) > 0, `tag "${t}" used by a theme but no item has it`);
 
+// --------------------------------------------------------- coherence checks
+// Base House / Vacation must not mix vibes; sport recipes only get items that
+// fit that sport (allsport or tagged for it).
+const VIBES: Record<string, string[]> = { house: ["cabin", "beach"], vacation: ["beach", "snow", "city"] };
+const SPORT_TAGS = ["basketball", "baseball", "football", "soccer", "hockey"];
+const SPORT_SLOTS = ["gameday_moment", "sports_gear", "gameday_seat"];
+for (const th of THEME_RECIPES) {
+  const vibes = VIBES[th.id];
+  if (vibes)
+    for (const it of recipeEligible(th))
+      check(!vibes.some((v) => it.tags.includes(v)), `${th.id} base: vibe item ${it.name} (${it.tags.join(" ")})`);
+  if (th.id === "sports")
+    for (const r of allRecipes(th)) {
+      const sport = r.key.split(":")[1]; // undefined for the base recipe
+      for (const it of recipeEligible(r)) {
+        if (!SPORT_SLOTS.some((s) => it.tags.includes(s))) continue;
+        const ok = it.tags.includes("allsport") || (sport !== undefined && it.tags.includes(sport));
+        check(ok, `${r.key}: ${it.name} doesn't fit (${it.tags.join(" ")})`);
+      }
+    }
+}
+for (const it of bank)
+  if (SPORT_SLOTS.some((s) => it.tags.includes(s)))
+    check(it.tags.includes("allsport") !== SPORT_TAGS.some((s) => it.tags.includes(s)), `${it.name}: needs allsport XOR sport tags`);
+for (const name of ["Overtime thriller", "Halftime show", "Touchdown dance"])
+  check(!recipeEligible(THEME_RECIPES.find((t) => t.id === "sports")!.variants.find((v) => v.key === "sports:baseball")!).some((it) => it.name === name), `Baseball Day can draw ${name}`);
+
 // ------------------------------------------------------------- engine checks
 const PLAYERS = [2, 3, 4];
 const GAMES_PER_RECIPE = 1200; // 400 per player count
