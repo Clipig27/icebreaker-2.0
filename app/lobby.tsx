@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from "react";
-import { View, Text, Pressable, ScrollView, StyleSheet, Alert, AppState, Animated as RNAnimated, Easing } from "react-native";
+import { View, Text, Pressable, ScrollView, StyleSheet, Alert, AlertButton, AppState, Animated as RNAnimated, Easing, Image, type ImageSourcePropType } from "react-native";
 import Animated, {
   useSharedValue,
   useAnimatedStyle,
@@ -13,7 +13,28 @@ import * as Haptics from "expo-haptics";
 import * as Clipboard from "expo-clipboard";
 import { LinearGradient } from "expo-linear-gradient";
 import { colors, fonts, gradients, radii, spacing, type } from "../src/theme";
+
+const GAME_LOGOS: Record<string, ImageSourcePropType> = {
+  talentShow: require("../assets/game-logos/talent-show.png"),
+  numberGuessor: require("../assets/game-logos/one-to-hundred.png"),
+  pieCharts: require("../assets/game-logos/pie-charts.png"),
+  potLuck: require("../assets/game-logos/smarty-pot.png"),
+  blindRanking: require("../assets/game-logos/blind-ranking.png"),
+  tenSecondTasks: require("../assets/game-logos/ten-second-tasks.png"),
+  auctionDraft: require("../assets/game-logos/bid-wars.png"),
+};
+/** width / height of each transparent logo PNG (cropped to the artwork's left/right edges). */
+const GAME_LOGO_ASPECT: Record<string, number> = {
+  talentShow: 2.0859,
+  numberGuessor: 2.0859,
+  pieCharts: 2.1328,
+  potLuck: 2.0078,
+  blindRanking: 1.9766,
+  tenSecondTasks: 1.9844,
+  auctionDraft: 1.7469,
+};
 import { useRoomStore, GameType } from "../src/stores/roomStore";
+import { supabase } from "../src/lib/supabase";
 import ScreenBackground from "../src/components/ScreenBackground";
 import GradientCard from "../src/components/GradientCard";
 import RoomToolbar from "../src/components/RoomToolbar";
@@ -24,14 +45,14 @@ import { AUCTION_GAME_NAME } from "../src/data/auctionDraft";
 
 type RowTint = "gold" | "teal" | "pink" | "purple";
 
-const GAMES: { id: GameType; name: string; icon: string; color: string; tint: RowTint; iconText?: string }[] = [
-  { id: "talentShow", name: "Nobody's Got Talent", icon: "star", color: "#F59E0B", tint: "gold" },
-  { id: "numberGuessor", name: "1 to 100", icon: "calculator", color: "#06B6D4", tint: "teal", iconText: "100" },
-  { id: "pieCharts", name: "Pie Charts", icon: "pie-chart", color: "#EF4444", tint: "pink" },
-  { id: "potLuck", name: "Smarty Pot", icon: "trophy", color: "#10B981", tint: "purple" },
-  { id: "blindRanking", name: "Blind Ranking", icon: "list", color: "#A78BFA", tint: "purple" },
-  { id: "tenSecondTasks", name: "10 Second Tasks", icon: "timer", color: "#F97316", tint: "purple", iconText: "10" },
-  { id: "auctionDraft", name: AUCTION_GAME_NAME, icon: "pricetags", color: "#F472B6", tint: "pink" },
+const GAMES: { id: GameType; name: string; desc: string; emoji: string; icon: string; color: string; tint: RowTint; iconText?: string; minPlayers: number; maxPlayers: number | null }[] = [
+  { id: "talentShow", name: "Nobody's Got Talent", desc: "Perform, judge, hit the buzzer.", emoji: "⭐", icon: "star", color: "#F59E0B", tint: "gold", minPlayers: 3, maxPlayers: 8 },
+  { id: "numberGuessor", name: "1 to 100", desc: "Guess the hidden number.", emoji: "🔢", icon: "calculator", color: "#06B6D4", tint: "teal", iconText: "100", minPlayers: 1, maxPlayers: null },
+  { id: "pieCharts", name: "Pie Charts", desc: "Who's most likely to...?", emoji: "🥧", icon: "pie-chart", color: "#EF4444", tint: "pink", minPlayers: 3, maxPlayers: null },
+  { id: "potLuck", name: "Smarty Pot", desc: "Trivia with risk vs reward.", emoji: "🍯", icon: "trophy", color: "#10B981", tint: "purple", minPlayers: 3, maxPlayers: 8 },
+  { id: "blindRanking", name: "Blind Ranking", desc: "Rank items blind, vote for the best.", emoji: "📊", icon: "list", color: "#A78BFA", tint: "purple", minPlayers: 2, maxPlayers: 5 },
+  { id: "tenSecondTasks", name: "10 Second Tasks", desc: "Stack tasks. Beat the timer.", emoji: "⏱️", icon: "timer", color: "#F97316", tint: "purple", iconText: "10", minPlayers: 3, maxPlayers: 6 },
+  { id: "auctionDraft", name: AUCTION_GAME_NAME, desc: "Outbid your rivals.", emoji: "💰", icon: "pricetags", color: "#F472B6", tint: "pink", minPlayers: 2, maxPlayers: 4 },
 ];
 
 /** Same per-game row tints as the Games tab list. */
@@ -134,6 +155,10 @@ function GameCard({ game, onPress }: { game: typeof GAMES[number]; onPress: () =
   const animStyle = useAnimatedStyle(() => ({
     transform: [{ scale: scale.value }],
   }));
+  const tint = TINTS[game.tint];
+  const playerText = game.maxPlayers
+    ? `${game.minPlayers}–${game.maxPlayers}`
+    : `${game.minPlayers}+`;
 
   return (
     <Pressable
@@ -141,15 +166,12 @@ function GameCard({ game, onPress }: { game: typeof GAMES[number]; onPress: () =
       hitSlop={CARD_HIT_SLOP}
       pressRetentionOffset={CARD_PRESS_RETENTION}
       onPressIn={() => {
-        console.log("[tapdiag] lobby card onPressIn", game.id);
         scale.value = withSpring(0.97, { damping: 15, stiffness: 300 });
       }}
       onPressOut={() => {
-        console.log("[tapdiag] lobby card onPressOut", game.id);
         scale.value = withSpring(1, { damping: 15, stiffness: 300 });
       }}
       onPress={() => {
-        console.log("[tapdiag] lobby card onPress fired", game.id);
         Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
         onPress();
       }}
@@ -157,14 +179,30 @@ function GameCard({ game, onPress }: { game: typeof GAMES[number]; onPress: () =
       <Animated.View style={animStyle}>
         <GradientCard
           radius={radii.lg}
-          contentStyle={s.gameRow}
-          fill={TINTS[game.tint].fill}
-          borderColors={TINTS[game.tint].edge}
+          contentStyle={s.gameCardInner}
+          fill={tint.fill}
+          borderColors={tint.edge}
         >
-          <GameTile game={game} />
-          <Text style={s.gameName} numberOfLines={1}>{game.name}</Text>
+          <View style={s.gameCardBody}>
+            {GAME_LOGOS[game.id] ? (
+              <Image
+                source={GAME_LOGOS[game.id]}
+                style={[s.gameCardLogo, { aspectRatio: GAME_LOGO_ASPECT[game.id] ?? 2 }]}
+                resizeMode="contain"
+              />
+            ) : (
+              <Text style={s.gameCardName} numberOfLines={1}>{game.name}</Text>
+            )}
+            <Text style={s.gameCardDesc} numberOfLines={2}>{game.desc}</Text>
+            <View style={s.gameCardMeta}>
+              <View style={[s.gameCardPill, { backgroundColor: tint.tileBg, borderColor: tint.tileBorder }]}>
+                <Ionicons name="people" size={11} color={tint.fg} />
+                <Text style={[s.gameCardPillText, { color: tint.fg }]}>{playerText}</Text>
+              </View>
+            </View>
+          </View>
           <View style={s.playChip}>
-            <Ionicons name="play" size={13} color={colors.onLavender} />
+            <Ionicons name="play" size={18} color={colors.onLavender} />
           </View>
         </GradientCard>
       </Animated.View>
@@ -174,7 +212,7 @@ function GameCard({ game, onPress }: { game: typeof GAMES[number]; onPress: () =
 
 export default function Lobby() {
   const router = useRouter();
-  const { room, players, isHost, leaveRoom, startGame, kickPlayer, kicked, clearKicked } = useRoomStore();
+  const { room, players, isHost, leaveRoom, startGame, kickPlayer, endGame, kicked, clearKicked, _fetchPlayers } = useRoomStore();
 
   useEffect(() => {
     // If room gets closed (or we were kicked), go back
@@ -267,6 +305,27 @@ export default function Lobby() {
 
   const handleStartGame = (gameType: GameType) => {
     Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+
+    // Validate player count
+    const gameDef = GAMES.find((g) => g.id === gameType);
+    if (gameDef) {
+      const playerCount = players.length;
+      if (playerCount < gameDef.minPlayers) {
+        Alert.alert(
+          "Not Enough Players",
+          `Need at least ${gameDef.minPlayers} players for ${gameDef.name}. Currently ${playerCount} in the room.`
+        );
+        return;
+      }
+      if (gameDef.maxPlayers !== null && playerCount > gameDef.maxPlayers) {
+        Alert.alert(
+          "Too Many Players",
+          `${gameDef.name} supports up to ${gameDef.maxPlayers} players. Currently ${playerCount} in the room.`
+        );
+        return;
+      }
+    }
+
     console.log("[tapdiag] handleStartGame", gameType, "local status:", room.status, "isHost:", isHost);
     startGame(gameType).catch((e) => console.log("[tapdiag] startGame threw", gameType, String(e)));
   };
@@ -293,12 +352,105 @@ export default function Lobby() {
     ]);
   };
 
+  const handleTransferHost = () => {
+    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+    const others = players.filter((p) => !p.is_host);
+    if (others.length === 0) {
+      Alert.alert("No Players", "There are no other players to transfer host to.");
+      return;
+    }
+    // Show an action sheet with player names
+    const buttons: AlertButton[] = others.map((p) => ({
+      text: p.username,
+      onPress: async () => {
+        try {
+          // Update rooms table
+          await supabase
+            .from("rooms")
+            .update({ host_id: p.user_id })
+            .eq("id", room.id);
+          // Remove host from current host
+          await supabase
+            .from("room_players")
+            .update({ is_host: false })
+            .eq("room_id", room.id)
+            .eq("is_host", true);
+          // Set new host
+          await supabase
+            .from("room_players")
+            .update({ is_host: true })
+            .eq("room_id", room.id)
+            .eq("user_id", p.user_id);
+          // Refetch players to update UI
+          await _fetchPlayers(room.id);
+        } catch (e) {
+          Alert.alert("Error", "Failed to transfer host. Please try again.");
+        }
+      },
+    }));
+    buttons.push({ text: "Cancel", style: "cancel" });
+    Alert.alert("Transfer Host", "Choose the new host:", buttons);
+  };
+
+  const handleEndRoom = () => {
+    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Heavy);
+    Alert.alert(
+      "End Room",
+      "This will close the room and remove all players. Are you sure?",
+      [
+        { text: "Cancel", style: "cancel" },
+        {
+          text: "End Room",
+          style: "destructive",
+          onPress: async () => {
+            if (!room) return;
+            // Delete ALL players first so no one remains
+            await supabase
+              .from("room_players")
+              .delete()
+              .eq("room_id", room.id);
+            // Set room to finished
+            await supabase
+              .from("rooms")
+              .update({ status: "finished", game_type: null, game_state: {} })
+              .eq("id", room.id);
+            // Clean up locally without triggering host transfer
+            useRoomStore.getState().cleanup();
+            router.replace("/(tabs)/play");
+          },
+        },
+      ]
+    );
+  };
+
   const selectedGame = room.game_type ? GAMES.find((g) => g.id === room.game_type) : undefined;
 
   return (
     <SafeAreaView style={s.safe} edges={["top"]}>
       <ScreenBackground />
-      <RoomToolbar backLabel="Play" title="ROOM LOBBY" onBack={handleLeave} style={s.toolbar} />
+      <RoomToolbar backLabel="Play" title="ROOM LOBBY" onBack={handleLeave} onMenu={() => {
+        Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+        const buttons: AlertButton[] = [
+          {
+            text: "Leave Room",
+            style: "destructive" as const,
+            onPress: () => handleLeave(),
+          },
+        ];
+        if (isHost) {
+          buttons.push({
+            text: "Transfer Host",
+            onPress: () => handleTransferHost(),
+          });
+          buttons.push({
+            text: "End Room",
+            style: "destructive" as const,
+            onPress: () => handleEndRoom(),
+          });
+        }
+        buttons.push({ text: "Cancel", style: "cancel" as const });
+        Alert.alert("Room Options", undefined, buttons);
+      }} style={s.toolbar} />
 
       <ScrollView
         style={s.scroll}
@@ -519,12 +671,56 @@ const s = StyleSheet.create({
   selectedName: { fontFamily: fonts.bold, fontSize: 17, color: colors.white, marginTop: 4 },
 
   // Game picker
-  gameCardTouch: { marginBottom: 10 },
-  gameRow: {
+  gameCardTouch: { marginBottom: 12 },
+  gameCardInner: {
     flexDirection: "row",
     alignItems: "center",
-    paddingVertical: 12,
-    paddingHorizontal: 12,
+    padding: 16,
+  },
+  gameCardBody: {
+    flex: 1,
+    marginRight: 12,
+  },
+  gameCardName: {
+    fontFamily: fonts.bold,
+    fontSize: 18,
+    color: colors.white,
+    marginBottom: 4,
+  },
+  gameCardDesc: {
+    fontFamily: fonts.regular,
+    fontSize: 13,
+    color: colors.gray400,
+    lineHeight: 18,
+    marginBottom: 10,
+  },
+  gameCardMeta: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 8,
+  },
+  gameCardPill: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 4,
+    paddingHorizontal: 8,
+    paddingVertical: 4,
+    borderRadius: 8,
+    borderWidth: 1,
+  },
+  gameCardPillText: {
+    fontFamily: fonts.bold,
+    fontSize: 11,
+  },
+  gameCardLogo: {
+    height: 80,
+    maxWidth: "100%",
+    alignSelf: "flex-start",
+    marginLeft: -4, // optical: the art has a small transparent pad on the left
+    marginBottom: 6,
+  },
+  gameCardEmoji: {
+    fontSize: 44,
   },
   gameIcon: {
     borderRadius: 12,
@@ -534,11 +730,10 @@ const s = StyleSheet.create({
     marginRight: 12,
   },
   gameIconText: { fontFamily: fonts.extrabold, fontSize: 13 },
-  gameName: { fontFamily: fonts.bold, fontSize: 15, color: colors.white, flex: 1, marginRight: 8 },
   playChip: {
-    width: 30,
-    height: 30,
-    borderRadius: 10,
+    width: 44,
+    height: 44,
+    borderRadius: 14,
     backgroundColor: colors.lavender,
     alignItems: "center",
     justifyContent: "center",
