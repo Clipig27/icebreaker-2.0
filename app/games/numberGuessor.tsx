@@ -127,6 +127,14 @@ export default function NumberGuessorScreen() {
     loadRecent(NG_DECK_KEY);
   }, []);
 
+  // Reset refs when game restarts (Play Again)
+  useEffect(() => {
+    if (phase === "intro" || phase === "starting" || (gs as any)?.phase === "starting") {
+      trackedGameRef.current = false;
+      navigatedBackRef.current = false;
+    }
+  }, [phase]);
+
   // Track wins/games played
   const trackedGameRef = useRef(false);
   useEffect(() => {
@@ -977,7 +985,7 @@ function WaitingNote({ label, done = false }: { label: string; done?: boolean })
 const styles = StyleSheet.create({
   safeArea: {
     flex: 1,
-    backgroundColor: colors.background,
+    backgroundColor: colors.bgPurple,
   },
   scroll: {
     flexGrow: 1,

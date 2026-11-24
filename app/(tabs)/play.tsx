@@ -1,4 +1,4 @@
-import { useState, useRef, useEffect } from "react";
+import { useState, useRef, useEffect, type ComponentRef } from "react";
 import {
   View,
   Text,
@@ -9,14 +9,22 @@ import {
   Alert,
   Animated,
   ScrollView,
+  KeyboardAvoidingView,
+  Platform,
 } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { LinearGradient } from "expo-linear-gradient";
 import { useRouter } from "expo-router";
 import * as Haptics from "expo-haptics";
 import { Ionicons } from "@expo/vector-icons";
-import { colors, fonts } from "../../src/theme";
+import { colors, fonts, gradients, radii, type } from "../../src/theme";
 import { useRoomStore } from "../../src/stores/roomStore";
+import AppHeader from "../../src/components/AppHeader";
+import Eyebrow from "../../src/components/Eyebrow";
+import Pill from "../../src/components/Pill";
+import ScreenBackground from "../../src/components/ScreenBackground";
+import GradientCard from "../../src/components/GradientCard";
+import HeroGradient from "../../src/components/HeroGradient";
 
 export default function Play() {
   const router = useRouter();
@@ -24,7 +32,6 @@ export default function Play() {
   const { createRoom, joinRoom, loading, error, room } = useRoomStore();
   const canJoin = roomCode.length >= 4;
 
-  // Animated values
   const headingOpacity = useRef(new Animated.Value(0)).current;
   const headingTranslateY = useRef(new Animated.Value(16)).current;
   const heroOpacity = useRef(new Animated.Value(0)).current;
@@ -32,14 +39,21 @@ export default function Play() {
   const hostBtnScale = useRef(new Animated.Value(1)).current;
   const joinBtnScale = useRef(new Animated.Value(1)).current;
 
+  // Keyboard handling (visual only): keep the invite card in view while typing.
+  const scrollRef = useRef<ComponentRef<typeof ScrollView>>(null);
+  const inviteYRef = useRef(0);
+  const scrollInviteIntoView = () => {
+    setTimeout(() => {
+      scrollRef.current?.scrollTo({ y: Math.max(0, inviteYRef.current - 16), animated: true });
+    }, 250);
+  };
+
   useEffect(() => {
-    // Heading fade in
     Animated.parallel([
       Animated.timing(headingOpacity, { toValue: 1, duration: 500, useNativeDriver: true }),
       Animated.timing(headingTranslateY, { toValue: 0, duration: 500, useNativeDriver: true }),
     ]).start();
 
-    // Hero card fade in after heading
     Animated.sequence([
       Animated.delay(200),
       Animated.parallel([
@@ -86,31 +100,33 @@ export default function Play() {
 
   return (
     <SafeAreaView style={s.safe} edges={["top"]}>
+      <ScreenBackground />
+      <KeyboardAvoidingView
+        style={s.flex}
+        behavior={Platform.OS === "ios" ? "padding" : undefined}
+      >
       <ScrollView
+        ref={scrollRef}
         style={s.scroll}
         contentContainerStyle={s.scrollContent}
         showsVerticalScrollIndicator={false}
         keyboardShouldPersistTaps="handled"
+        keyboardDismissMode="interactive"
       >
         {/* Top bar */}
-        <View style={s.topBar}>
-          <View style={s.topBarLeft}>
-            <Ionicons name="flash" size={20} color={colors.primaryLight} />
-            <Text style={s.topBarTitle}>Icebreaker</Text>
-          </View>
-          <View style={s.settingsCircle}>
-            <Ionicons name="settings" size={18} color={colors.gray400} />
-          </View>
-        </View>
+        <AppHeader />
 
-        {/* Heading */}
+        {/* Heading with GAME NIGHT badge */}
         <Animated.View
           style={{
             opacity: headingOpacity,
             transform: [{ translateY: headingTranslateY }],
           }}
         >
-          <Text style={s.heading}>Lets Play!</Text>
+          <View style={s.headingRow}>
+            <Text style={s.heading}>Let's play!</Text>
+            <Pill tone="peach" tilt label="GAME NIGHT" style={s.gameNightPill} />
+          </View>
           <Text style={s.subheading}>Less small talk. More good times.</Text>
         </Animated.View>
 
@@ -124,56 +140,79 @@ export default function Play() {
             },
           ]}
         >
-          <LinearGradient
-            colors={["#6D5ACD", "#5240A8"]}
-            start={{ x: 0, y: 0 }}
-            end={{ x: 1, y: 1 }}
-            style={s.heroGradient}
-          >
-            <Text style={s.heroLabel}>THE GROUP CHAT, BUT BETTER</Text>
+          <HeroGradient style={s.heroGradient}>
             <View style={s.heroMainRow}>
-              <Text style={s.heroMainText}>
-                {"Your people.\nYour game night."}
-              </Text>
-              <View style={s.heroEmojiGroup}>
-                <Text style={{ fontSize: 36 }}>{"🎲"}</Text>
-                <Text style={{ fontSize: 24, marginLeft: -8, marginTop: -4 }}>{"✨"}</Text>
-                <Text style={{ fontSize: 16, marginLeft: -4, marginTop: 8 }}>{"💬"}</Text>
+              <View style={{ flex: 1 }}>
+                <Eyebrow tone="dark" style={s.heroLabel}>
+                  THE GROUP CHAT, BUT BETTER
+                </Eyebrow>
+                <Text style={s.heroMainText}>
+                  {"Your people.\nYour game night."}
+                </Text>
+              </View>
+              <View style={s.heroArt}>
+                <Text style={s.heroDiceBack}>{"🎲"}</Text>
+                <Text style={s.heroDice}>{"🎲"}</Text>
+                <Text style={s.heroBubble}>{"💬"}</Text>
+                <Text style={s.heroSparkle}>{"✦"}</Text>
+                <Text style={s.heroSparkleSmall}>{"✦"}</Text>
               </View>
             </View>
             <Animated.View style={{ transform: [{ scale: hostBtnScale }] }}>
               <Pressable
-                style={s.hostPill}
+                style={s.hostBar}
                 onPress={handleHost}
                 onPressIn={onPressInHost}
                 onPressOut={onPressOutHost}
                 disabled={loading}
               >
+                <LinearGradient
+                  colors={gradients.heroDarkButton}
+                  start={{ x: 0, y: 0 }}
+                  end={{ x: 1, y: 1 }}
+                  style={StyleSheet.absoluteFill}
+                  pointerEvents="none"
+                />
                 {loading ? (
                   <ActivityIndicator color={colors.white} size="small" />
                 ) : (
-                  <View style={s.hostPillInner}>
-                    <Text style={s.hostPillText}>Host Game</Text>
-                    <Ionicons name="arrow-forward" size={18} color={colors.white} />
+                  <View style={s.hostBarInner}>
+                    <Text style={s.hostBarText}>Host a game</Text>
+                    <Ionicons name="arrow-up-outline" size={18} color={colors.white} style={s.hostBarArrow} />
                   </View>
                 )}
               </Pressable>
             </Animated.View>
-          </LinearGradient>
+          </HeroGradient>
         </Animated.View>
 
         {/* Got an invite? */}
-        <View style={s.inviteSection}>
-          <Text style={s.inviteTitle}>Got an invite?</Text>
-          <Text style={s.inviteSub}>Join a Game with your room code.</Text>
+        <View
+          onLayout={(e) => {
+            inviteYRef.current = e.nativeEvent.layout.y;
+          }}
+        >
+        <GradientCard
+          style={s.inviteSection}
+          contentStyle={s.inviteContent}
+          fill={gradients.inviteCard}
+        >
+          <View style={s.inviteHeader}>
+            <Text style={s.inviteTitle}>Got an invite?</Text>
+            <Text style={s.inviteSub}>Join with your 5-letter room code.</Text>
+          </View>
           <View style={s.inviteRow}>
             <TextInput
-              placeholder="Room code"
+              placeholder="5-letter code"
               placeholderTextColor={colors.gray500}
               value={roomCode}
               onChangeText={(t) => setRoomCode(t.toUpperCase())}
               autoCapitalize="characters"
+              autoCorrect={false}
+              spellCheck={false}
+              autoComplete="off"
               maxLength={6}
+              onFocus={scrollInviteIntoView}
               style={s.codeInput}
             />
             <Animated.View style={{ transform: [{ scale: joinBtnScale }] }}>
@@ -184,37 +223,53 @@ export default function Play() {
                 onPressIn={onPressInJoin}
                 onPressOut={onPressOutJoin}
               >
+                <LinearGradient
+                  colors={gradients.primaryButton}
+                  locations={[0, 0.5, 1]}
+                  start={{ x: 0, y: 0 }}
+                  end={{ x: 0.6, y: 1 }}
+                  style={StyleSheet.absoluteFill}
+                  pointerEvents="none"
+                />
                 {loading ? (
-                  <ActivityIndicator color={colors.background} size="small" />
+                  <ActivityIndicator color={colors.onPrimary} size="small" />
                 ) : (
-                  <Text style={s.joinBtnText}>{"Join →"}</Text>
+                  <View style={s.joinBtnInner}>
+                    <Text style={s.joinBtnText}>Join</Text>
+                    <Ionicons name="arrow-forward" size={16} color={colors.onPrimary} />
+                  </View>
                 )}
               </Pressable>
             </Animated.View>
           </View>
+        </GradientCard>
         </View>
 
         {/* Bottom section */}
         <View style={s.bottomSection}>
-          <Text style={s.bottomLabel}>
-            A LITTLE COMPETITION. A LOT OF CONNECTION.
-          </Text>
+          <Eyebrow style={s.bottomLabel}>GOOD TIMES, THREE SIMPLE STEPS</Eyebrow>
           <View style={s.stepsRow}>
-            <View style={s.stepCol}>
-              <Text style={s.stepNumber}>01</Text>
-              <Text style={s.stepText}>Get together</Text>
-            </View>
-            <View style={s.stepCol}>
-              <Text style={s.stepNumber}>02</Text>
-              <Text style={s.stepText}>Pick a game</Text>
-            </View>
-            <View style={s.stepCol}>
-              <Text style={s.stepNumber}>03</Text>
-              <Text style={s.stepText}>Break the ice</Text>
-            </View>
+            {[
+              { n: "01", t: "Get together", color: colors.lavender },
+              { n: "02", t: "Pick a game", color: colors.peachSticker },
+              { n: "03", t: "Break the ice", color: colors.lavender },
+            ].map((step) => (
+              <GradientCard
+                key={step.n}
+                radius={radii.md}
+                style={s.stepCard}
+                contentStyle={s.stepContent}
+              >
+                <Text style={[s.stepNumber, { color: step.color }]}>{step.n}</Text>
+                <Text style={s.stepText} numberOfLines={1} adjustsFontSizeToFit>
+                  {step.t}
+                </Text>
+              </GradientCard>
+            ))}
           </View>
         </View>
       </ScrollView>
+      </KeyboardAvoidingView>
     </SafeAreaView>
   );
 }
@@ -222,8 +277,9 @@ export default function Play() {
 const s = StyleSheet.create({
   safe: {
     flex: 1,
-    backgroundColor: colors.background,
+    backgroundColor: colors.bgPurple,
   },
+  flex: { flex: 1 },
   scroll: {
     flex: 1,
   },
@@ -232,123 +288,144 @@ const s = StyleSheet.create({
     paddingBottom: 32,
   },
 
-  // Top bar
-  topBar: {
+  // Heading
+  headingRow: {
     flexDirection: "row",
     alignItems: "center",
     justifyContent: "space-between",
-    paddingTop: 8,
-    paddingBottom: 24,
-  },
-  topBarLeft: {
-    flexDirection: "row",
-    alignItems: "center",
-    gap: 6,
-  },
-  topBarTitle: {
-    fontFamily: fonts.semibold,
-    fontSize: 18,
-    color: colors.white,
-  },
-  settingsCircle: {
-    width: 36,
-    height: 36,
-    borderRadius: 18,
-    backgroundColor: colors.surface,
-    alignItems: "center",
-    justifyContent: "center",
-  },
-
-  // Heading
-  heading: {
-    fontFamily: fonts.extrabold,
-    fontSize: 36,
-    color: colors.white,
+    gap: 12,
     marginBottom: 6,
   },
+  heading: {
+    ...type.title,
+    fontSize: 34,
+    letterSpacing: -0.6,
+  },
+  gameNightPill: {
+    alignSelf: "center",
+    marginRight: 4,
+  },
   subheading: {
-    fontFamily: fonts.regular,
-    fontSize: 15,
-    color: colors.gray400,
-    marginBottom: 28,
+    ...type.subtitle,
+    marginBottom: 22,
   },
 
   // Hero card
   heroCard: {
-    borderRadius: 20,
-    overflow: "hidden",
-    marginBottom: 28,
-    shadowColor: "#6D5ACD",
-    shadowOffset: { width: 0, height: 6 },
-    shadowOpacity: 0.3,
-    shadowRadius: 16,
+    borderRadius: radii.xl,
+    marginBottom: 16,
+    shadowColor: colors.lavender,
+    shadowOffset: { width: 0, height: 10 },
+    shadowOpacity: 0.22,
+    shadowRadius: 22,
     elevation: 8,
   },
   heroGradient: {
-    padding: 24,
-    borderRadius: 20,
+    padding: 18,
   },
   heroLabel: {
-    fontFamily: fonts.bold,
-    fontSize: 11,
-    color: "rgba(255,255,255,0.6)",
-    letterSpacing: 1.5,
-    textTransform: "uppercase",
-    marginBottom: 12,
+    marginBottom: 10,
+    fontSize: 10,
+    letterSpacing: 0.8,
   },
   heroMainRow: {
     flexDirection: "row",
-    alignItems: "flex-start",
+    alignItems: "center",
     justifyContent: "space-between",
-    marginBottom: 24,
+    marginBottom: 20,
   },
   heroMainText: {
-    fontFamily: fonts.bold,
-    fontSize: 24,
-    color: colors.white,
-    lineHeight: 32,
-    flex: 1,
+    fontFamily: fonts.extrabold,
+    fontSize: 25,
+    lineHeight: 30,
+    color: colors.onLavender,
+    letterSpacing: -0.5,
   },
-  heroEmojiGroup: {
-    flexDirection: "row",
-    flexWrap: "wrap",
-    alignItems: "flex-start",
-    marginLeft: 8,
-    width: 70,
+  heroArt: {
+    width: 96,
+    height: 84,
+    marginLeft: 6,
+    alignItems: "center",
+    justifyContent: "center",
   },
-  hostPill: {
+  heroDiceBack: {
+    position: "absolute",
+    left: 4,
+    top: 8,
+    fontSize: 40,
+    transform: [{ rotate: "-14deg" }],
+  },
+  heroDice: {
+    position: "absolute",
+    right: 6,
+    bottom: 2,
+    fontSize: 44,
+    transform: [{ rotate: "12deg" }],
+  },
+  heroBubble: {
+    position: "absolute",
+    right: 0,
+    top: -2,
+    fontSize: 20,
+  },
+  heroSparkle: {
+    position: "absolute",
+    left: 0,
+    bottom: 4,
+    fontSize: 12,
+    color: colors.onLavender,
+  },
+  heroSparkleSmall: {
+    position: "absolute",
+    left: 44,
+    top: -4,
+    fontSize: 9,
+    color: "rgba(26,20,39,0.7)",
+  },
+  hostBar: {
     alignSelf: "stretch",
-    backgroundColor: "rgba(0,0,0,0.35)",
-    borderRadius: 14,
-    paddingVertical: 14,
-    paddingHorizontal: 20,
+    borderRadius: radii.md,
+    overflow: "hidden",
+    minHeight: 50,
+    paddingHorizontal: 16,
+    justifyContent: "center",
+    borderWidth: 1,
+    borderColor: "rgba(255,255,255,0.08)",
   },
-  hostPillInner: {
+  hostBarInner: {
     flexDirection: "row",
     alignItems: "center",
     justifyContent: "space-between",
   },
-  hostPillText: {
-    fontFamily: fonts.semibold,
-    fontSize: 16,
+  hostBarText: {
+    fontFamily: fonts.bold,
+    fontSize: 15,
     color: colors.white,
   },
+  hostBarArrow: {
+    transform: [{ rotate: "45deg" }],
+  },
 
-  // Invite section
+  // Invite card
   inviteSection: {
-    marginBottom: 32,
+    marginBottom: 24,
+  },
+  inviteContent: {
+    padding: 16,
+  },
+  inviteHeader: {
+    marginBottom: 14,
   },
   inviteTitle: {
     fontFamily: fonts.bold,
-    fontSize: 18,
+    fontSize: 17,
     color: colors.white,
     marginBottom: 4,
   },
   inviteSub: {
     fontFamily: fonts.regular,
-    fontSize: 14,
+    fontSize: 13,
     color: colors.gray400,
-    marginBottom: 14,
   },
   inviteRow: {
     flexDirection: "row",
@@ -357,60 +434,69 @@ const s = StyleSheet.create({
   },
   codeInput: {
     flex: 1,
-    backgroundColor: colors.surface,
+    backgroundColor: "#17121F",
     color: colors.white,
     fontFamily: fonts.semibold,
-    fontSize: 16,
-    paddingHorizontal: 16,
+    fontSize: 15,
+    letterSpacing: 1,
+    paddingHorizontal: 14,
     paddingVertical: 14,
     borderRadius: 12,
+    borderWidth: 1,
+    borderColor: colors.cardEdge,
   },
   joinBtn: {
-    backgroundColor: colors.lime,
     borderRadius: 12,
+    overflow: "hidden",
     paddingVertical: 14,
-    paddingHorizontal: 20,
+    paddingHorizontal: 18,
+    minWidth: 88,
     alignItems: "center",
     justifyContent: "center",
   },
   joinBtnDisabled: {
     opacity: 0.45,
   },
+  joinBtnInner: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 6,
+  },
   joinBtnText: {
     fontFamily: fonts.bold,
     fontSize: 15,
-    color: colors.background,
+    color: colors.onLavender,
   },
 
-  // Bottom section
+  // Steps
   bottomSection: {
-    marginTop: 4,
+    marginTop: 0,
   },
   bottomLabel: {
-    fontFamily: fonts.bold,
-    fontSize: 11,
-    color: colors.gray500,
-    letterSpacing: 1.5,
-    textTransform: "uppercase",
-    marginBottom: 16,
+    marginBottom: 10,
+    fontSize: 10,
+    letterSpacing: 0.8,
   },
   stepsRow: {
     flexDirection: "row",
-    justifyContent: "space-between",
+    gap: 8,
   },
-  stepCol: {
+  stepCard: {
     flex: 1,
-    alignItems: "flex-start",
+  },
+  stepContent: {
+    paddingVertical: 12,
+    paddingHorizontal: 10,
+    gap: 6,
   },
   stepNumber: {
-    fontFamily: fonts.bold,
-    fontSize: 20,
-    color: colors.lime,
-    marginBottom: 4,
+    fontFamily: fonts.extrabold,
+    fontSize: 15,
   },
   stepText: {
-    fontFamily: fonts.regular,
-    fontSize: 13,
-    color: colors.gray400,
+    fontFamily: fonts.medium,
+    fontSize: 12,
+    lineHeight: 16,
+    color: colors.white,
   },
 });

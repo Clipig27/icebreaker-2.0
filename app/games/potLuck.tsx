@@ -33,7 +33,7 @@ import { competitionRanks } from "../../src/utils/rank";
 // Types
 // ---------------------------------------------------------------------------
 
-type Phase = "intro" | "rolling" | "live" | "reveal" | "gameover";
+type Phase = "intro" | "rolling" | "turn-countdown" | "live" | "reveal" | "gameover";
 
 type LastResult = {
   playerId: string;
@@ -127,6 +127,13 @@ export default function PotLuckScreen() {
   const [timeLeft, setTimeLeft] = useState(TIMER_SECONDS);
   const timerRef = useRef<ReturnType<typeof setInterval> | null>(null);
 
+  // Target score selection (host picks in intro phase)
+  const [selectedTarget, setSelectedTarget] = useState(DEFAULT_TARGET);
+
+  // Turn countdown (3-second countdown before each turn)
+  const [turnCountdown, setTurnCountdown] = useState(0);
+  const turnCountdownRef = useRef<ReturnType<typeof setInterval> | null>(null);
+
   // Delta animation (flashes +N or -N next to score)
   const [deltaText, setDeltaText] = useState<string | null>(null);
   const [deltaColor, setDeltaColor] = useState(colors.success);
@@ -168,7 +175,7 @@ export default function PotLuckScreen() {
       potCap: DEFAULT_POT_CAP,
       consecutiveSkips: 0,
       scores: Object.fromEntries(players.map((p) => [p.user_id, 0])),
-      target: DEFAULT_TARGET,
+      target: selectedTarget,
       turnAction: null,
       turnSkip: null,
       revealInfo: null,
@@ -180,11 +187,19 @@ export default function PotLuckScreen() {
       return initialState;
     });
     });
-  }, [isHost, room?.id]);
+  }, [isHost, room?.id, gs?.phase === "starting"]);
 
   // -----------------------------------------------------------------------
   // Navigate away if room returns to lobby
   // -----------------------------------------------------------------------
+  // Reset refs when game restarts (Play Again)
+  useEffect(() => {
+    if (phase === "intro" || phase === "starting" || (gs as any)?.phase === "starting") {
+      trackedGameRef.current = false;
+      navigatedBackRef.current = false;
+    }
+  }, [phase]);
+
   // Track wins/games played
   const trackedGameRef = useRef(false);
   useEffect(() => {
@@ -447,6 +462,34 @@ export default function PotLuckScreen() {
   }, [gs?.turnAction, gs?.turnSkip, phase, isHost]);
 
   // -----------------------------------------------------------------------
+  // Turn countdown: 3-second countdown before each turn starts
+  // -----------------------------------------------------------------------
+  useEffect(() => {
+    if (turnCountdownRef.current) clearInterval(turnCountdownRef.current);
+    if (phase !== "turn-countdown") return;
+    setTurnCountdown(3);
+    const start = Date.now();
+    turnCountdownRef.current = setInterval(() => {
+      const elapsed = Math.floor((Date.now() - start) / 1000);
+      const remaining = Math.max(0, 3 - elapsed);
+      setTurnCountdown(remaining);
+      if (remaining <= 0) {
+        if (turnCountdownRef.current) clearInterval(turnCountdownRef.current);
+        // Host advances to live
+        if (isHost) {
+          mutateGameState((cur: GameState | null) => {
+            if (!cur || cur.phase !== "turn-countdown") return null;
+            return { ...cur, phase: "live" as Phase };
+          });
+        }
+      }
+    }, 250);
+    return () => {
+      if (turnCountdownRef.current) clearInterval(turnCountdownRef.current);
+    };
+  }, [phase === "turn-countdown", turnKey]);
+
+  // -----------------------------------------------------------------------
   // Derived data
   // -----------------------------------------------------------------------
   const playerMap: Record<string, { username: string }> = {};
@@ -465,16 +508,16 @@ export default function PotLuckScreen() {
   const startFromIntro = useCallback(async () => {
     await mutateGameState((cur) => {
       if (!cur || cur.phase !== "intro") return null;
-      return { ...cur, phase: "rolling" as Phase };
+      return { ...cur, phase: "rolling" as Phase, target: selectedTarget };
     });
-    // Auto-advance to live after a brief delay for the rolling animation
+    // Auto-advance to turn-countdown after a brief delay for the rolling animation
     setTimeout(async () => {
       await mutateGameState((cur) => {
         if (!cur || cur.phase !== "rolling") return null;
-        return { ...cur, phase: "live" as Phase, turnSeq: (cur.turnSeq ?? 0) + 1 };
+        return { ...cur, phase: "turn-countdown" as Phase, turnSeq: (cur.turnSeq ?? 0) + 1 };
       });
     }, 3000);
-  }, [mutateGameState]);
+  }, [mutateGameState, selectedTarget]);
 
   // Host: next question from reveal
   const handleNextQuestion = useCallback(async () => {
@@ -484,7 +527,7 @@ export default function PotLuckScreen() {
       if (!q) return null;
       return {
         ...cur,
-        phase: "live" as Phase,
+        phase: "turn-countdown" as Phase,
         currentQuestion: q,
         usedQuestionIds: [...cur.usedQuestionIds, q.id],
         pot: q.startingPot,
@@ -526,12 +569,50 @@ export default function PotLuckScreen() {
         <HeroGradient>
           <View style={st.heroRow}>
             <View style={st.heroCopy}>
-              <Eyebrow tone="dark">{`First to ${gs.target ?? DEFAULT_TARGET} wins`}</Eyebrow>
+              <Eyebrow tone="dark">{`First to ${isHost ? selectedTarget : (gs.target ?? DEFAULT_TARGET)} wins`}</Eyebrow>
               <Text style={st.heroTitle}>Answer to win the pot. Skip to grow it.</Text>
             </View>
             <Text style={st.heroEmoji}>{"\uD83E\uDDE0"}</Text>
           </View>
         </HeroGradient>
+        {/* Target score selector (host only) */}
+        {isHost && (
+          <>
+            <Eyebrow style={st.sectionEyebrow}>Target score</Eyebrow>
+            <View style={st.targetRow}>
+              {[10, 20, 30].map((t) => (
+                <Pressable
+                  key={t}
+                  onPress={() => setSelectedTarget(t)}
+                  style={[
+                    st.targetChip,
+                    selectedTarget === t && st.targetChipActive,
+                  ]}
+                >
+                  <Text
+                    style={[
+                      st.targetChipText,
+                      selectedTarget === t && st.targetChipTextActive,
+                    ]}
+                  >
+                    First to {t}
+                  </Text>
+                </Pressable>
+              ))}
+            </View>
+          </>
+        )}
+        {!isHost && (
+          <>
+            <Eyebrow style={st.sectionEyebrow}>Target score</Eyebrow>
+            <View style={st.targetRow}>
+              <View style={[st.targetChip, st.targetChipActive]}>
+                <Text style={[st.targetChipText, st.targetChipTextActive]}>First to {gs.target ?? DEFAULT_TARGET}</Text>
+              </View>
+            </View>
+          </>
+        )}
+
         <Eyebrow style={st.sectionEyebrow}>How it works</Eyebrow>
         <View style={st.list}>
           {[
@@ -585,6 +666,25 @@ export default function PotLuckScreen() {
     );
   }
 
+  // === TURN COUNTDOWN (3-second countdown before each turn) ===
+  if (phase === "turn-countdown") {
+    const nextPlayerId = gs.order?.[gs.seatPtr];
+    const nextPlayerName = nextPlayerId ? playerMap[nextPlayerId]?.username ?? "Player" : "Player";
+    const isNextMe = nextPlayerId === myId;
+
+    return (
+      <Shell>
+        <View style={st.turnCountdownContainer}>
+          <Text style={st.turnCountdownName}>
+            {isNextMe ? "Your turn!" : `${nextPlayerName}'s turn!`}
+          </Text>
+          <Text style={st.turnCountdownNum}>{turnCountdown}</Text>
+          <Text style={st.turnCountdownLabel}>Get ready...</Text>
+        </View>
+      </Shell>
+    );
+  }
+
   // === LIVE (active turn) ===
   if (phase === "live") {
     const q = gs.currentQuestion;
@@ -594,29 +694,60 @@ export default function PotLuckScreen() {
     const atCap = gs.pot >= gs.potCap;
     const urgent = timeLeft <= 3;
 
+    // Pot animation values
+    const potSize = gs.pot;
+    const potScale = 1 + Math.min(potSize, 7) * 0.06; // slightly smaller scale
+    const potColor = potSize >= 5 ? "#EF4444" : potSize >= 3 ? "#F59E0B" : "#F0D78C";
+    const potGlow = potSize >= 5 ? 16 : potSize >= 3 ? 10 : 4;
+
+    // Sorted scores for scoreboard (show max 4)
+    const sortedScores = Object.entries(gs.scores)
+      .map(([uid, score]) => ({ uid, username: playerMap[uid]?.username ?? "?", score: score as number }))
+      .sort((a, b) => b.score - a.score);
+    const displayScores = sortedScores.slice(0, 4);
+    const moreCount = sortedScores.length - 4;
+
     return (
-      <Shell
-        footer={
-          isMyTurn ? (
-            actionSent ? (
-              <WaitingNote label="Locking in..." />
-            ) : (
-              <PrimaryAction
-                label={"Skip \u2014 pass to next player"}
-                icon="play-skip-forward"
-                variant="dark"
-                onPress={handleSkip}
-              />
-            )
-          ) : (
-            <WaitingNote label={`${currentActor} is deciding...`} />
-          )
-        }
-      >
-        <ScreenTitle
-          title={isMyTurn ? "Your turn!" : `${currentActor}'s turn`}
-          subtitle={
-            isMyTurn
+      <SafeAreaView style={st.container} edges={["top", "left", "right"]}>
+        <ScreenBackground />
+        <GameHeader />
+        <View style={st.liveBody}>
+          {/* Floating scoreboard - top right */}
+          <View style={st.liveScoreboardWrap}>
+            <View style={st.scoreboard}>
+              <Text style={st.scoreboardTitle}>Scores</Text>
+              {displayScores.map((p) => (
+                <View
+                  key={p.uid}
+                  style={[
+                    st.scoreboardRow,
+                    p.uid === currentActorId && st.scoreboardRowActive,
+                  ]}
+                >
+                  <Text
+                    style={[
+                      st.scoreboardName,
+                      p.uid === myId && st.scoreboardNameMe,
+                    ]}
+                    numberOfLines={1}
+                  >
+                    {p.uid === myId ? "You" : p.username}
+                  </Text>
+                  <Text style={[st.scoreboardScore, p.uid === currentActorId && st.scoreboardScoreActive]}>{p.score}</Text>
+                </View>
+              ))}
+              {moreCount > 0 && (
+                <Text style={st.scoreboardMore}>+{moreCount} more</Text>
+              )}
+            </View>
+          </View>
+
+          {/* Turn label */}
+          <Text style={st.liveTurnLabel}>
+            {isMyTurn ? "Your turn!" : `${currentActor}'s turn`}
+          </Text>
+          <Text style={st.liveTurnSub}>
+            {isMyTurn
               ? actionSent
                 ? "Locking in..."
                 : `Answer for ${gs.pot} pt${gs.pot !== 1 ? "s" : ""} \u00B7 or skip`
@@ -624,80 +755,50 @@ export default function PotLuckScreen() {
                 ? "You're up"
                 : turnsAway === 1
                   ? "You're NEXT"
-                  : `You're ${turnsAway} turns away`
-          }
-          pill={isMyTurn ? "Your turn" : undefined}
-        />
+                  : `You're ${turnsAway} turns away`}
+          </Text>
 
-        {/* Timer */}
-        <View style={st.countdown}>
-          <Text style={[st.countdownNum, isMyTurn && st.countdownNumCompact, urgent && { color: colors.danger }]}>{timeLeft}</Text>
-          <Eyebrow>Seconds left</Eyebrow>
-          <ProgressBar progress={timeLeft / TIMER_SECONDS} />
-        </View>
-
-        {/* Pot + my score (hidden on my own turn so all 4 answers fit without scrolling;
-            the subtitle already shows the points at stake) */}
-        {!isMyTurn && (
-        <View style={st.statRow}>
-          <GradientCard
-            style={st.flex1}
-            radius={radii.lg}
-            borderColors={atCap ? DANGER_BORDER : undefined}
-            contentStyle={st.statContent}
-          >
-            <Text style={[st.statValue, atCap && { color: colors.danger }]}>{gs.pot}</Text>
-            <Eyebrow style={atCap ? { color: colors.danger } : undefined}>{atCap ? "Max pot" : "Pot"}</Eyebrow>
-            <View style={st.potTrack}>
+          {/* Compact pot display */}
+          <View style={st.livePotRow}>
+            <View style={[
+              st.livePotCircle,
+              {
+                transform: [{ scale: potScale }],
+                shadowColor: potColor,
+                shadowRadius: potGlow,
+                shadowOpacity: 0.7,
+              },
+            ]}>
+              <Text style={[st.livePotValue, { color: potColor }]}>{gs.pot}</Text>
+              <Text style={st.livePotLabel}>{atCap ? "MAX" : "POT"}</Text>
+            </View>
+            <View style={st.livePotDots}>
               {Array.from({ length: gs.potCap }).map((_, i) => (
                 <View
                   key={i}
                   style={[
                     st.potDot,
-                    i < gs.pot && (atCap ? st.potDotMax : st.potDotOn),
+                    i < gs.pot && { backgroundColor: potColor },
                   ]}
                 />
               ))}
             </View>
-          </GradientCard>
-          <GradientCard style={st.flex1} radius={radii.lg} contentStyle={st.statContent}>
-            <Text style={st.statValue}>
-              {gs.scores[myId] ?? 0}
-              <Text style={st.statTarget}>/{gs.target}</Text>
-            </Text>
-            <Eyebrow>Your score</Eyebrow>
-            {deltaText && (
-              <Animated.Text
-                style={[
-                  st.deltaAnim,
-                  { color: deltaColor, opacity: deltaOpacity, transform: [{ translateY: deltaTranslateY }] },
-                ]}
-              >
-                {deltaText}
-              </Animated.Text>
-            )}
-          </GradientCard>
-        </View>
-        )}
+          </View>
 
-        {/* Question */}
-        <HeroGradient>
-          <View style={st.qHero}>
-            <View style={st.qHeroHead}>
+          {/* Question card - compact */}
+          <View style={[st.liveQuestionCard]}>
+            <View style={st.liveQHeader}>
               <View style={[st.diffChip, { backgroundColor: diffColor }]}>
                 <Text style={st.diffText}>{diffLabel}</Text>
               </View>
               <Text style={st.diffPots}>starts at {q?.startingPot ?? 1}pt</Text>
             </View>
-            <Text style={st.qText}>{q?.text ?? ""}</Text>
+            <Text style={st.liveQText}>{q?.text ?? ""}</Text>
           </View>
-        </HeroGradient>
 
-        {/* Choices / spectate */}
-        {isMyTurn ? (
-          <>
-            <Eyebrow style={st.sectionEyebrow}>Pick your answer</Eyebrow>
-            <View style={st.list}>
+          {/* Choices or spectate */}
+          {isMyTurn ? (
+            <View style={st.liveChoices}>
               {(q?.choices ?? []).map((choice, i) => (
                 <Pressable
                   key={i}
@@ -706,31 +807,59 @@ export default function PotLuckScreen() {
                   accessibilityRole="button"
                   style={({ pressed }) => [actionSent && st.choiceOff, pressed && st.pressed]}
                 >
-                  <GradientCard radius={radii.lg} contentStyle={st.choiceRow}>
-                    <View style={st.numTile}>
-                      <Text style={[st.numTileText, { color: colors.highlight }]}>{String.fromCharCode(65 + i)}</Text>
+                  <View style={st.liveChoiceItem}>
+                    <View style={st.liveChoiceLetter}>
+                      <Text style={st.liveChoiceLetterText}>{String.fromCharCode(65 + i)}</Text>
                     </View>
-                    <Text style={st.choiceText} numberOfLines={2}>{choice}</Text>
-                    <Ionicons name="chevron-forward" size={16} color={colors.highlight} />
-                  </GradientCard>
+                    <Text style={st.liveChoiceText} numberOfLines={2}>{choice}</Text>
+                    <Ionicons name="chevron-forward" size={14} color={colors.highlight} />
+                  </View>
                 </Pressable>
               ))}
             </View>
-          </>
-        ) : (
-          <GradientCard radius={radii.lg} contentStyle={st.rankRow}>
-            <PlayerAvatar username={currentActor ?? "?"} size={40} />
-            <View style={st.flex1}>
-              <Eyebrow>Now deciding</Eyebrow>
-              <Text style={st.rankName} numberOfLines={1}>{currentActor}</Text>
+          ) : (
+            <View style={st.liveSpectate}>
+              <PlayerAvatar username={currentActor ?? "?"} size={32} />
+              <View style={st.flex1}>
+                <Text style={st.liveSpectateName} numberOfLines={1}>{currentActor} is deciding...</Text>
+              </View>
+              <Text style={st.liveSpectateAway}>
+                {turnsAway <= 0 ? "You're up" : turnsAway === 1 ? "Next" : `${turnsAway} away`}
+              </Text>
             </View>
-            <Pill
-              tone={turnsAway === 1 ? "lavender" : "dark"}
-              label={turnsAway <= 0 ? "You're up" : turnsAway === 1 ? "You're next" : `${turnsAway} turns away`}
-            />
-          </GradientCard>
-        )}
-      </Shell>
+          )}
+
+          {/* Timer at bottom */}
+          <View style={st.liveTimerRow}>
+            <Text style={[st.liveTimerNum, urgent && { color: colors.danger }]}>{timeLeft}s</Text>
+            <View style={st.liveTimerBarWrap}>
+              <ProgressBar progress={timeLeft / TIMER_SECONDS} />
+            </View>
+          </View>
+
+          {/* Skip button or waiting */}
+          <View style={st.liveFooter}>
+            {isMyTurn ? (
+              actionSent ? (
+                <View style={st.liveWaiting}>
+                  <ActivityIndicator size="small" color={colors.highlight} />
+                  <Text style={st.liveWaitingText}>Locking in...</Text>
+                </View>
+              ) : (
+                <Pressable onPress={handleSkip} style={st.liveSkipBtn}>
+                  <Ionicons name="play-skip-forward" size={16} color={colors.white} />
+                  <Text style={st.liveSkipText}>Skip</Text>
+                </Pressable>
+              )
+            ) : (
+              <View style={st.liveWaiting}>
+                <ActivityIndicator size="small" color={colors.highlight} />
+                <Text style={st.liveWaitingText}>{currentActor} is deciding...</Text>
+              </View>
+            )}
+          </View>
+        </View>
+      </SafeAreaView>
     );
   }
 
@@ -931,7 +1060,7 @@ function StandingRow({ rank, name, score, isMe }: { rank: number; name: string; 
 // ---------------------------------------------------------------------------
 
 const st = StyleSheet.create({
-  container: { flex: 1, backgroundColor: colors.background },
+  container: { flex: 1, backgroundColor: colors.bgPurple },
   scroll: {
     flexGrow: 1,
     paddingHorizontal: spacing.screen,
@@ -1082,4 +1211,302 @@ const st = StyleSheet.create({
   // Game over
   winnerContent: { flexDirection: "row", alignItems: "center", gap: spacing.md, padding: 20 },
   winnerName: { fontFamily: fonts.extrabold, fontSize: 24, color: colors.onPrimary },
+
+  // Target score selector
+  targetRow: { flexDirection: "row", gap: spacing.sm, marginTop: spacing.xs },
+  targetChip: {
+    flex: 1,
+    paddingVertical: 12,
+    paddingHorizontal: 14,
+    borderRadius: radii.pill,
+    backgroundColor: colors.surfaceLight,
+    borderWidth: 1,
+    borderColor: colors.cardBorder,
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  targetChipActive: {
+    backgroundColor: colors.highlight,
+    borderColor: colors.highlight,
+  },
+  targetChipText: {
+    fontFamily: fonts.bold,
+    fontSize: 14,
+    color: colors.gray400,
+  },
+  targetChipTextActive: {
+    color: colors.onPrimary,
+  },
+
+  // Turn countdown
+  turnCountdownContainer: {
+    flex: 1,
+    alignItems: "center",
+    justifyContent: "center",
+    gap: spacing.md,
+    paddingBottom: 60,
+  },
+  turnCountdownName: {
+    fontFamily: fonts.extrabold,
+    fontSize: 28,
+    color: colors.white,
+    textAlign: "center",
+  },
+  turnCountdownNum: {
+    fontFamily: fonts.extrabold,
+    fontSize: 120,
+    lineHeight: 130,
+    color: colors.highlight,
+    letterSpacing: -4,
+    fontVariant: ["tabular-nums"] as any,
+  },
+  turnCountdownLabel: {
+    fontFamily: fonts.semibold,
+    fontSize: 16,
+    color: colors.gray400,
+  },
+
+  // Scoreboard (compact floating card)
+  scoreboard: {
+    backgroundColor: "rgba(26, 23, 48, 0.9)",
+    borderRadius: radii.md,
+    borderWidth: 1,
+    borderColor: colors.cardBorder,
+    paddingVertical: 6,
+    paddingHorizontal: 10,
+    minWidth: 120,
+    maxWidth: 150,
+  },
+  scoreboardTitle: {
+    fontFamily: fonts.bold,
+    fontSize: 9,
+    color: colors.gray500,
+    letterSpacing: 1.2,
+    textTransform: "uppercase",
+    marginBottom: 2,
+  },
+  scoreboardRow: {
+    flexDirection: "row",
+    justifyContent: "space-between",
+    alignItems: "center",
+    paddingVertical: 1,
+    paddingHorizontal: 3,
+    borderRadius: 4,
+  },
+  scoreboardRowActive: {
+    backgroundColor: "rgba(184, 174, 232, 0.12)",
+  },
+  scoreboardName: {
+    fontFamily: fonts.medium,
+    fontSize: 11,
+    color: colors.gray300,
+    flex: 1,
+    marginRight: 6,
+  },
+  scoreboardNameMe: {
+    fontFamily: fonts.bold,
+    color: colors.highlight,
+  },
+  scoreboardScore: {
+    fontFamily: fonts.extrabold,
+    fontSize: 12,
+    color: colors.white,
+    fontVariant: ["tabular-nums"] as any,
+  },
+  scoreboardScoreActive: {
+    color: colors.highlight,
+  },
+  scoreboardMore: {
+    fontFamily: fonts.medium,
+    fontSize: 10,
+    color: colors.gray500,
+    textAlign: "center",
+    marginTop: 2,
+  },
+
+  // Live phase layout (no scroll, single screen)
+  liveBody: {
+    flex: 1,
+    paddingHorizontal: spacing.screen,
+    paddingTop: 4,
+    paddingBottom: 8,
+    justifyContent: "space-between",
+  },
+  liveScoreboardWrap: {
+    position: "absolute",
+    top: 0,
+    right: spacing.screen,
+    zIndex: 10,
+  },
+  liveTurnLabel: {
+    fontFamily: fonts.extrabold,
+    fontSize: 18,
+    color: colors.white,
+    marginTop: 2,
+  },
+  liveTurnSub: {
+    fontFamily: fonts.medium,
+    fontSize: 13,
+    color: colors.gray400,
+    marginTop: 1,
+  },
+  livePotRow: {
+    alignItems: "center",
+    gap: 4,
+    marginVertical: 2,
+  },
+  livePotCircle: {
+    alignItems: "center",
+    justifyContent: "center",
+    width: 64,
+    height: 64,
+    borderRadius: 32,
+    backgroundColor: "rgba(26, 23, 48, 0.9)",
+    borderWidth: 2,
+    borderColor: "rgba(240, 215, 140, 0.3)",
+    shadowOffset: { width: 0, height: 0 },
+    elevation: 8,
+  },
+  livePotValue: {
+    fontFamily: fonts.extrabold,
+    fontSize: 28,
+    lineHeight: 32,
+    fontVariant: ["tabular-nums"] as any,
+  },
+  livePotLabel: {
+    fontFamily: fonts.bold,
+    fontSize: 8,
+    letterSpacing: 1.2,
+    color: colors.gray400,
+    marginTop: -2,
+  },
+  livePotDots: {
+    flexDirection: "row",
+    gap: 4,
+  },
+  liveQuestionCard: {
+    backgroundColor: "rgba(109, 90, 205, 0.15)",
+    borderRadius: radii.lg,
+    borderWidth: 1,
+    borderColor: "rgba(109, 90, 205, 0.3)",
+    padding: 12,
+    gap: 6,
+  },
+  liveQHeader: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: spacing.sm,
+  },
+  liveQText: {
+    fontFamily: fonts.bold,
+    fontSize: 15,
+    lineHeight: 20,
+    color: colors.white,
+  },
+  liveChoices: {
+    gap: 6,
+  },
+  liveChoiceItem: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 10,
+    backgroundColor: "rgba(26, 23, 48, 0.7)",
+    borderRadius: radii.md,
+    borderWidth: 1,
+    borderColor: colors.cardBorder,
+    paddingVertical: 10,
+    paddingHorizontal: 12,
+  },
+  liveChoiceLetter: {
+    width: 28,
+    height: 28,
+    borderRadius: radii.sm,
+    backgroundColor: colors.surfaceLight,
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  liveChoiceLetterText: {
+    fontFamily: fonts.extrabold,
+    fontSize: 13,
+    color: colors.highlight,
+  },
+  liveChoiceText: {
+    flex: 1,
+    fontFamily: fonts.semibold,
+    fontSize: 14,
+    color: colors.white,
+  },
+  liveSpectate: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 10,
+    backgroundColor: "rgba(26, 23, 48, 0.7)",
+    borderRadius: radii.md,
+    borderWidth: 1,
+    borderColor: colors.cardBorder,
+    paddingVertical: 10,
+    paddingHorizontal: 12,
+  },
+  liveSpectateName: {
+    fontFamily: fonts.semibold,
+    fontSize: 14,
+    color: colors.gray300,
+  },
+  liveSpectateAway: {
+    fontFamily: fonts.bold,
+    fontSize: 12,
+    color: colors.highlight,
+  },
+  liveTimerRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 10,
+    marginTop: 2,
+  },
+  liveTimerNum: {
+    fontFamily: fonts.extrabold,
+    fontSize: 22,
+    color: colors.white,
+    fontVariant: ["tabular-nums"] as any,
+    minWidth: 36,
+  },
+  liveTimerBarWrap: {
+    flex: 1,
+  },
+  liveFooter: {
+    marginTop: 4,
+    marginBottom: 4,
+  },
+  liveSkipBtn: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "center",
+    gap: 8,
+    backgroundColor: colors.surfaceLight,
+    borderRadius: radii.pill,
+    paddingVertical: 12,
+    borderWidth: 1,
+    borderColor: colors.cardBorder,
+  },
+  liveSkipText: {
+    fontFamily: fonts.semibold,
+    fontSize: 15,
+    color: colors.white,
+  },
+  liveWaiting: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "center",
+    gap: 8,
+    paddingVertical: 12,
+    backgroundColor: colors.surface,
+    borderRadius: radii.pill,
+    borderWidth: 1,
+    borderColor: colors.cardBorder,
+  },
+  liveWaitingText: {
+    fontFamily: fonts.semibold,
+    fontSize: 14,
+    color: colors.gray300,
+  },
 });

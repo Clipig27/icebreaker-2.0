@@ -167,7 +167,7 @@ export default function AuctionDraftScreen() {
       if (cur?.phase && cur.phase !== "starting") return null;
       return initialState();
     }).catch(warn);
-  }, [isHost, room?.id]);
+  }, [isHost, room?.id, gs?.phase === "starting"]);
 
   // Hydrate this device's recently-dealt item ids so pools don't repeat
   useEffect(() => {
@@ -274,6 +274,14 @@ export default function AuctionDraftScreen() {
     if (phase !== "voting") {
       setMyVote(null);
       setSubmittingVote(false);
+    }
+  }, [phase]);
+
+  // Reset refs when game restarts (Play Again)
+  useEffect(() => {
+    if (phase === "intro" || phase === "starting" || (gs as any)?.phase === "starting") {
+      trackedGameRef.current = false;
+      navigatedBackRef.current = false;
     }
   }, [phase]);
 
@@ -1463,7 +1471,7 @@ function WaitingNote({ label, done = false }: { label: string; done?: boolean })
 // ---------------------------------------------------------------------------
 
 const st = StyleSheet.create({
-  container: { flex: 1, backgroundColor: colors.background },
+  container: { flex: 1, backgroundColor: colors.bgPurple },
   scroll: {
     flexGrow: 1,
     paddingHorizontal: spacing.screen,

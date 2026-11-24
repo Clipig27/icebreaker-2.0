@@ -66,6 +66,13 @@ export default function GameScreen() {
   const info = GAME_INFO[gameType ?? ""] ?? GAME_INFO.talentShow;
   const phase = room?.game_state?.phase ?? "starting";
 
+  // Reset refs when game restarts (Play Again)
+  useEffect(() => {
+    if (phase === "intro" || phase === "starting") {
+      navigatedBackRef.current = false;
+    }
+  }, [phase]);
+
   // Single place that returns to the lobby (host + players); fires once.
   const navigatedBackRef = useRef(false);
   useEffect(() => {
@@ -147,7 +154,7 @@ export default function GameScreen() {
 }
 
 const s = StyleSheet.create({
-  safe: { flex: 1, backgroundColor: colors.background },
+  safe: { flex: 1, backgroundColor: colors.bgPurple },
   scroll: {
     flexGrow: 1,
     paddingHorizontal: spacing.screen,

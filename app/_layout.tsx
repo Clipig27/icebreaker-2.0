@@ -104,14 +104,14 @@ export default function RootLayout() {
   const contentStyle = useAnimatedStyle(() => ({ transform: [{ scale: 1 + 0.06 * fade.value }] }));
 
   return (
-    <View style={{ flex: 1, backgroundColor: colors.background }}>
+    <View style={{ flex: 1, backgroundColor: colors.bgPurple }}>
       <StatusBar style="light" />
       {appReady && (
         <Stack
           screenOptions={{
             headerShown: false,
-            contentStyle: { backgroundColor: colors.background },
-            animation: "slide_from_right",
+            contentStyle: { backgroundColor: colors.bgPurple },
+            animation: "fade",
           }}
         />
       )}

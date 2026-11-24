@@ -74,18 +74,24 @@ export default function UsernameSetup() {
       }),
     ]).start();
 
-    // Floating emoji animation
+    // Floating emoji animation: 0 → -8 → 0 → 8 → 0 (smooth continuous bob)
     RNAnimated.loop(
       RNAnimated.sequence([
         RNAnimated.timing(floatAnim, {
           toValue: -8,
-          duration: 1500,
+          duration: 1000,
           useNativeDriver: true,
           easing: Easing.inOut(Easing.sin),
         }),
         RNAnimated.timing(floatAnim, {
           toValue: 8,
-          duration: 1500,
+          duration: 2000,
+          useNativeDriver: true,
+          easing: Easing.inOut(Easing.sin),
+        }),
+        RNAnimated.timing(floatAnim, {
+          toValue: 0,
+          duration: 1000,
           useNativeDriver: true,
           easing: Easing.inOut(Easing.sin),
         }),
@@ -134,15 +140,13 @@ export default function UsernameSetup() {
       style={s.container}
     >
       <View style={s.content}>
-        <RNAnimated.Text
-          style={[
-            s.emoji,
-            makeSlideStyle(emojiAnim),
-            { transform: [...(makeSlideStyle(emojiAnim).transform), { translateY: floatAnim }] },
-          ]}
-        >
-          ⚡
-        </RNAnimated.Text>
+        <RNAnimated.View style={[makeSlideStyle(emojiAnim)]}>
+          <RNAnimated.Text
+            style={[s.emoji, { transform: [{ translateY: floatAnim }] }]}
+          >
+            ⚡
+          </RNAnimated.Text>
+        </RNAnimated.View>
 
         <RNAnimated.Text style={[s.heading, makeSlideStyle(titleAnim)]}>
           Pick a username

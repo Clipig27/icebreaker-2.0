@@ -208,9 +208,17 @@ export default function BlindRankingScreen() {
       if (cur?.phase && cur.phase !== "starting") return null;
       return initialState;
     });
-  }, [isHost, room?.id]);
+  }, [isHost, room?.id, gs?.phase === "starting"]);
 
   // Navigate away if room returns to lobby
+  // Reset refs when game restarts (Play Again)
+  useEffect(() => {
+    if (phase === "intro" || phase === "starting" || (gs as any)?.phase === "starting") {
+      trackedGameRef.current = false;
+      navigatedBackRef.current = false;
+    }
+  }, [phase]);
+
   // Track wins/games played
   const trackedGameRef = useRef(false);
   useEffect(() => {
@@ -422,7 +430,7 @@ export default function BlindRankingScreen() {
     return <GameLoadingScreen name="Blind Ranking" icon="list" color="#A78BFA" />;
   }
 
-  const roundPill = `Round ${gs.currentGame ?? 1}/${gs.totalGames ?? 1}`;
+  // Always 1 round — no round pill needed.
 
   // === INTRO ===
   if (phase === "intro") {
@@ -477,7 +485,7 @@ export default function BlindRankingScreen() {
           <ScreenTitle
             title="Blind Ranking"
             subtitle="Host is choosing the category and size."
-            pill={(gs.totalGames ?? 1) > 1 ? roundPill : undefined}
+
           />
           <GradientCard contentStyle={st.centerCard}>
             <View style={st.artTileLg}>
@@ -550,12 +558,8 @@ export default function BlindRankingScreen() {
         <Shell>
           <ScreenTitle
             title="Pick a Category"
-            subtitle={
-              (gs.totalGames ?? 1) > 1
-                ? `Round ${gs.currentGame ?? 1} of ${gs.totalGames} — pick a category.`
-                : "Choose what everyone will rank."
-            }
-            pill={(gs.totalGames ?? 1) > 1 ? roundPill : undefined}
+            subtitle="Choose what everyone will rank."
+
           />
           <View style={st.catGrid}>
             {BANK_KEYS.map((key) => {
@@ -638,7 +642,7 @@ export default function BlindRankingScreen() {
       const sizeOptions = ([5, 10] as const).filter((s) => catItemCount >= s);
       return (
         <Shell>
-          <CategoryTitle emoji={catEmoji} label={catLabel} eyebrow="How many items to rank?" pill={(gs.totalGames ?? 1) > 1 ? roundPill : undefined} />
+          <CategoryTitle emoji={catEmoji} label={catLabel} eyebrow="How many items to rank?" />
           <View style={st.optionRow}>
             {sizeOptions.map((size) => (
               <OptionTile
@@ -647,8 +651,8 @@ export default function BlindRankingScreen() {
                 label={`Top ${size}`}
                 onPress={() => {
                   setSelectedSize(size);
-                  // Rounds are only picked for game 1; later games launch straight away.
-                  if ((gs.currentGame ?? 1) > 1) launchGame(gs.totalGames, gs.currentGame, size);
+                  // Always 1 round — launch immediately after size pick.
+                  launchGame(1, gs.currentGame ?? 1, size);
                 }}
               />
             ))}
@@ -658,39 +662,18 @@ export default function BlindRankingScreen() {
       );
     }
 
-    // Games 2..N: rounds were already chosen in game 1 — launching (fallback button if it didn't).
-    if ((gs.currentGame ?? 1) > 1) {
-      return (
-        <Shell
-          footer={
-            <PrimaryAction label="Start" icon="play" onPress={() => launchGame(gs.totalGames, gs.currentGame)} />
-          }
-        >
-          <CategoryTitle
-            emoji={catEmoji}
-            label={catLabel}
-            eyebrow={`Top ${selectedSize} · Game ${gs.currentGame}/${gs.totalGames}`}
-            pill={roundPill}
-          />
-          <TextLink label="Change size" onPress={() => setSelectedSize(null)} />
-        </Shell>
-      );
-    }
-
-    // Step 3: pick rounds
+    // Size was selected and launchGame was called — show loading fallback.
     return (
-      <Shell>
-        <CategoryTitle emoji={catEmoji} label={catLabel} eyebrow={`Top ${selectedSize} · How many rounds?`} />
-        <View style={st.optionRow}>
-          {([1, 3, 5] as const).map((n) => (
-            <OptionTile
-              key={n}
-              value={String(n)}
-              label={n === 1 ? "Round" : "Rounds"}
-              onPress={() => launchGame(n, gs.currentGame ?? 1)}
-            />
-          ))}
-        </View>
+      <Shell
+        footer={
+          <PrimaryAction label="Start" icon="play" onPress={() => launchGame(1, gs.currentGame ?? 1)} />
+        }
+      >
+        <CategoryTitle
+          emoji={catEmoji}
+          label={catLabel}
+          eyebrow={`Top ${selectedSize}`}
+        />
         <TextLink label="Change size" onPress={() => setSelectedSize(null)} />
       </Shell>
     );
@@ -722,15 +705,16 @@ export default function BlindRankingScreen() {
         <View style={st.titleBlock}>
           <View style={st.eyebrowRow}>
             <Eyebrow tone="lavender">Blind Ranking</Eyebrow>
-            <Pill tone="peach" label={roundPill} />
+            <Pill tone="peach" label={`Top ${gs.size}`} />
           </View>
           <View style={st.promptRow}>
             <View style={st.flex1}>
               <Eyebrow>Your top {gs.size}</Eyebrow>
               <Text style={[type.title, st.promptTitle]}>{gs.categoryLabel}</Text>
             </View>
-            <View style={st.artTile}>
-              <Text style={st.artEmoji}>{gs.categoryEmoji}</Text>
+            <View style={st.rankBadge}>
+              <Text style={st.rankBadgeEmoji}>{gs.categoryEmoji}</Text>
+              <Text style={st.rankBadgeText}>1-{gs.size}</Text>
             </View>
           </View>
         </View>
@@ -769,52 +753,65 @@ export default function BlindRankingScreen() {
 
         {/* Slots */}
         <Eyebrow style={st.sectionEyebrow}>Your Top {gs.size} Ranking</Eyebrow>
-        <View style={st.list}>
-          {mySlots.map((slotItem: string | null, idx: number) => {
-            const isFilled = slotItem !== null;
-            const canPlace = !isFilled && !hasPlacedThisRound;
-            return (
-              <Pressable
-                key={idx}
-                onPress={() => canPlace && handlePlaceItem(idx)}
-                disabled={!canPlace}
-                accessibilityRole="button"
-                style={({ pressed }) => [pressed && canPlace && st.pressed]}
-              >
-                <GradientCard
-                  radius={radii.lg}
-                  borderColors={canPlace ? OPEN_BORDER : undefined}
-                  contentStyle={[st.slotRow, !isFilled && !canPlace && st.slotDim]}
-                >
-                  <View style={[st.numTile, isFilled ? st.numTileOn : st.numTileOpen]}>
-                    {isFilled ? (
-                      <Text style={st.numTileTextOn}>{idx + 1}</Text>
-                    ) : canPlace ? (
-                      <Ionicons name="add" size={18} color={colors.highlight} />
-                    ) : (
-                      <Text style={st.numTileText}>{idx + 1}</Text>
-                    )}
-                  </View>
-                  {isFilled ? (
-                    <Text style={st.slotItemText} numberOfLines={1}>{slotItem}</Text>
-                  ) : (
-                    <Text style={st.slotEmpty} numberOfLines={1}>
-                      {canPlace ? `Place at #${idx + 1}` : "—"}
-                    </Text>
-                  )}
-                  {isFilled ? (
-                    <View style={st.slotTag}>
-                      <Ionicons name="lock-closed" size={12} color={colors.gray500} />
-                      <Text style={st.slotTagMuted}>LOCKED</Text>
-                    </View>
-                  ) : canPlace ? (
-                    <Text style={st.slotTagText}>TAP</Text>
-                  ) : null}
-                </GradientCard>
-              </Pressable>
-            );
-          })}
-        </View>
+        {gs.size <= 5 ? (
+          /* Single column for 5 items */
+          <View style={st.list}>
+            {mySlots.map((slotItem: string | null, idx: number) => {
+              const isFilled = slotItem !== null;
+              const canPlace = !isFilled && !hasPlacedThisRound;
+              return (
+                <SlotTile
+                  key={idx}
+                  idx={idx}
+                  slotItem={slotItem}
+                  isFilled={isFilled}
+                  canPlace={canPlace}
+                  onPlace={handlePlaceItem}
+                  compact={false}
+                />
+              );
+            })}
+          </View>
+        ) : (
+          /* Two columns for 10 items: 1-5 left, 6-10 right */
+          <View style={st.twoColWrap}>
+            <View style={st.twoColColumn}>
+              {mySlots.slice(0, 5).map((slotItem: string | null, idx: number) => {
+                const isFilled = slotItem !== null;
+                const canPlace = !isFilled && !hasPlacedThisRound;
+                return (
+                  <SlotTile
+                    key={idx}
+                    idx={idx}
+                    slotItem={slotItem}
+                    isFilled={isFilled}
+                    canPlace={canPlace}
+                    onPlace={handlePlaceItem}
+                    compact
+                  />
+                );
+              })}
+            </View>
+            <View style={st.twoColColumn}>
+              {mySlots.slice(5, 10).map((slotItem: string | null, idx: number) => {
+                const realIdx = idx + 5;
+                const isFilled = slotItem !== null;
+                const canPlace = !isFilled && !hasPlacedThisRound;
+                return (
+                  <SlotTile
+                    key={realIdx}
+                    idx={realIdx}
+                    slotItem={slotItem}
+                    isFilled={isFilled}
+                    canPlace={canPlace}
+                    onPlace={handlePlaceItem}
+                    compact
+                  />
+                );
+              })}
+            </View>
+          </View>
+        )}
       </Shell>
     );
   }
@@ -853,7 +850,6 @@ export default function BlindRankingScreen() {
         <ScreenTitle
           title="Results"
           subtitle={`${gs.categoryEmoji} ${gs.categoryLabel} — Top ${gs.size}`}
-          pill={roundPill}
         />
 
         {divisive.length > 0 && (
@@ -925,7 +921,7 @@ export default function BlindRankingScreen() {
       const pct = players.length > 0 ? Math.min(100, (votesIn / players.length) * 100) : 0;
       return (
         <Shell footer={<WaitingNote label={`${votesIn} / ${players.length} voted`} />}>
-          <ScreenTitle title="Vote submitted!" subtitle={`${votesIn} / ${players.length} voted`} pill={roundPill} />
+          <ScreenTitle title="Vote submitted!" subtitle={`${votesIn} / ${players.length} voted`} />
           <GradientCard contentStyle={st.centerCard}>
             <View style={st.submittedIcon}>
               <Ionicons name="checkmark" size={36} color={colors.highlight} />
@@ -946,10 +942,9 @@ export default function BlindRankingScreen() {
 
     return (
       <Shell footer={<WaitingNote label={`${votesIn} / ${players.length} voted`} />}>
-        <ScreenTitle title="Vote for the Best List" subtitle="Whose ranking do you think is best?" pill={roundPill} />
+        <ScreenTitle title="Vote for the Best List" subtitle="Whose ranking do you think is best?" />
         <View style={st.list}>
           {players
-            .filter((p) => p.user_id !== myId)
             .map((p) => (
               <Pressable
                 key={p.user_id}
@@ -994,7 +989,7 @@ export default function BlindRankingScreen() {
         footer={
           isHost ? (
             <PrimaryAction
-              label={gs.currentGame >= gs.totalGames ? "See Final Results" : "Next Round"}
+              label="See Final Results"
               icon="arrow-forward"
               onPress={handleNextGameOrEnd}
             />
@@ -1003,7 +998,7 @@ export default function BlindRankingScreen() {
           )
         }
       >
-        <ScreenTitle title="Vote Results" subtitle={`${gs.categoryEmoji} ${gs.categoryLabel}`} pill={roundPill} />
+        <ScreenTitle title="Vote Results" subtitle={`${gs.categoryEmoji} ${gs.categoryLabel}`} />
         <View style={st.list}>
           {sorted.map((p, i) => (
             <RankRow
@@ -1016,22 +1011,6 @@ export default function BlindRankingScreen() {
           ))}
         </View>
 
-        {gs.totalGames > 1 && (
-          <>
-            <Eyebrow style={st.sectionEyebrow}>SERIES SCORES</Eyebrow>
-            <View style={st.list}>
-              {scoreSorted.map((p, i) => (
-                <RankRow
-                  key={p.uid}
-                  rank={scoreRanks[i]}
-                  name={p.username}
-                  isMe={p.uid === myId}
-                  value={`${p.score} pt${p.score !== 1 ? "s" : ""}`}
-                />
-              ))}
-            </View>
-          </>
-        )}
       </Shell>
     );
   }
@@ -1117,6 +1096,71 @@ const SELECTED_BORDER = [colors.highlight, colors.highlightGradientEnd] as const
 const OPEN_BORDER = ["rgba(184,174,232,0.6)", "rgba(184,174,232,0.15)"] as const;
 const WARN_BORDER = ["rgba(245,158,11,0.6)", "rgba(245,158,11,0.1)"] as const;
 const SUCCESS_BORDER = ["rgba(16,185,129,0.6)", "rgba(16,185,129,0.1)"] as const;
+
+/** Slot tile used in the ranking grid (both single-col and two-col layouts). */
+function SlotTile({
+  idx,
+  slotItem,
+  isFilled,
+  canPlace,
+  onPlace,
+  compact,
+}: {
+  idx: number;
+  slotItem: string | null;
+  isFilled: boolean;
+  canPlace: boolean;
+  onPlace: (i: number) => void;
+  compact: boolean;
+}) {
+  return (
+    <Pressable
+      onPress={() => canPlace && onPlace(idx)}
+      disabled={!canPlace}
+      accessibilityRole="button"
+      style={({ pressed }) => [pressed && canPlace && st.pressed]}
+    >
+      <GradientCard
+        radius={radii.lg}
+        borderColors={canPlace ? OPEN_BORDER : undefined}
+        contentStyle={[
+          compact ? st.slotRowCompact : st.slotRow,
+          !isFilled && !canPlace && st.slotDim,
+        ]}
+      >
+        <View style={[compact ? st.numTileCompact : st.numTile, isFilled ? st.numTileOn : st.numTileOpen]}>
+          {isFilled ? (
+            <Text style={compact ? st.numTileTextOnCompact : st.numTileTextOn}>{idx + 1}</Text>
+          ) : canPlace ? (
+            <Ionicons name="add" size={compact ? 14 : 18} color={colors.highlight} />
+          ) : (
+            <Text style={compact ? st.numTileTextCompact : st.numTileText}>{idx + 1}</Text>
+          )}
+        </View>
+        {isFilled ? (
+          <Text style={compact ? st.slotItemTextCompact : st.slotItemText} numberOfLines={1}>{slotItem}</Text>
+        ) : (
+          <Text style={compact ? st.slotEmptyCompact : st.slotEmpty} numberOfLines={1}>
+            {canPlace ? (compact ? "TAP" : `Place at #${idx + 1}`) : "\u2014"}
+          </Text>
+        )}
+        {!compact && (
+          isFilled ? (
+            <View style={st.slotTag}>
+              <Ionicons name="lock-closed" size={12} color={colors.gray500} />
+              <Text style={st.slotTagMuted}>LOCKED</Text>
+            </View>
+          ) : canPlace ? (
+            <Text style={st.slotTagText}>TAP</Text>
+          ) : null
+        )}
+        {compact && isFilled && (
+          <Ionicons name="lock-closed" size={10} color={colors.gray500} style={{ marginLeft: 2 }} />
+        )}
+      </GradientCard>
+    </Pressable>
+  );
+}
 
 /** Screen frame: background, room toolbar, scrolling body and pinned footer. */
 function Shell({
@@ -1264,7 +1308,7 @@ function RankRow({
 // ---------------------------------------------------------------------------
 
 const st = StyleSheet.create({
-  container: { flex: 1, backgroundColor: colors.background },
+  container: { flex: 1, backgroundColor: colors.bgPurple },
   scroll: {
     flexGrow: 1,
     paddingHorizontal: spacing.screen,
@@ -1447,6 +1491,44 @@ const st = StyleSheet.create({
   slotTag: { flexDirection: "row", alignItems: "center", gap: 4 },
   slotTagMuted: { fontFamily: fonts.bold, fontSize: 11, letterSpacing: 1.2, color: colors.gray500 },
   slotTagText: { fontFamily: fonts.bold, fontSize: 12, letterSpacing: 1.2, color: colors.highlight },
+
+  // Two-column layout for 10-item games
+  twoColWrap: { flexDirection: "row", gap: spacing.sm },
+  twoColColumn: { flex: 1, gap: spacing.xs },
+
+  // Compact slot (used in two-column mode)
+  slotRowCompact: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 6,
+    paddingVertical: 8,
+    paddingHorizontal: 10,
+  },
+  numTileCompact: {
+    width: 26,
+    height: 26,
+    borderRadius: 7,
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  numTileTextOnCompact: { fontFamily: fonts.extrabold, fontSize: 12, color: colors.onPrimary },
+  numTileTextCompact: { fontFamily: fonts.extrabold, fontSize: 12, color: colors.white },
+  slotItemTextCompact: { flex: 1, fontFamily: fonts.bold, fontSize: 12, color: colors.white },
+  slotEmptyCompact: { flex: 1, fontFamily: fonts.medium, fontSize: 12, color: colors.gray400 },
+
+  // Rank badge (top-right of playing header)
+  rankBadge: {
+    width: 64,
+    height: 64,
+    borderRadius: radii.lg,
+    backgroundColor: colors.highlightSoft,
+    borderWidth: 1,
+    borderColor: colors.cardBorder,
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  rankBadgeEmoji: { fontSize: 22 },
+  rankBadgeText: { fontFamily: fonts.extrabold, fontSize: 13, color: colors.highlight, marginTop: 1 },
 
   // Reveal
   callout: { padding: spacing.lg, gap: spacing.sm },

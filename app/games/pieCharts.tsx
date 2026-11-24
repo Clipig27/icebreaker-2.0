@@ -226,9 +226,17 @@ export default function PieChartsScreen() {
       if (cur?.phase && cur.phase !== "starting") return null;
       return initialState;
     });
-  }, [isHost, room?.id]);
+  }, [isHost, room?.id, gs?.phase === "starting"]);
 
   // Navigate away if room returns to lobby
+  // Reset refs when game restarts (Play Again)
+  useEffect(() => {
+    if (phase === "setup" || phase === "intro" || (gs as any)?.phase === "starting") {
+      trackedGameRef.current = false;
+      navigatedBackRef.current = false;
+    }
+  }, [phase]);
+
   // Track games played (Pie Charts has no winner)
   const trackedGameRef = useRef(false);
   useEffect(() => {
@@ -856,7 +864,7 @@ function VoteTag() {
 // ---------------------------------------------------------------------------
 
 const s = StyleSheet.create({
-  container: { flex: 1, backgroundColor: colors.background },
+  container: { flex: 1, backgroundColor: colors.bgPurple },
   scroll: {
     flexGrow: 1,
     paddingHorizontal: spacing.screen,

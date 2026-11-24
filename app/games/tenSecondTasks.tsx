@@ -202,6 +202,14 @@ export default function TenSecondTasksScreen() {
     if (phase !== "active") buzzedRef.current = false;
   }, [secondsLeft, phase]);
 
+  // Reset refs when game restarts (Play Again)
+  useEffect(() => {
+    if (phase === "intro" || phase === "starting" || (gs as any)?.phase === "starting") {
+      trackedGameRef.current = false;
+      navigatedBackRef.current = false;
+    }
+  }, [phase]);
+
   // Track wins/games played
   const trackedGameRef = useRef(false);
   useEffect(() => {
@@ -242,7 +250,7 @@ export default function TenSecondTasksScreen() {
       if (cur?.phase && cur.phase !== "starting") return null;
       return initialState;
     });
-  }, [isHost, room?.id]);
+  }, [isHost, room?.id, gs?.phase === "starting"]);
 
   // Navigate away if room returns to lobby
   const navigatedBackRef = useRef(false);
@@ -744,7 +752,7 @@ function StatCard({ label, value, danger = false }: { label: string; value: numb
 // ---------------------------------------------------------------------------
 
 const st = StyleSheet.create({
-  container: { flex: 1, backgroundColor: colors.background },
+  container: { flex: 1, backgroundColor: colors.bgPurple },
   scroll: {
     flexGrow: 1,
     paddingHorizontal: spacing.screen,

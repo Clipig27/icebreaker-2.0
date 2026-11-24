@@ -42,6 +42,7 @@ type Phase =
   | "r1-neutral-vote"
   | "r1-result"
   | "r2-voting"
+  | "tiebreak-announce"
   | "tiebreak-prep"
   | "tiebreak-performing"
   | "tiebreak-vote"
@@ -99,6 +100,9 @@ type GameState = {
   r3Votes: { voterId: string; voteFor: string }[];
   r3SubmittedVoterIds: string[];
   r3VoterIds: string[];
+
+  // Tiebreak announce (vote tallies to show before tiebreaker)
+  tiebreakerVoteTally: { id: string; name: string; count: number }[];
 
   winnerId: string | null;
   runnerUpId: string | null;
@@ -247,6 +251,7 @@ export default function TalentShowScreen() {
       r3Votes: [],
       r3SubmittedVoterIds: [],
       r3VoterIds: [],
+      tiebreakerVoteTally: [],
       winnerId: null,
       runnerUpId: null,
     };
@@ -254,9 +259,16 @@ export default function TalentShowScreen() {
       if (cur?.phase && cur.phase !== "starting") return null;
       return initialState;
     });
-  }, [isHost, room?.id]);
+  }, [isHost, room?.id, gs?.phase === "starting"]);
 
-  // Navigate away if room returns to lobby
+  // Reset refs when game restarts (Play Again)
+  useEffect(() => {
+    if (phase === "intro" || phase === "starting" || (gs as any)?.phase === "starting") {
+      trackedGameRef.current = false;
+      navigatedBackRef.current = false;
+    }
+  }, [phase]);
+
   // Track wins/games played
   const trackedGameRef = useRef(false);
   useEffect(() => {
@@ -266,6 +278,7 @@ export default function TalentShowScreen() {
     if (gs.winnerId === myId) useAuthStore.getState().incrementWins();
   }, [phase]);
 
+  // Navigate away if room returns to lobby
   const navigatedBackRef = useRef(false);
   useEffect(() => {
     if (navigatedBackRef.current) return;
@@ -315,9 +328,32 @@ export default function TalentShowScreen() {
       const newBuzzed = [...cur.buzzedPlayerIds, myId];
       const performerPid = cur.performerQueue[cur.currentPerformerIdx];
       const liveVoters = players.filter((p) => p.user_id !== performerPid).length;
-      const threshold = Math.ceil(liveVoters / 2);
+      const threshold = Math.floor(liveVoters / 2) + 1; // strict majority (>50%)
 
+      const totalVoted = newBuzzed.length + cur.goldenPlayerIds.length;
+      const allVoted = totalVoted >= liveVoters;
+
+      // Majority buzzes → eliminated
       if (newBuzzed.length >= threshold) {
+        const result: PerformResult = {
+          playerId: performerPid,
+          playerName: playerMap[performerPid] ?? "Player",
+          outcome: "eliminated",
+          buzzCount: newBuzzed.length,
+          goldenCount: cur.goldenPlayerIds.length,
+        };
+        return {
+          ...cur,
+          buzzedPlayerIds: newBuzzed,
+          totalVoters: liveVoters,
+          r1Results: [...cur.r1Results, result],
+          eliminatedPlayerIds: [...cur.eliminatedPlayerIds, performerPid],
+          phase: "r1-result" as Phase,
+          timerEnd: null,
+        };
+      }
+      // All voted and it's a tie or buzzes win → eliminated immediately (no waiting)
+      if (allVoted && newBuzzed.length >= cur.goldenPlayerIds.length) {
         const result: PerformResult = {
           playerId: performerPid,
           playerName: playerMap[performerPid] ?? "Player",
@@ -348,13 +384,35 @@ export default function TalentShowScreen() {
       const newGolden = [...cur.goldenPlayerIds, myId];
       const performerPid = cur.performerQueue[cur.currentPerformerIdx];
       const liveVoters = players.filter((p) => p.user_id !== performerPid).length;
-      const threshold = Math.ceil(liveVoters / 2);
+      const threshold = Math.floor(liveVoters / 2) + 1; // strict majority (>50%)
 
+      const totalVoted = cur.buzzedPlayerIds.length + newGolden.length;
+      const allVoted = totalVoted >= liveVoters;
+
+      // Majority golden → advance
       if (newGolden.length >= threshold) {
         const result: PerformResult = {
           playerId: performerPid,
           playerName: playerMap[performerPid] ?? "Player",
           outcome: "golden",
+          buzzCount: cur.buzzedPlayerIds.length,
+          goldenCount: newGolden.length,
+        };
+        return {
+          ...cur,
+          goldenPlayerIds: newGolden,
+          totalVoters: liveVoters,
+          r1Results: [...cur.r1Results, result],
+          phase: "r1-result" as Phase,
+          timerEnd: null,
+        };
+      }
+      // All voted and golden strictly wins → advance immediately
+      if (allVoted && newGolden.length > cur.buzzedPlayerIds.length) {
+        const result: PerformResult = {
+          playerId: performerPid,
+          playerName: playerMap[performerPid] ?? "Player",
+          outcome: "advanced",
           buzzCount: cur.buzzedPlayerIds.length,
           goldenCount: newGolden.length,
         };
@@ -393,7 +451,7 @@ export default function TalentShowScreen() {
       const buzzCount = gs.buzzedPlayerIds.length;
       const goldenCount = gs.goldenPlayerIds.length;
       const liveVoters = players.filter((p) => p.user_id !== performerPid).length;
-      const threshold = Math.ceil(liveVoters / 2);
+      const threshold = Math.floor(liveVoters / 2) + 1; // strict majority (>50%)
 
       if (buzzCount >= threshold) return; // already handled
       if (goldenCount >= threshold) return; // already handled
@@ -403,8 +461,8 @@ export default function TalentShowScreen() {
       const neutralIds = players.filter((p) => p.user_id !== performerPid && !usedIds.has(p.user_id)).map((p) => p.user_id);
 
       if (neutralIds.length === 0) {
-        // All voted via buzz/golden, determine by majority
-        const outcome = goldenCount >= buzzCount ? "advanced" : "eliminated";
+        // All voted via buzz/golden — need strict majority (>50%) to advance
+        const outcome = goldenCount > buzzCount ? "advanced" : "eliminated";
         const result: PerformResult = {
           playerId: performerPid,
           playerName: playerMap[performerPid] ?? "Player",
@@ -466,7 +524,9 @@ export default function TalentShowScreen() {
         if (gs.phase === "tiebreak-performing") {
           mutateGameState((cur) => {
             if (!cur) return null;
-            const voterIds = players.map((p) => p.user_id);
+            // Candidates cannot vote in their own tiebreaker
+            const candidateSet = new Set(cur.tiebreakerCandidates ?? cur.performerQueue);
+            const voterIds = players.map((p) => p.user_id).filter((id) => !candidateSet.has(id));
             return {
               ...cur,
               phase: "tiebreak-vote" as Phase,
@@ -528,7 +588,8 @@ export default function TalentShowScreen() {
 
     const advanceVotes = gs.goldenPlayerIds.length + gs.r1NeutralVotes.filter((v) => v.decision === "advance").length;
     const eliminateVotes = gs.buzzedPlayerIds.length + gs.r1NeutralVotes.filter((v) => v.decision === "eliminate").length;
-    const outcome = advanceVotes >= eliminateVotes ? "advanced" : "eliminated";
+    // Strict majority: need MORE advance votes to survive (tie = eliminated)
+    const outcome = advanceVotes > eliminateVotes ? "advanced" : "eliminated";
     const performerPid = gs.performerQueue[gs.currentPerformerIdx];
 
     const result: PerformResult = {
@@ -675,35 +736,59 @@ export default function TalentShowScreen() {
         };
       });
     } else {
-      // Tiebreaker
-      const { item: tbPrompt, index: tbIdx } = pickRandom(TALENT_SHOW_TIEBREAK_PROMPTS, usedTBRef.current);
-      usedTBRef.current.add(tbIdx);
+      // Tiebreaker — show announce screen first with vote tallies
+      // Only show the tied candidates, not players who already advanced
+      const voteTally = allCounts
+        .filter((p) => atCutoff.includes(p.id))
+        .map((p) => ({
+          id: p.id,
+          name: playerMap[p.id] ?? "Player",
+          count: p.count,
+        }));
       mutateGameState((cur) => {
         if (!cur || cur.phase !== "r2-voting") return null;
         return {
           ...cur,
-          phase: "tiebreak-prep" as Phase,
+          phase: "tiebreak-announce" as Phase,
           tiebreakerCandidates: atCutoff,
           tiebreakerSpotsNeeded: spotsLeft,
           tiebreakerAlreadyAdvanced: clearAdvanced,
-          performerQueue: atCutoff,
-          currentPerformerIdx: 0,
-          prompt: tbPrompt,
-          timerDuration: 10000,
-          timerEnd: null,
-          tbVotes: [],
-          tbSubmittedVoterIds: [],
-          tbVoterIds: players.map((p) => p.user_id),
+          tiebreakerVoteTally: voteTally,
         };
       });
     }
   }, [gs?.r2SubmittedVoterIds?.length, gs?.phase, isHost]);
 
-  // Tiebreak vote
+  // Host: advance from tiebreak-announce to tiebreak-prep
+  const advanceFromTBAnnote = useCallback(async () => {
+    const { item: tbPrompt, index: tbIdx } = pickRandom(TALENT_SHOW_TIEBREAK_PROMPTS, usedTBRef.current);
+    usedTBRef.current.add(tbIdx);
+    await mutateGameState((cur) => {
+      if (!cur || cur.phase !== "tiebreak-announce") return null;
+      // Candidates cannot vote in their own tiebreaker
+      const candidateSet = new Set(cur.tiebreakerCandidates);
+      const voterIds = players.map((p) => p.user_id).filter((id) => !candidateSet.has(id));
+      return {
+        ...cur,
+        phase: "tiebreak-prep" as Phase,
+        performerQueue: cur.tiebreakerCandidates,
+        currentPerformerIdx: 0,
+        prompt: tbPrompt,
+        timerDuration: 10000,
+        timerEnd: null,
+        tbVotes: [],
+        tbSubmittedVoterIds: [],
+        tbVoterIds: voterIds,
+      };
+    });
+  }, [mutateGameState, players]);
+
+  // Tiebreak vote (candidates cannot vote)
   const handleTBVote = useCallback(async (voteFor: string) => {
     await mutateGameState((cur) => {
       if (!cur || cur.phase !== "tiebreak-vote") return null;
       if (cur.tbSubmittedVoterIds.includes(myId)) return null;
+      if (!cur.tbVoterIds.includes(myId)) return null; // candidate, can't vote
       return {
         ...cur,
         tbVotes: [...cur.tbVotes, { voterId: myId, voteFor }],
@@ -781,26 +866,22 @@ export default function TalentShowScreen() {
       .sort((a, b) => b.count - a.count);
 
     if (sorted.length >= 2 && sorted[0].count === sorted[1].count) {
-      // Tie — tiebreaker
-      const { item: tbPrompt, index: tbIdx } = pickRandom(TALENT_SHOW_TIEBREAK_PROMPTS, usedTBRef.current);
-      usedTBRef.current.add(tbIdx);
+      // Tie — show announce screen first
+      const voteTally = sorted.map((p) => ({
+        id: p.id,
+        name: playerMap[p.id] ?? "Player",
+        count: p.count,
+      }));
       mutateGameState((cur) => {
         if (!cur || cur.phase !== "r3-voting") return null;
         return {
           ...cur,
-          phase: "tiebreak-prep" as Phase,
+          phase: "tiebreak-announce" as Phase,
           round: 3 as 1 | 2 | 3,
           tiebreakerCandidates: gs.r3FinalistIds,
           tiebreakerSpotsNeeded: 1,
           tiebreakerAlreadyAdvanced: [],
-          performerQueue: gs.r3FinalistIds,
-          currentPerformerIdx: 0,
-          prompt: tbPrompt,
-          timerDuration: 10000,
-          timerEnd: null,
-          tbVotes: [],
-          tbSubmittedVoterIds: [],
-          tbVoterIds: players.map((p) => p.user_id),
+          tiebreakerVoteTally: voteTally,
         };
       });
     } else {
@@ -848,7 +929,7 @@ export default function TalentShowScreen() {
         <View style={st.list}>
           {[
             ["🎭", "Round 1: Everyone performs a prompt. Audience buzzes or golden buzzes."],
-            ["🔴", "If majority buzzes, you're eliminated. Golden = you advance!"],
+            ["🔴", "If more than half buzz, you're out. If more than half golden, you advance!"],
             ["🏆", "Round 2: Survivors perform again. Vote for top 2 finalists."],
             ["🌟", "Round 3: Finals! 2 finalists perform. Everyone votes for the winner."],
           ].map(([icon, text], i) => (
@@ -896,16 +977,35 @@ export default function TalentShowScreen() {
           <Text style={st.heroBig}>{String(gs.round).padStart(2, "0")}</Text>
         </GradientCard>
         <Eyebrow style={st.sectionEyebrow}>The line-up</Eyebrow>
-        <View style={st.lineup}>
-          {gs.performerQueue.map((pid) => (
-            <View key={pid} style={st.chip}>
-              <PlayerAvatar username={playerMap[pid] ?? "Player"} size={28} />
-              <Text style={st.chipText} numberOfLines={1}>
+        <View style={st.list}>
+          {gs.performerQueue.map((pid, i) => (
+            <GradientCard key={pid} radius={radii.lg} contentStyle={st.candidateRow}>
+              <View style={st.lineupNumber}>
+                <Text style={st.lineupNumberText}>{i + 1}</Text>
+              </View>
+              <PlayerAvatar username={playerMap[pid] ?? "Player"} size={36} />
+              <Text style={st.candidateName} numberOfLines={1}>
                 {playerMap[pid] ?? "Player"}
               </Text>
-            </View>
+            </GradientCard>
           ))}
         </View>
+        {gs.round >= 2 && gs.eliminatedPlayerIds.length > 0 && (
+          <>
+            <Eyebrow style={st.sectionEyebrow}>Eliminated</Eyebrow>
+            <View style={st.list}>
+              {gs.eliminatedPlayerIds.map((pid) => (
+                <GradientCard key={pid} radius={radii.lg} borderColors={DANGER_BORDER} contentStyle={st.candidateRow}>
+                  <Ionicons name="close-circle" size={20} color={colors.danger} />
+                  <PlayerAvatar username={playerMap[pid] ?? "Player"} size={32} />
+                  <Text style={[st.candidateName, { color: colors.gray400 }]} numberOfLines={1}>
+                    {playerMap[pid] ?? "Player"}
+                  </Text>
+                </GradientCard>
+              ))}
+            </View>
+          </>
+        )}
       </Shell>
     );
   }
@@ -967,29 +1067,37 @@ export default function TalentShowScreen() {
 
     let footer: React.ReactNode = null;
     if (isPerformer) {
-      if (!isR1)
-        footer = (
-          <>
-            <Text style={st.footerHelper}>Your moment. Give it your best.</Text>
-            <PrimaryAction label="I'm done" onPress={handleDoneEarly} />
-          </>
-        );
+      footer = (
+        <>
+          <Text style={st.footerHelper}>Your moment. Give it your best.</Text>
+          <PrimaryAction label="I'm done" onPress={handleDoneEarly} />
+        </>
+      );
     } else if (isR1) {
       footer = hasUsedAction ? (
         <WaitingNote done label="Vote submitted! Watching the show..." />
       ) : (
-        <View style={st.buzzRow}>
-          <Pressable
-            onPress={handleBuzz}
-            accessibilityRole="button"
-            style={({ pressed }) => [st.judgeBtn, st.buzzBtn, pressed && st.pressed]}
-          >
-            <Ionicons name="close-circle" size={18} color={colors.danger} />
-            <Text style={st.buzzBtnText} numberOfLines={1} adjustsFontSizeToFit>
-              Buzz ({buzzCount})
-            </Text>
-          </Pressable>
-          <GoldenButton label={`Golden (${goldenCount})`} onPress={handleGolden} />
+        <View style={st.buzzerRow}>
+          <View style={st.buzzerCol}>
+            <Pressable
+              onPress={handleBuzz}
+              accessibilityRole="button"
+              style={({ pressed }) => [st.buzzerCircle, st.buzzerRed, pressed && { transform: [{ scale: 0.92 }] }]}
+            >
+              <Ionicons name="close" size={44} color="#fff" />
+            </Pressable>
+            <Text style={st.buzzerLabel}>BUZZ ({buzzCount})</Text>
+          </View>
+          <View style={st.buzzerCol}>
+            <Pressable
+              onPress={handleGolden}
+              accessibilityRole="button"
+              style={({ pressed }) => [st.buzzerCircle, st.buzzerGold, pressed && { transform: [{ scale: 0.92 }] }]}
+            >
+              <Ionicons name="star" size={40} color={colors.onPrimary} />
+            </Pressable>
+            <Text style={st.buzzerLabel}>GOLDEN ({goldenCount})</Text>
+          </View>
         </View>
       );
     } else {
@@ -1122,7 +1230,7 @@ export default function TalentShowScreen() {
   // === R2 VOTING ===
   if (phase === "r2-voting") {
     const hasVoted = gs.r2SubmittedVoterIds.includes(myId);
-    const performers = gs.r2Results ?? [];
+    const performers = (gs.r2Results ?? []).filter((p) => p.playerId !== myId);
     if (hasVoted) {
       return <SubmittedScreen submitted={gs.r2SubmittedVoterIds.length} total={gs.r2VoterIds.length} />;
     }
@@ -1165,10 +1273,60 @@ export default function TalentShowScreen() {
     );
   }
 
+  // === TIEBREAK ANNOUNCE (show votes before tiebreaker) ===
+  if (phase === "tiebreak-announce") {
+    const tally = gs.tiebreakerVoteTally ?? [];
+    return (
+      <Shell
+        footer={
+          isHost ? (
+            <PrimaryAction label="Start Tiebreaker" icon="flash" onPress={advanceFromTBAnnote} />
+          ) : (
+            <View style={st.centerRow}>
+              <HostWaitingPill label="Waiting for host..." />
+            </View>
+          )
+        }
+      >
+        <ScreenTitle title="It's a Tie!" subtitle="These players are tied and must break it." pill="Tiebreaker" />
+        {gs.tiebreakerAlreadyAdvanced.length > 0 && (
+          <>
+            <Eyebrow style={st.sectionEyebrow}>Already advanced</Eyebrow>
+            <View style={st.list}>
+              {gs.tiebreakerAlreadyAdvanced.map((pid) => (
+                <GradientCard key={pid} radius={radii.lg} contentStyle={st.candidateRow}>
+                  <PlayerAvatar username={playerMap[pid] ?? "Player"} size={36} />
+                  <Text style={st.candidateName} numberOfLines={1}>{playerMap[pid] ?? "Player"}</Text>
+                  <Ionicons name="checkmark-circle" size={20} color={colors.joinedGreen} />
+                </GradientCard>
+              ))}
+            </View>
+          </>
+        )}
+        <Eyebrow style={st.sectionEyebrow}>Tied — need tiebreaker</Eyebrow>
+        <View style={st.list}>
+          {tally.map((entry) => (
+            <GradientCard key={entry.id} radius={radii.lg} contentStyle={st.candidateRow}>
+              <PlayerAvatar username={entry.name} size={40} />
+              <View style={st.flex1}>
+                <Text style={st.candidateName} numberOfLines={1}>{entry.name}</Text>
+              </View>
+              <View style={st.voteCountBadge}>
+                <Text style={st.voteCountText}>{entry.count} {entry.count === 1 ? "vote" : "votes"}</Text>
+              </View>
+            </GradientCard>
+          ))}
+        </View>
+      </Shell>
+    );
+  }
+
   // === TIEBREAK VOTE ===
   if (phase === "tiebreak-vote") {
+    const isCandidate = gs.tiebreakerCandidates.includes(myId);
     const hasVoted = gs.tbSubmittedVoterIds.includes(myId);
-    if (hasVoted) {
+    // Candidates can't vote — show waiting screen
+    if (isCandidate || hasVoted) {
       return <SubmittedScreen submitted={gs.tbSubmittedVoterIds.length} total={gs.tbVoterIds.length} />;
     }
     return (
@@ -1198,7 +1356,7 @@ export default function TalentShowScreen() {
       <Shell>
         <ScreenTitle title="The Final Vote" subtitle="Who should win?" pill="Finals" />
         <View style={st.list}>
-          {gs.r3FinalistIds.map((pid) => (
+          {gs.r3FinalistIds.filter((pid) => pid !== myId).map((pid) => (
             <CandidateRow
               key={pid}
               name={playerMap[pid] ?? "Player"}
@@ -1262,6 +1420,26 @@ export default function TalentShowScreen() {
               </Text>
             </View>
           </GradientCard>
+        )}
+
+        {/* Final vote counts */}
+        {gs.r3Votes.length > 0 && (
+          <>
+            <Eyebrow style={{ marginTop: spacing.lg, marginBottom: spacing.sm }}>Final Votes</Eyebrow>
+            {tallyVotes(gs.r3Votes)
+              .sort((a, b) => b.count - a.count)
+              .map((entry) => (
+                <GradientCard key={entry.id} radius={radii.lg} contentStyle={st.candidateRow}>
+                  <PlayerAvatar username={playerMap[entry.id] ?? "?"} size={36} />
+                  <View style={st.flex1}>
+                    <Text style={st.candidateName} numberOfLines={1}>
+                      {playerMap[entry.id] ?? "?"}
+                    </Text>
+                  </View>
+                  <Pill tone="lavender" label={`${entry.count} vote${entry.count !== 1 ? "s" : ""}`} />
+                </GradientCard>
+              ))}
+          </>
         )}
       </Shell>
     );
@@ -1507,18 +1685,18 @@ const st = StyleSheet.create({
   ruleText: { flex: 1, fontFamily: fonts.medium, fontSize: 14, lineHeight: 20, color: colors.white },
 
   // Line-up chips
-  lineup: { flexDirection: "row", flexWrap: "wrap", gap: spacing.sm },
-  chip: {
-    flexDirection: "row",
+  lineupNumber: {
+    width: 28,
+    height: 28,
+    borderRadius: 8,
+    backgroundColor: "rgba(186,162,249,0.15)",
     alignItems: "center",
-    gap: 8,
-    paddingLeft: 4,
-    paddingRight: 14,
-    paddingVertical: 4,
-    borderRadius: radii.pill,
-    backgroundColor: colors.surface,
-    borderWidth: 1,
-    borderColor: colors.cardBorder,
+    justifyContent: "center",
+  },
+  lineupNumberText: {
+    fontFamily: fonts.bold,
+    fontSize: 13,
+    color: colors.lavender,
   },
   chipText: { fontFamily: fonts.semibold, fontSize: 14, color: colors.white, maxWidth: 140 },
 
@@ -1554,7 +1732,48 @@ const st = StyleSheet.create({
   performerHelpBody: { fontFamily: fonts.regular, fontSize: 13, lineHeight: 18, color: colors.gray400 },
   footerHelper: { fontFamily: fonts.regular, fontSize: 13, color: colors.gray400, textAlign: "center" },
 
-  // Judging buttons
+  // Circular buzzer buttons
+  buzzerRow: {
+    flexDirection: "row",
+    justifyContent: "center",
+    gap: 40,
+    paddingVertical: 4,
+  },
+  buzzerCol: {
+    alignItems: "center",
+    gap: 8,
+  },
+  buzzerCircle: {
+    width: 100,
+    height: 100,
+    borderRadius: 50,
+    alignItems: "center",
+    justifyContent: "center",
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.4,
+    shadowRadius: 10,
+    elevation: 6,
+  },
+  buzzerRed: {
+    backgroundColor: colors.danger,
+    shadowColor: colors.danger,
+    borderWidth: 3,
+    borderColor: "rgba(255,255,255,0.15)",
+  },
+  buzzerGold: {
+    backgroundColor: "#F0D78C",
+    shadowColor: "#D4A843",
+    borderWidth: 3,
+    borderColor: "rgba(255,255,255,0.3)",
+  },
+  buzzerLabel: {
+    fontFamily: fonts.bold,
+    fontSize: 11,
+    letterSpacing: 1,
+    color: colors.gray400,
+  },
+
+  // Legacy judging buttons (neutral vote)
   buzzRow: { flexDirection: "row", gap: spacing.md },
   judgeBtn: {
     flex: 1,
@@ -1600,6 +1819,13 @@ const st = StyleSheet.create({
     justifyContent: "center",
   },
   checkOn: { backgroundColor: colors.highlight, borderColor: colors.highlight },
+  voteCountBadge: {
+    backgroundColor: "rgba(184,174,232,0.18)",
+    borderRadius: 10,
+    paddingHorizontal: 10,
+    paddingVertical: 5,
+  },
+  voteCountText: { fontFamily: fonts.bold, fontSize: 13, color: colors.lavender },
   voteTag: { flexDirection: "row", alignItems: "center", gap: 2 },
   voteTagText: { fontFamily: fonts.bold, fontSize: 12, letterSpacing: 1.2, color: colors.highlight },
 

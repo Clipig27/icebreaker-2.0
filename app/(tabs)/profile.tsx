@@ -5,19 +5,50 @@ import { Ionicons } from "@expo/vector-icons";
 import * as ImagePicker from "expo-image-picker";
 import { useAuthStore } from "../../src/stores/authStore";
 import { supabase } from "../../src/lib/supabase";
-import { colors, fonts } from "../../src/theme";
+import { LinearGradient } from "expo-linear-gradient";
+import { colors, fonts, gradients, radii, type } from "../../src/theme";
+import AppHeader from "../../src/components/AppHeader";
+import Eyebrow from "../../src/components/Eyebrow";
+import ScreenBackground from "../../src/components/ScreenBackground";
+import GradientCard from "../../src/components/GradientCard";
+import EditProfileModal from "../../src/components/EditProfileModal";
+import FeedbackModal from "../../src/components/FeedbackModal";
 
 function useStats() {
   const wins = useAuthStore((s) => s.wins);
   const gamesPlayed = useAuthStore((s) => s.gamesPlayed);
+  const trophies = useAuthStore((s) => s.trophies);
   return [
     { label: "Games", value: String(gamesPlayed) },
     { label: "Wins", value: String(wins) },
-    { label: "Win Rate", value: gamesPlayed > 0 ? `${Math.round((wins / gamesPlayed) * 100)}%` : "0%" },
+    { label: "Trophies", value: String(trophies) },
   ];
 }
 
+/** Human-readable labels for game type keys. */
+const GAME_LABELS: Record<string, string> = {
+  numberGuessor: "1 to 100",
+  talentShow: "Nobody's Got Talent",
+  pieCharts: "Pie Charts",
+  potLuck: "Pot Luck",
+  blindRanking: "Blind Ranking",
+  tenSecondTasks: "10 Second Tasks",
+};
+
+/** Visual accent per stat card (index-based: Games, Wins, Trophies). */
+const STAT_ACCENTS = [
+  { bar: "rgba(255,255,255,0.85)", num: colors.white, fill: undefined, edge: undefined },
+  { bar: colors.lavender, num: colors.lavender, fill: undefined, edge: undefined },
+  {
+    bar: colors.goldStat,
+    num: colors.goldStat,
+    fill: ["rgba(240,198,106,0.12)", "rgba(240,198,106,0.03)"] as const,
+    edge: ["rgba(240,198,106,0.30)", "rgba(240,198,106,0.10)"] as const,
+  },
+];
+
 function StatCard({ label, value, index }: { label: string; value: string; index: number }) {
+  const accent = STAT_ACCENTS[index] ?? STAT_ACCENTS[0];
   const animValue = useRef(new Animated.Value(0)).current;
 
   useEffect(() => {
@@ -41,8 +72,17 @@ function StatCard({ label, value, index }: { label: string; value: string; index
         },
       ]}
     >
-      <Text style={s.statNum}>{value}</Text>
-      <Text style={s.statLabel}>{label}</Text>
+      <GradientCard
+        radius={radii.lg}
+        style={s.statCard}
+        contentStyle={s.statContent}
+        fill={accent.fill}
+        borderColors={accent.edge}
+      >
+        <View style={[s.statAccent, { backgroundColor: accent.bar }]} />
+        <Text style={[s.statNum, { color: accent.num }]}>{value}</Text>
+        <Text style={s.statLabel}>{label}</Text>
+      </GradientCard>
     </Animated.View>
   );
 }
@@ -53,10 +93,15 @@ export default function Profile() {
   const avatarUrl = useAuthStore((s) => s.avatarUrl);
   const setAvatarUrl = useAuthStore((s) => s.setAvatarUrl);
   const STATS = useStats();
+  const wins = useAuthStore((s) => s.wins);
+  const gamesPlayed = useAuthStore((s) => s.gamesPlayed);
+  const perGameWins = useAuthStore((s) => s.perGameWins);
+  const gameWinEntries = Object.entries(perGameWins).filter(([, count]) => count > 0);
 
   const [uploading, setUploading] = useState(false);
+  const [editVisible, setEditVisible] = useState(false);
+  const [feedbackVisible, setFeedbackVisible] = useState(false);
 
-  // Breathing animation for avatar
   const breatheAnim = useRef(new Animated.Value(1)).current;
 
   useEffect(() => {
@@ -89,7 +134,6 @@ export default function Profile() {
 
     setUploading(true);
     try {
-      // Upload to Supabase Storage
       const ext = uri.split(".").pop() ?? "jpg";
       const fileName = `${user.id}/avatar.${ext}`;
 
@@ -105,7 +149,6 @@ export default function Profile() {
         });
 
       if (uploadErr) {
-        // If storage bucket doesn't exist, just save the local URI
         console.warn("[profile] upload failed, using local URI:", uploadErr.message);
         await setAvatarUrl(uri);
       } else {
@@ -114,49 +157,81 @@ export default function Profile() {
       }
     } catch (e: any) {
       console.warn("[profile] avatar error:", e.message);
-      // Fallback: just save local URI
       await setAvatarUrl(uri);
     } finally {
       setUploading(false);
     }
   };
 
+  const milestone = getMilestone(gamesPlayed, wins);
+  const progressPct = Math.max(0, Math.min(1, milestone.current / milestone.target));
+
   return (
     <SafeAreaView style={s.safe} edges={["top"]}>
-      <ScrollView style={s.scroll} contentContainerStyle={s.scrollContent}>
+      <ScreenBackground />
+      <ScrollView style={s.scroll} contentContainerStyle={s.scrollContent} showsVerticalScrollIndicator={false}>
         {/* Top bar */}
-        <View style={s.topBar}>
-          <View style={s.topBarLeft}>
-            <Ionicons name="flash" size={20} color={colors.lime} />
-            <Text style={s.topBarTitle}>Icebreaker</Text>
-          </View>
-          <Pressable style={s.settingsBtn}>
-            <Ionicons name="settings-outline" size={20} color={colors.gray400} />
-          </Pressable>
-        </View>
+        <AppHeader />
 
         {/* Heading */}
         <Text style={s.heading}>Profile</Text>
         <Text style={s.subtitle}>Good company starts with you.</Text>
 
-        {/* Avatar section */}
-        <View style={s.avatarSection}>
-          <Pressable onPress={pickImage} style={s.avatarContainer} disabled={uploading}>
-            <Animated.View style={[s.avatar, { transform: [{ scale: breatheAnim }] }]}>
-              {avatarUrl ? (
-                <Image source={{ uri: avatarUrl }} style={s.avatarImage} />
-              ) : (
-                <Text style={s.avatarText}>{username.charAt(0).toUpperCase()}</Text>
-              )}
-            </Animated.View>
-            {/* Camera badge */}
-            <View style={s.cameraBadge}>
-              <Ionicons name={uploading ? "hourglass" : "camera"} size={14} color={colors.white} />
-            </View>
-          </Pressable>
-          <Text style={s.username}>{username}</Text>
-          <Text style={s.tapHint}>Tap photo to change</Text>
-        </View>
+        {/* Player Card */}
+        <GradientCard
+          style={s.playerCard}
+          contentStyle={s.playerCardContent}
+          fill={gradients.profileCard}
+          borderColors={["rgba(186,162,249,0.32)", "rgba(186,162,249,0.12)", "rgba(186,162,249,0.06)"]}
+        >
+          {/* Decorative concentric rings behind the avatar */}
+          <View style={s.ringsWrap} pointerEvents="none">
+            <View style={[s.ring, s.ring3]} />
+            <View style={[s.ring, s.ring2]} />
+            <View style={[s.ring, s.ring1]} />
+          </View>
+          <Text style={[s.sparkle, s.sparkleRight]} pointerEvents="none">{"✦"}</Text>
+          <Text style={[s.sparkle, s.sparkleLeft]} pointerEvents="none">{"✧"}</Text>
+
+          <Eyebrow style={s.cardEyebrow}>PLAYER CARD</Eyebrow>
+
+          <View style={s.playerCol}>
+            <Pressable onPress={pickImage} style={s.avatarContainer} disabled={uploading}>
+              <Animated.View style={[s.avatarShadow, { transform: [{ scale: breatheAnim }] }]}>
+                <LinearGradient
+                  colors={gradients.avatarTile}
+                  start={{ x: 0, y: 0 }}
+                  end={{ x: 1, y: 1 }}
+                  style={s.avatar}
+                >
+                  {avatarUrl ? (
+                    <Image source={{ uri: avatarUrl }} style={s.avatarImage} />
+                  ) : (
+                    <Text style={s.avatarText}>{username.charAt(0).toUpperCase()}</Text>
+                  )}
+                </LinearGradient>
+              </Animated.View>
+              {/* Sparkle badge (tap avatar to change photo) */}
+              <View style={s.starBadge}>
+                {uploading ? (
+                  <Ionicons name="hourglass-outline" size={12} color={colors.onLavender} />
+                ) : (
+                  <Text style={s.starBadgeText}>{"✦"}</Text>
+                )}
+              </View>
+            </Pressable>
+            <Text style={s.username} numberOfLines={1}>{username}</Text>
+            <Text style={s.playerType}>Anonymous player</Text>
+
+            {/* Edit profile button */}
+            <Pressable
+              style={({ pressed }) => [s.editProfileBtn, pressed && { opacity: 0.7 }]}
+              onPress={() => setEditVisible(true)}
+            >
+              <Text style={s.editProfileText}>Edit profile</Text>
+            </Pressable>
+          </View>
+        </GradientCard>
 
         {/* Stats row */}
         <View style={s.statsRow}>
@@ -166,85 +241,274 @@ export default function Profile() {
         </View>
 
         {/* Milestone section */}
-        <Text style={s.milestoneLabel}>YOUR NEXT MILESTONE</Text>
-        <View style={s.milestoneCard}>
+        <Eyebrow style={s.sectionLabel}>YOUR NEXT MILESTONE</Eyebrow>
+        <GradientCard radius={radii.lg} contentStyle={s.milestoneCard}>
           <View style={s.milestoneTop}>
             <View style={s.milestoneIconContainer}>
-              <Ionicons name="trophy" size={22} color={colors.lime} />
+              <Ionicons name="trophy-outline" size={20} color={colors.goldStat} />
             </View>
             <View style={s.milestoneTextContainer}>
-              <Text style={s.milestoneTitle}>First of many</Text>
-              <Text style={s.milestoneDesc}>
-                Your first game is a story waiting to happen. Let's make it a good one.
-              </Text>
+              <Text style={s.milestoneTitle}>{milestone.title}</Text>
+              <Text style={s.milestoneDesc}>{milestone.desc}</Text>
             </View>
           </View>
           {/* Progress bar */}
-          <View style={s.progressBarBg}>
-            <View style={s.progressBarFill} />
+          <View style={s.progressMeta}>
+            <Text style={s.progressLabel}>PROGRESS</Text>
+            <Text style={s.progressCount}>
+              {Math.min(milestone.current, milestone.target)}/{milestone.target}
+            </Text>
           </View>
-        </View>
+          <View style={s.progressBarBg}>
+            <LinearGradient
+              colors={gradients.primaryButton}
+              start={{ x: 0, y: 0 }}
+              end={{ x: 1, y: 0 }}
+              style={[s.progressBarFill, { width: `${Math.max(progressPct * 100, 4)}%` }]}
+            />
+          </View>
+        </GradientCard>
+        {/* Game Stats section */}
+        {gameWinEntries.length > 0 && (
+          <>
+            <Eyebrow style={[s.sectionLabel, { marginTop: 24 }]}>GAME STATS</Eyebrow>
+            {gameWinEntries.map(([gameType, count]) => (
+              <GradientCard key={gameType} radius={radii.lg} contentStyle={s.gameStatCard} style={{ marginBottom: 8 }}>
+                <View style={s.gameStatRow}>
+                  <Ionicons name="game-controller-outline" size={18} color={colors.lavender} />
+                  <Text style={s.gameStatName}>{GAME_LABELS[gameType] ?? gameType}</Text>
+                  <Text style={s.gameStatCount}>{count} {count === 1 ? "win" : "wins"}</Text>
+                </View>
+              </GradientCard>
+            ))}
+          </>
+        )}
+
+        {/* Feedback button */}
+        <Pressable
+          style={({ pressed }) => [s.feedbackBtn, pressed && { opacity: 0.7 }]}
+          onPress={() => setFeedbackVisible(true)}
+        >
+          <Ionicons name="chatbubble-ellipses-outline" size={18} color={colors.lavender} />
+          <Text style={s.feedbackText}>Send Feedback</Text>
+          <Ionicons name="chevron-forward" size={16} color={colors.gray500} style={{ marginLeft: "auto" }} />
+        </Pressable>
       </ScrollView>
+
+      <EditProfileModal visible={editVisible} onClose={() => setEditVisible(false)} />
+      <FeedbackModal visible={feedbackVisible} onClose={() => setFeedbackVisible(false)} />
     </SafeAreaView>
   );
 }
 
+/** Display-only milestone derived from the player's real games/wins counts. */
+function getMilestone(gamesPlayed: number, wins: number) {
+  if (gamesPlayed < 1) {
+    return {
+      title: "First of many",
+      desc: "Play your first game to unlock your first trophy.",
+      current: gamesPlayed,
+      target: 1,
+    };
+  }
+  if (wins < 1) {
+    return {
+      title: "First victory",
+      desc: "Win a game to claim your first bragging rights.",
+      current: wins,
+      target: 1,
+    };
+  }
+  const winTargets = [5, 10, 25, 50, 100];
+  const target = winTargets.find((t) => wins < t) ?? Math.ceil((wins + 1) / 100) * 100;
+  return {
+    title: `${target} wins`,
+    desc: `${target - wins} more ${target - wins === 1 ? "win" : "wins"} to reach your next milestone.`,
+    current: wins,
+    target,
+  };
+}
+
 const s = StyleSheet.create({
-  safe: { flex: 1, backgroundColor: colors.background },
+  safe: { flex: 1, backgroundColor: colors.bgPurple },
   scroll: { flex: 1 },
-  scrollContent: { paddingHorizontal: 24, paddingTop: 16, paddingBottom: 40 },
+  scrollContent: { paddingHorizontal: 24, paddingBottom: 40 },
 
-  topBar: { flexDirection: "row", alignItems: "center", justifyContent: "space-between", marginBottom: 28 },
-  topBarLeft: { flexDirection: "row", alignItems: "center", gap: 6 },
-  topBarTitle: { fontFamily: fonts.semibold, fontSize: 18, color: colors.white },
-  settingsBtn: {
-    width: 36, height: 36, borderRadius: 18, backgroundColor: colors.surface,
-    alignItems: "center", justifyContent: "center", borderWidth: 1, borderColor: colors.border,
+  heading: { ...type.title, fontSize: 34, letterSpacing: -0.6, marginBottom: 6 },
+  subtitle: { ...type.subtitle, marginBottom: 22 },
+
+  sectionLabel: { marginBottom: 10, fontSize: 10, letterSpacing: 0.8 },
+
+  // Player card
+  playerCard: {
+    marginBottom: 12,
   },
-
-  heading: { fontFamily: fonts.extrabold, fontSize: 36, color: colors.white, marginBottom: 4 },
-  subtitle: { fontFamily: fonts.regular, fontSize: 15, color: colors.gray400, marginBottom: 32 },
-
-  avatarSection: { alignItems: "center", marginBottom: 28 },
-  avatarContainer: { width: 100, height: 100, marginBottom: 14 },
+  playerCardContent: {
+    paddingTop: 14,
+    paddingBottom: 18,
+    paddingHorizontal: 16,
+  },
+  cardEyebrow: { fontSize: 9, letterSpacing: 0.8, color: "rgba(255,255,255,0.6)" },
+  ringsWrap: {
+    position: "absolute",
+    top: 0,
+    left: 0,
+    right: 0,
+    bottom: 0,
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  ring: {
+    position: "absolute",
+    borderWidth: 1,
+    borderColor: "rgba(186,162,249,0.09)",
+  },
+  // Centered on the avatar (~74px below the card content top).
+  ring1: { width: 150, height: 150, borderRadius: 75, top: -1 },
+  ring2: { width: 230, height: 230, borderRadius: 115, top: -41 },
+  ring3: { width: 320, height: 320, borderRadius: 160, top: -86 },
+  sparkle: { position: "absolute", color: "#D9C8FF" },
+  sparkleRight: { top: 26, right: 26, fontSize: 18 },
+  sparkleLeft: { top: 70, left: 28, fontSize: 14, color: "rgba(248,210,192,0.85)" },
+  playerCol: { alignItems: "center" },
+  avatarContainer: { width: 92, height: 92, marginTop: 2, marginBottom: 10 },
+  avatarShadow: {
+    borderRadius: 26,
+    shadowColor: "#A783EF",
+    shadowOffset: { width: 0, height: 8 },
+    shadowOpacity: 0.35,
+    shadowRadius: 16,
+    elevation: 8,
+  },
   avatar: {
-    width: 100, height: 100, borderRadius: 50, backgroundColor: colors.surface,
-    alignItems: "center", justifyContent: "center", overflow: "hidden",
+    width: 92,
+    height: 92,
+    borderRadius: 26,
+    alignItems: "center",
+    justifyContent: "center",
+    overflow: "hidden",
   },
-  avatarImage: { width: 100, height: 100, borderRadius: 50 },
-  avatarText: { fontFamily: fonts.extrabold, fontSize: 40, color: colors.primaryLight },
-  cameraBadge: {
-    position: "absolute", bottom: 0, right: 0,
-    width: 30, height: 30, borderRadius: 15, backgroundColor: colors.primary,
-    alignItems: "center", justifyContent: "center", borderWidth: 2, borderColor: colors.background,
+  avatarImage: { width: 92, height: 92, borderRadius: 26 },
+  avatarText: { fontFamily: fonts.extrabold, fontSize: 44, color: colors.onLavender },
+  starBadge: {
+    position: "absolute",
+    bottom: 2,
+    right: -6,
+    width: 26,
+    height: 26,
+    borderRadius: 13,
+    backgroundColor: colors.peachSticker,
+    alignItems: "center",
+    justifyContent: "center",
+    borderWidth: 2,
+    borderColor: "#2E2245",
   },
-  username: { fontFamily: fonts.bold, fontSize: 24, color: colors.white, marginBottom: 2 },
-  tapHint: { fontFamily: fonts.regular, fontSize: 13, color: colors.gray500, marginBottom: 8 },
+  starBadgeText: { fontSize: 12, lineHeight: 14, color: colors.onLavender },
+  username: {
+    fontFamily: fonts.extrabold,
+    fontSize: 22,
+    color: colors.white,
+    marginBottom: 2,
+    letterSpacing: -0.3,
+    textAlign: "center",
+  },
+  playerType: { fontFamily: fonts.regular, fontSize: 13, color: colors.gray400, textAlign: "center" },
+  editProfileBtn: {
+    alignItems: "center",
+    justifyContent: "center",
+    marginTop: 12,
+    backgroundColor: colors.cardRaised,
+    borderWidth: 1,
+    borderColor: "rgba(186,162,249,0.16)",
+    borderRadius: 12,
+    paddingVertical: 10,
+    paddingHorizontal: 26,
+  },
+  editProfileText: { fontFamily: fonts.bold, fontSize: 14, color: colors.lavender },
 
-  statsRow: { flexDirection: "row", gap: 12, marginBottom: 28 },
-  stat: {
-    flex: 1, backgroundColor: colors.surface, borderRadius: 14, padding: 16,
-    alignItems: "center", borderWidth: 1, borderColor: colors.border,
+  // Stats
+  statsRow: { flexDirection: "row", gap: 8, marginBottom: 24 },
+  stat: { flex: 1 },
+  statCard: { flex: 1 },
+  statContent: { paddingTop: 16, paddingBottom: 14, paddingHorizontal: 10, alignItems: "center" },
+  statAccent: {
+    position: "absolute",
+    top: 0,
+    width: 22,
+    height: 3,
+    borderBottomLeftRadius: 2,
+    borderBottomRightRadius: 2,
   },
-  statNum: { fontFamily: fonts.extrabold, fontSize: 28, color: colors.white },
-  statLabel: { fontFamily: fonts.regular, fontSize: 12, color: colors.gray500, marginTop: 4 },
+  statNum: { fontFamily: fonts.extrabold, fontSize: 28, lineHeight: 34, letterSpacing: -0.5 },
+  statLabel: {
+    fontFamily: fonts.medium,
+    fontSize: 11,
+    color: colors.gray400,
+    marginTop: 2,
+  },
 
-  milestoneLabel: {
-    fontFamily: fonts.bold, fontSize: 11, color: colors.gray500,
-    letterSpacing: 1.5, textTransform: "uppercase", marginBottom: 12,
-  },
+  // Milestone
   milestoneCard: {
-    backgroundColor: colors.surface, borderRadius: 14, padding: 16,
-    borderWidth: 1, borderColor: colors.border,
+    padding: 16,
   },
-  milestoneTop: { flexDirection: "row", alignItems: "flex-start", gap: 14, marginBottom: 14 },
+  milestoneTop: { flexDirection: "row", alignItems: "center", gap: 14, marginBottom: 16 },
   milestoneIconContainer: {
-    width: 44, height: 44, borderRadius: 22, backgroundColor: "rgba(196, 240, 77, 0.15)",
-    alignItems: "center", justifyContent: "center",
+    width: 44,
+    height: 44,
+    borderRadius: 12,
+    backgroundColor: "rgba(240,198,106,0.14)",
+    borderWidth: 1,
+    borderColor: "rgba(240,198,106,0.28)",
+    alignItems: "center",
+    justifyContent: "center",
   },
   milestoneTextContainer: { flex: 1 },
-  milestoneTitle: { fontFamily: fonts.bold, fontSize: 16, color: colors.white, marginBottom: 4 },
+  milestoneTitle: { fontFamily: fonts.extrabold, fontSize: 18, color: colors.white, marginBottom: 4 },
   milestoneDesc: { fontFamily: fonts.regular, fontSize: 13, color: colors.gray400, lineHeight: 18 },
-  progressBarBg: { height: 4, borderRadius: 2, backgroundColor: colors.border },
-  progressBarFill: { width: "10%", height: 4, borderRadius: 2, backgroundColor: colors.lime },
+  progressMeta: { flexDirection: "row", justifyContent: "space-between", marginBottom: 8 },
+  progressLabel: { fontFamily: fonts.bold, fontSize: 11, letterSpacing: 1.2, color: colors.gray500 },
+  progressCount: { fontFamily: fonts.bold, fontSize: 12, color: colors.lavender },
+  progressBarBg: { height: 5, borderRadius: 3, backgroundColor: "rgba(255,255,255,0.08)", overflow: "hidden" },
+  progressBarFill: { height: 5, borderRadius: 3 },
+
+  // Game Stats
+  gameStatCard: {
+    paddingVertical: 14,
+    paddingHorizontal: 16,
+  },
+  gameStatRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 12,
+  },
+  gameStatName: {
+    flex: 1,
+    fontFamily: fonts.semibold,
+    fontSize: 15,
+    color: colors.white,
+  },
+  gameStatCount: {
+    fontFamily: fonts.bold,
+    fontSize: 14,
+    color: colors.lavender,
+  },
+
+  // Feedback
+  feedbackBtn: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 12,
+    marginTop: 24,
+    backgroundColor: colors.cardFill,
+    borderWidth: 1,
+    borderColor: colors.cardEdge,
+    borderRadius: radii.lg,
+    paddingVertical: 16,
+    paddingHorizontal: 16,
+  },
+  feedbackText: {
+    fontFamily: fonts.semibold,
+    fontSize: 15,
+    color: colors.white,
+  },
 });

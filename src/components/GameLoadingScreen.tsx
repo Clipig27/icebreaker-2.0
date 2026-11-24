@@ -13,6 +13,6 @@ export default function GameLoadingScreen(_props: { name: string; icon: string; 
 }
 
 const styles = StyleSheet.create({
-  container: { flex: 1, backgroundColor: colors.background },
+  container: { flex: 1, backgroundColor: colors.bgPurple },
   content: { flex: 1, justifyContent: "center", alignItems: "center" },
 });
