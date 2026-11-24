@@ -42,17 +42,18 @@ import Eyebrow from "../src/components/Eyebrow";
 import PlayerAvatar from "../src/components/PlayerAvatar";
 import { PrimaryActionBar } from "../src/components/PrimaryAction";
 import { AUCTION_GAME_NAME } from "../src/data/auctionDraft";
+import { CARD_THEMES, GameCardAccent, GameCardBackground, GameCardIllustration, withAlpha } from "../src/components/GameCardArt";
 
-type RowTint = "gold" | "teal" | "pink" | "purple";
+type RowTint = "gold" | "teal" | "pink" | "purple" | "green" | "orange" | "yellow";
 
 const GAMES: { id: GameType; name: string; desc: string; emoji: string; icon: string; color: string; tint: RowTint; iconText?: string; minPlayers: number; maxPlayers: number | null }[] = [
   { id: "talentShow", name: "Nobody's Got Talent", desc: "Perform, judge, hit the buzzer.", emoji: "⭐", icon: "star", color: "#F59E0B", tint: "gold", minPlayers: 3, maxPlayers: 8 },
   { id: "numberGuessor", name: "1 to 100", desc: "Guess the hidden number.", emoji: "🔢", icon: "calculator", color: "#06B6D4", tint: "teal", iconText: "100", minPlayers: 1, maxPlayers: null },
   { id: "pieCharts", name: "Pie Charts", desc: "Who's most likely to...?", emoji: "🥧", icon: "pie-chart", color: "#EF4444", tint: "pink", minPlayers: 3, maxPlayers: null },
-  { id: "potLuck", name: "Smarty Pot", desc: "Trivia with risk vs reward.", emoji: "🍯", icon: "trophy", color: "#10B981", tint: "purple", minPlayers: 3, maxPlayers: 8 },
+  { id: "potLuck", name: "Smarty Pot", desc: "Trivia with risk vs reward.", emoji: "🍯", icon: "trophy", color: "#F0C66A", tint: "yellow", minPlayers: 3, maxPlayers: 8 },
   { id: "blindRanking", name: "Blind Ranking", desc: "Rank items blind, vote for the best.", emoji: "📊", icon: "list", color: "#A78BFA", tint: "purple", minPlayers: 2, maxPlayers: 5 },
-  { id: "tenSecondTasks", name: "10 Second Tasks", desc: "Stack tasks. Beat the timer.", emoji: "⏱️", icon: "timer", color: "#F97316", tint: "purple", iconText: "10", minPlayers: 3, maxPlayers: 6 },
-  { id: "auctionDraft", name: AUCTION_GAME_NAME, desc: "Outbid your rivals.", emoji: "💰", icon: "pricetags", color: "#F472B6", tint: "pink", minPlayers: 2, maxPlayers: 4 },
+  { id: "tenSecondTasks", name: "10 Second Tasks", desc: "Stack tasks. Beat the timer.", emoji: "⏱️", icon: "timer", color: "#F97316", tint: "orange", iconText: "10", minPlayers: 3, maxPlayers: 6 },
+  { id: "auctionDraft", name: AUCTION_GAME_NAME, desc: "Outbid your rivals.", emoji: "💰", icon: "pricetags", color: "#5ABF9C", tint: "green", minPlayers: 2, maxPlayers: 4 },
 ];
 
 /** Same per-game row tints as the Games tab list. */
@@ -61,32 +62,53 @@ const TINTS: Record<
   { fill: readonly [string, string]; edge: readonly [string, string]; tileBg: string; tileBorder: string; fg: string }
 > = {
   gold: {
-    fill: gradients.rowGold,
+    fill: ["rgba(248,210,147,0.11)", "rgba(248,210,147,0.02)"] as readonly [string, string],
     edge: ["rgba(248,210,147,0.24)", "rgba(248,210,147,0.08)"],
-    tileBg: colors.goldTile,
-    tileBorder: "rgba(255,255,255,0.25)",
-    fg: colors.onLavender,
+    tileBg: "rgba(248,210,147,0.16)",
+    tileBorder: "rgba(248,210,147,0.35)",
+    fg: "#F8D293",
   },
   teal: {
-    fill: gradients.rowTeal,
+    fill: ["rgba(94,214,200,0.10)", "rgba(94,214,200,0.02)"] as readonly [string, string],
     edge: ["rgba(94,214,200,0.22)", "rgba(94,214,200,0.07)"],
     tileBg: "rgba(94,214,200,0.16)",
     tileBorder: "rgba(94,214,200,0.35)",
     fg: "#8FE6DA",
   },
   pink: {
-    fill: gradients.rowPink,
+    fill: ["rgba(246,150,190,0.10)", "rgba(246,150,190,0.02)"] as readonly [string, string],
     edge: ["rgba(246,150,190,0.22)", "rgba(246,150,190,0.07)"],
     tileBg: "rgba(246,150,190,0.16)",
     tileBorder: "rgba(246,150,190,0.35)",
     fg: "#F7A8C8",
   },
   purple: {
-    fill: gradients.rowPurple,
+    fill: ["rgba(186,162,249,0.10)", "rgba(186,162,249,0.02)"] as readonly [string, string],
     edge: ["rgba(186,162,249,0.22)", "rgba(186,162,249,0.07)"],
     tileBg: "rgba(186,162,249,0.16)",
     tileBorder: "rgba(186,162,249,0.35)",
     fg: colors.lavender,
+  },
+  green: {
+    fill: ["rgba(90,191,156,0.10)", "rgba(90,191,156,0.02)"] as readonly [string, string],
+    edge: ["rgba(90,191,156,0.22)", "rgba(90,191,156,0.07)"],
+    tileBg: "rgba(90,191,156,0.16)",
+    tileBorder: "rgba(90,191,156,0.35)",
+    fg: "#7DD8B5",
+  },
+  orange: {
+    fill: ["rgba(249,115,22,0.10)", "rgba(249,115,22,0.02)"] as readonly [string, string],
+    edge: ["rgba(249,115,22,0.22)", "rgba(249,115,22,0.07)"],
+    tileBg: "rgba(249,115,22,0.16)",
+    tileBorder: "rgba(249,115,22,0.35)",
+    fg: "#FBB078",
+  },
+  yellow: {
+    fill: ["rgba(240,198,106,0.10)", "rgba(240,198,106,0.02)"] as readonly [string, string],
+    edge: ["rgba(240,198,106,0.22)", "rgba(240,198,106,0.07)"],
+    tileBg: "rgba(240,198,106,0.16)",
+    tileBorder: "rgba(240,198,106,0.35)",
+    fg: "#F0D78C",
   },
 };
 
@@ -155,10 +177,16 @@ function GameCard({ game, onPress }: { game: typeof GAMES[number]; onPress: () =
   const animStyle = useAnimatedStyle(() => ({
     transform: [{ scale: scale.value }],
   }));
-  const tint = TINTS[game.tint];
+  const theme = CARD_THEMES[game.id];
+  // Measured card width → explicit logo size (an absolute Image with only a %
+  // width + aspectRatio collapses to 0 height on iOS).
+  const [cardW, setCardW] = useState(0);
+  const logoAspect = GAME_LOGO_ASPECT[game.id] ?? 2;
+  const logoW = Math.round(cardW * 0.57);
+  const logoH = Math.min(Math.round(logoW / logoAspect), 112);
   const playerText = game.maxPlayers
-    ? `${game.minPlayers}–${game.maxPlayers}`
-    : `${game.minPlayers}+`;
+    ? `${game.minPlayers}–${game.maxPlayers} players`
+    : `${game.minPlayers}+ players`;
 
   return (
     <Pressable
@@ -177,34 +205,35 @@ function GameCard({ game, onPress }: { game: typeof GAMES[number]; onPress: () =
       }}
     >
       <Animated.View style={animStyle}>
-        <GradientCard
-          radius={radii.lg}
-          contentStyle={s.gameCardInner}
-          fill={tint.fill}
-          borderColors={tint.edge}
+        <View
+          style={[s.gameCard, { borderColor: theme.border }]}
+          onLayout={(e) => setCardW(e.nativeEvent.layout.width)}
         >
-          <View style={s.gameCardBody}>
-            {GAME_LOGOS[game.id] ? (
-              <Image
-                source={GAME_LOGOS[game.id]}
-                style={[s.gameCardLogo, { aspectRatio: GAME_LOGO_ASPECT[game.id] ?? 2 }]}
-                resizeMode="contain"
-              />
-            ) : (
-              <Text style={s.gameCardName} numberOfLines={1}>{game.name}</Text>
-            )}
-            <Text style={s.gameCardDesc} numberOfLines={2}>{game.desc}</Text>
-            <View style={s.gameCardMeta}>
-              <View style={[s.gameCardPill, { backgroundColor: tint.tileBg, borderColor: tint.tileBorder }]}>
-                <Ionicons name="people" size={11} color={tint.fg} />
-                <Text style={[s.gameCardPillText, { color: tint.fg }]}>{playerText}</Text>
-              </View>
-            </View>
+          {/* gradient + light rays → illustration → edge accents */}
+          <GameCardBackground theme={theme} />
+          <GameCardIllustration id={game.id} />
+          <GameCardAccent id={game.id} />
+          {/* Logo — top left */}
+          {GAME_LOGOS[game.id] ? (
+            <Image
+              source={GAME_LOGOS[game.id]}
+              style={[s.gameCardLogo, { width: logoH * logoAspect, height: logoH }]}
+              resizeMode="contain"
+            />
+          ) : (
+            <Text style={[s.gameCardLogo, s.gameCardName]} numberOfLines={2}>{game.name}</Text>
+          )}
+          {/* Description — bottom left */}
+          <Text style={s.gameCardDesc} numberOfLines={2}>{game.desc}</Text>
+          {/* Player count — top right */}
+          <View style={[s.gameCardPill, { borderColor: withAlpha(theme.accent, 0.35) }]}>
+            <Text style={[s.gameCardPillText, { color: theme.text }]}>{playerText}</Text>
           </View>
-          <View style={s.playChip}>
-            <Ionicons name="play" size={18} color={colors.onLavender} />
+          {/* Play — bottom right */}
+          <View style={[s.playChip, { backgroundColor: theme.accent }]}>
+            <Ionicons name="play" size={20} color="#1A1420" />
           </View>
-        </GradientCard>
+        </View>
       </Animated.View>
     </Pressable>
   );
@@ -672,27 +701,27 @@ const s = StyleSheet.create({
 
   // Game picker
   gameCardTouch: { marginBottom: 12 },
-  gameCardInner: {
-    flexDirection: "row",
-    alignItems: "center",
-    padding: 16,
-  },
-  gameCardBody: {
-    flex: 1,
-    marginRight: 12,
+  gameCard: {
+    height: 200,
+    borderRadius: 20,
+    borderWidth: 1.5,
+    overflow: "hidden",
+    backgroundColor: "#1A1420",
   },
   gameCardName: {
-    fontFamily: fonts.bold,
-    fontSize: 18,
+    fontFamily: fonts.extrabold,
+    fontSize: 26,
     color: colors.white,
-    marginBottom: 4,
   },
   gameCardDesc: {
-    fontFamily: fonts.regular,
-    fontSize: 13,
-    color: colors.gray400,
-    lineHeight: 18,
-    marginBottom: 10,
+    position: "absolute",
+    left: 18,
+    bottom: 22,
+    maxWidth: "58%",
+    fontFamily: fonts.medium,
+    fontSize: 14,
+    lineHeight: 19,
+    color: "rgba(242,238,248,0.9)",
   },
   gameCardMeta: {
     flexDirection: "row",
@@ -700,24 +729,23 @@ const s = StyleSheet.create({
     gap: 8,
   },
   gameCardPill: {
-    flexDirection: "row",
-    alignItems: "center",
-    gap: 4,
-    paddingHorizontal: 8,
-    paddingVertical: 4,
-    borderRadius: 8,
+    position: "absolute",
+    top: 12,
+    right: 12,
+    paddingHorizontal: 10,
+    paddingVertical: 5,
+    borderRadius: 999,
     borderWidth: 1,
+    backgroundColor: "rgba(14,12,26,0.75)",
   },
   gameCardPillText: {
-    fontFamily: fonts.bold,
-    fontSize: 11,
+    fontFamily: fonts.semibold,
+    fontSize: 11.5,
   },
   gameCardLogo: {
-    height: 80,
-    maxWidth: "100%",
-    alignSelf: "flex-start",
-    marginLeft: -4, // optical: the art has a small transparent pad on the left
-    marginBottom: 6,
+    position: "absolute",
+    left: 18,
+    top: 22,
   },
   gameCardEmoji: {
     fontSize: 44,
@@ -731,13 +759,17 @@ const s = StyleSheet.create({
   },
   gameIconText: { fontFamily: fonts.extrabold, fontSize: 13 },
   playChip: {
-    width: 44,
-    height: 44,
-    borderRadius: 14,
-    backgroundColor: colors.lavender,
+    position: "absolute",
+    right: 14,
+    bottom: 14,
+    width: 46,
+    height: 46,
+    borderRadius: 12,
     alignItems: "center",
     justifyContent: "center",
-    paddingLeft: 2,
+    paddingLeft: 3,
+    borderWidth: 1.5,
+    borderColor: "rgba(26,20,32,0.35)",
   },
 
   // Non-host footer
