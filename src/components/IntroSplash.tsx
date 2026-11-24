@@ -9,10 +9,12 @@
  * started, advanced linearly by withTiming). No layout props, blur, shadows,
  * masks, animated SVG props or per-frame path building.
  *
- * Story: frosted slab with a faint bolt frozen inside → four player dots
- * slide in to its corners → a crack spreads (segments pop in) → slab shakes →
- * SHATTER (haptic; slab swaps for 8 pre-rendered shards that fly out) → the
- * bolt springs free → wordmark letters rise in → tagline → HOLD → onComplete.
+ * Story: an icy bolt (bolt shape rendered in frosted ice colors) → four player
+ * dots slide in around it → a tapered fracture spreads from the inner notch
+ * (4 static, bolt-clipped stage layers cross-faded by opacity) → icy
+ * bolt shakes → SHATTER (haptic; icy bolt disappears, triangular ice shards
+ * fly out) → the real vibrant bolt springs free → wordmark letters rise in →
+ * tagline → HOLD → onComplete.
  */
 import React, { memo, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { StyleSheet, View, useWindowDimensions, type LayoutChangeEvent } from "react-native";
@@ -33,6 +35,7 @@ import { scheduleOnRN } from "react-native-worklets";
 import { LinearGradient } from "expo-linear-gradient";
 import Svg, {
   Circle,
+  ClipPath,
   Defs,
   G,
   Line,
@@ -56,9 +59,9 @@ export const TIMELINE = {
   dots: { start: 150, stagger: 40, dur: 530 },
   /** Dots lean in a few px right before the break. */
   dotsPress: [950, 1150] as const,
-  /** Crack segments pop in: crack c starts at start + c*crackStagger,
-   *  its segment k at + k*segStagger, each pop lasts segDur. */
-  crack: { start: 700, crackStagger: 55, segStagger: 75, segDur: 90 },
+  /** Crack spreads in 4 cumulative stages: stage i fades in at
+   *  start + i*stageStagger over stageDur. `glow` = peak-tension glow fade-in. */
+  crack: { start: 700, stageStagger: 110, stageDur: 80, glow: [1050, 1130] as const },
   /** Slab tension shake (decaying). */
   shake: [1000, 1150] as const,
   /** THE BREAK — haptic, slab hides, shards fly. */
@@ -202,22 +205,6 @@ function rayHit(O: Pt, theta: number, poly: Pt[]): { pt: Pt; seg: number } {
 }
 
 type Box = { x: number; y: number; w: number; h: number };
-function bbox(pts: Pt[], pad: number): Box {
-  let x0 = Infinity, y0 = Infinity, x1 = -Infinity, y1 = -Infinity;
-  for (const p of pts) {
-    x0 = Math.min(x0, p.x); y0 = Math.min(y0, p.y);
-    x1 = Math.max(x1, p.x); y1 = Math.max(y1, p.y);
-  }
-  return { x: x0 - pad, y: y0 - pad, w: x1 - x0 + pad * 2, h: y1 - y0 + pad * 2 };
-}
-
-type CrackSegData = {
-  key: string;
-  box: Box; // slab-local
-  a: Pt; // box-local endpoints
-  b: Pt;
-  start: number;
-};
 
 type ShardData = {
   key: string;
@@ -253,91 +240,67 @@ function buildScene(W: number, H: number) {
   const L = cx - S / 2;
   const T = cy - S / 2;
 
-  // Impact point (slab-local), slightly off-center.
-  const I: Pt = { x: S * 0.54, y: S * 0.46 };
-  const perim = roundedRectPolygon(S, R);
+  // Bolt dimensions (screen coords)
+  const boltW = (BOLT_H * 492) / 755;
+  const icyScale = 1.3;
+  const icyW = boltW * icyScale;
+  const icyH = BOLT_H * icyScale;
 
-  // 8 rays from I → shard boundaries; 4 of them are the visible cracks.
-  const RAYS = 8;
-  const base = -Math.PI * 0.55;
-  const rays = Array.from({ length: RAYS }, (_, k) => {
-    const th = base + (k * 2 * Math.PI) / RAYS + (rand() - 0.5) * 0.35;
-    const hit = rayHit(I, th, perim);
-    const len = Math.hypot(hit.pt.x - I.x, hit.pt.y - I.y);
-    const nx = -Math.sin(th);
-    const ny = Math.cos(th);
-    const at = (f: number, jit: number): Pt => {
-      const j = (rand() - 0.5) * 2 * jit;
-      return { x: I.x + Math.cos(th) * len * f + nx * j, y: I.y + Math.sin(th) * len * f + ny * j };
-    };
-    const pts = [I, at(0.25, 3), at(0.5, 5), at(0.75, 5), hit.pt];
-    return { th, pts, seg: hit.seg };
+  // The bolt's key vertices mapped to screen coords.
+  // Original viewBox: 260,135 → 752,890. Width=492, Height=755.
+  // Screen bolt: left = cx - icyW/2, top = cy - icyH/2
+  const bL = cx - icyW / 2;
+  const bT = cy - icyH / 2;
+  const toScreen = (vx: number, vy: number): Pt => ({
+    x: bL + ((vx - 260) / 492) * icyW,
+    y: bT + ((vy - 135) / 755) * icyH,
   });
 
-  // --- cracks: two long (4 segments), two short (3 segments) ---------------
-  const { start: c0, crackStagger, segStagger } = TIMELINE.crack;
-  const crackRays = [
-    { ray: 0, segs: 4 },
-    { ray: 4, segs: 4 },
-    { ray: 2, segs: 3 },
-    { ray: 6, segs: 3 },
-  ];
-  const crackSegs: CrackSegData[] = [];
-  crackRays.forEach(({ ray, segs }, c) => {
-    const p = rays[ray].pts.slice();
-    // stop the long cracks just shy of the rim
-    p[4] = { x: lerp(p[3].x, p[4].x, 0.7), y: lerp(p[3].y, p[4].y, 0.7) };
-    for (let k = 0; k < segs; k++) {
-      const a = p[k];
-      const b = p[k + 1];
-      const box = bbox([a, b], 4);
-      crackSegs.push({
-        key: `c${c}s${k}`,
-        box,
-        a: { x: a.x - box.x, y: a.y - box.y },
-        b: { x: b.x - box.x, y: b.y - box.y },
-        start: c0 + c * crackStagger + k * segStagger,
-      });
-    }
-  });
-
-  // --- shards: wedge between consecutive rays + rim arc --------------------
-  const perimBetween = (segA: number, segB: number): Pt[] => {
-    const out: Pt[] = [];
-    let i = segA;
-    let guard = 0;
-    while (i !== segB && guard++ < perim.length + 1) {
-      i = (i + 1) % perim.length;
-      out.push(perim[i]);
-    }
-    return out;
-  };
-  const shards: ShardData[] = rays.map((r0, k) => {
-    const r1 = rays[(k + 1) % RAYS];
+  // --- shards: triangular fragments breaking away FROM the primary fracture --
+  // Origins are sampled along the primary crack polyline (viewBox coords →
+  // screen via toScreen); pieces alternate sides of the crack and fly outward.
+  const SHARD_COUNT = 8;
+  const shards: ShardData[] = Array.from({ length: SHARD_COUNT }, (_, k) => {
+    const f = (k + 0.5) / SHARD_COUNT + (rand() - 0.5) * 0.06;
+    const { p, tx, ty } = samplePolyline(CRACK_PRIMARY, f);
+    const o = toScreen(p.x, p.y);
+    const side = k % 2 === 0 ? 1 : -1;
+    // crack normal (screen space; aspect is uniform so viewBox tangent works)
+    let dx = -ty * side;
+    let dy = tx * side;
+    const rx = o.x - cx;
+    const ry = o.y - cy;
+    const rl = Math.hypot(rx, ry) || 1;
+    dx += (rx / rl) * 0.7;
+    dy += (ry / rl) * 0.7;
+    const dl = Math.hypot(dx, dy) || 1;
+    const cos = dx / dl;
+    const sin = dy / dl;
+    // Triangle shard size
+    const shW = 14 + rand() * 12;
+    const shH = 18 + rand() * 14;
+    // Origin: on the crack, nudged a hair toward the side the piece breaks to
+    const ox = o.x + cos * 3;
+    const oy = o.y + sin * 3;
+    // Triangle points (local coords within the shard box)
+    const pad = 2;
+    const bx: Box = { x: ox - shW / 2 - pad, y: oy - shH / 2 - pad, w: shW + pad * 2, h: shH + pad * 2 };
+    const triCx = shW / 2 + pad;
+    const triCy = shH / 2 + pad;
     const poly: Pt[] = [
-      ...r0.pts,
-      ...perimBetween(r0.seg, r1.seg),
-      ...r1.pts.slice(1).reverse(),
+      { x: triCx, y: pad },
+      { x: triCx + shW / 2, y: triCy + shH / 2 },
+      { x: triCx - shW / 2, y: triCy + shH / 2 },
     ];
-    const ox = poly.reduce((s, p) => s + p.x, 0) / poly.length;
-    const oy = poly.reduce((s, p) => s + p.y, 0) / poly.length;
-    let dx = ox - I.x;
-    let dy = oy - I.y;
-    const d = Math.hypot(dx, dy) || 1;
-    dx /= d;
-    dy /= d;
-    const box = bbox(poly, 1.5);
-    const gl = Math.min(box.w, box.h) * 0.16;
-    const gx = ox - box.x - 3;
-    const gy = oy - box.y - 3;
+    const gl = Math.min(shW, shH) * 0.2;
     const sign = rand() < 0.5 ? -1 : 1;
     return {
       key: `sh${k}`,
-      box: { x: L + box.x, y: T + box.y, w: box.w, h: box.h },
-      points: poly.map((p) => `${(p.x - box.x).toFixed(2)},${(p.y - box.y).toFixed(2)}`).join(" "),
-      gloss: { x1: gx - gl, y1: gy + gl, x2: gx + gl, y2: gy - gl },
-      dirX: dx,
-      dirY: dy,
+      box: bx,
+      points: poly.map((p) => `${p.x.toFixed(2)},${p.y.toFixed(2)}`).join(" "),
+      gloss: { x1: triCx - gl, y1: triCy + gl, x2: triCx + gl, y2: triCy - gl },
+      dirX: cos,
+      dirY: sin,
       dist: 140 + rand() * 120,
       rot: sign * (20 + rand() * 35),
       scaleTo: k % 2 === 0 ? 1.15 : 0.8,
@@ -387,10 +350,9 @@ function buildScene(W: number, H: number) {
     };
   });
 
-  const boltW = (BOLT_H * 492) / 755;
   const wordTop = cy + BOLT_H / 2 + 24;
 
-  return { S, R, cx, cy, L, T, crackSegs, shards, dots, boltW, wordTop };
+  return { S, R, cx, cy, L, T, shards, dots, boltW, wordTop };
 }
 
 type Scene = ReturnType<typeof buildScene>;
@@ -458,45 +420,287 @@ function Streak({ id, cx, cy, half, width, alpha }: {
   );
 }
 
-const SlabArt = memo(function SlabArt({ S, R }: { S: number; R: number }) {
+/** Icy bolt: the bolt shape rendered with frosted ice colors, slightly larger than the real bolt. */
+const ICY_BOLT_SCALE = 1.3;
+const ICY_BOLT_H = BOLT_H * ICY_BOLT_SCALE;
+const ICY_BOLT_W = (ICY_BOLT_H * 492) / 755;
+
+const IcyBoltArt = memo(function IcyBoltArt() {
   return (
-    <Svg width={S} height={S}>
+    <Svg width={ICY_BOLT_W} height={ICY_BOLT_H} viewBox="260 135 492 755">
       <Defs>
-        <IceDefs id="slab" />
-        <SvgLinearGradient id="slabBand" x1="0" y1="0" x2="0" y2="1">
-          <Stop offset="0" stopColor={C.white} stopOpacity={0.16} />
-          <Stop offset="0.32" stopColor={C.white} stopOpacity={0} />
+        <IceDefs id="icy" />
+        {/* Frosty fill gradient — white/blue-lavender */}
+        <SvgLinearGradient id="icyFill" x1="300" y1="150" x2="560" y2="890" gradientUnits="userSpaceOnUse">
+          <Stop offset="0" stopColor={C.white} stopOpacity={0.55} />
+          <Stop offset="0.4" stopColor="#D6D0F5" stopOpacity={0.4} />
+          <Stop offset="1" stopColor={C.lavender} stopOpacity={0.25} />
+        </SvgLinearGradient>
+        {/* Frosty stroke gradient */}
+        <SvgLinearGradient id="icyEdge" x1="260" y1="135" x2="752" y2="890" gradientUnits="userSpaceOnUse">
+          <Stop offset="0" stopColor={C.white} stopOpacity={0.8} />
+          <Stop offset="1" stopColor={C.lavender} stopOpacity={0.35} />
+        </SvgLinearGradient>
+        {/* Gloss highlight */}
+        <SvgLinearGradient id="icyGloss" x1="350" y1="200" x2="550" y2="500" gradientUnits="userSpaceOnUse">
+          <Stop offset="0" stopColor={C.white} stopOpacity={0.3} />
+          <Stop offset="0.5" stopColor={C.white} stopOpacity={0.08} />
+          <Stop offset="1" stopColor={C.white} stopOpacity={0} />
         </SvgLinearGradient>
       </Defs>
-      <Rect x={0.75} y={0.75} width={S - 1.5} height={S - 1.5} rx={R} ry={R} fill="url(#slabf)" />
-      {/* inner top highlight band */}
-      <Rect x={3} y={3} width={S - 6} height={S - 6} rx={R - 3} ry={R - 3} fill="url(#slabBand)" />
-      {/* diagonal gloss streaks, upper-left */}
-      <Streak id="st1" cx={S * 0.36} cy={S * 0.36} half={S * 0.3} width={7} alpha={0.1} />
-      <Streak id="st2" cx={S * 0.3} cy={S * 0.3} half={S * 0.24} width={1.6} alpha={0.22} />
-      <Streak id="st3" cx={S * 0.46} cy={S * 0.46} half={S * 0.26} width={1.2} alpha={0.14} />
-      {/* crisp edge */}
-      <Rect
-        x={0.75}
-        y={0.75}
-        width={S - 1.5}
-        height={S - 1.5}
-        rx={R}
-        ry={R}
-        fill="none"
-        stroke="url(#slabs)"
-        strokeWidth={1.5}
-      />
+      {/* Upper bolt piece */}
+      <Path d="M592 135 L530 432 L458 588 L260 588 Z" fill="url(#icyFill)" stroke="url(#icyEdge)" strokeWidth={2.5} strokeLinejoin="round" />
+      {/* Lower bolt piece */}
+      <Path d="M752 432 L412 890 L458 588 Z" fill="url(#icyFill)" stroke="url(#icyEdge)" strokeWidth={2.5} strokeLinejoin="round" />
+      {/* Middle connector */}
+      <Path d="M530 432 L752 432 L458 588 Z" fill="url(#icyFill)" stroke="url(#icyEdge)" strokeWidth={2.5} strokeLinejoin="round" />
+      {/* Gloss overlay */}
+      <Path d="M592 135 L530 432 L458 588 L260 588 Z" fill="url(#icyGloss)" />
     </Svg>
   );
 });
 
-const CrackArt = memo(function CrackArt({ s }: { s: CrackSegData }) {
+// ---------------------------------------------------------------------------
+// Crack — authored in the bolt's own viewBox (x 260..752, y 135..890), built
+// ONCE at module load as filled, tapered polygons (no strokes), clipped to the
+// bolt silhouette, revealed only via Animated.View opacity of static layers.
+// ---------------------------------------------------------------------------
+const BOLT_FACETS = [
+  "M592 135 L530 432 L458 588 L260 588 Z",
+  "M752 432 L412 890 L458 588 Z",
+  "M530 432 L752 432 L458 588 Z",
+] as const;
+
+/** viewBox units per screen px for the icy bolt. */
+const VB_PER_PX = 755 / ICY_BOLT_H;
+
+const CRACK_CORE = "#2A1F4D";
+const CRACK_HI_END = "#E9E0FF";
+const CRACK_GLOW = "#C9B6FF";
+
+/** Stress origin: the concave inner notch of the upper limb. */
+const CRACK_ORIGIN: Pt = { x: 530, y: 434 };
+
+/** Primary down-arm: origin → through the waist, past the lower notch, into the lower limb. */
+const CRACK_DOWN: Pt[] = [
+  CRACK_ORIGIN,
+  { x: 518, y: 470 },
+  { x: 520, y: 505 },
+  { x: 502, y: 541 },
+  { x: 492, y: 576 },
+  { x: 474, y: 612 },
+  { x: 479, y: 655 },
+  { x: 462, y: 705 },
+  { x: 455, y: 758 },
+  { x: 441, y: 808 }, // hairline end, well short of the tip (412,890)
+];
+/** Primary up-arm: origin → up the upper limb toward the top tip. */
+const CRACK_UP: Pt[] = [
+  CRACK_ORIGIN,
+  { x: 522, y: 400 },
+  { x: 528, y: 362 },
+  { x: 515, y: 322 },
+  { x: 524, y: 288 },
+  { x: 523, y: 252 },
+];
+/** Secondary hairlines, each forking off the primary at ~30–55°. */
+const CRACK_BRANCHES: Pt[][] = [
+  // waist → toward the right point
+  [{ x: 520, y: 505 }, { x: 538, y: 538 }, { x: 552, y: 575 }, { x: 572, y: 597 }],
+  // waist → toward the left point
+  [{ x: 502, y: 541 }, { x: 472, y: 559 }, { x: 443, y: 565 }, { x: 414, y: 578 }],
+  // upper limb → up-left
+  [{ x: 528, y: 362 }, { x: 504, y: 345 }, { x: 488, y: 322 }, { x: 484, y: 302 }],
+];
+/** Tiny tertiary flick off the right waist branch. */
+const CRACK_TERT: Pt[] = [{ x: 538, y: 538 }, { x: 558, y: 529 }, { x: 574, y: 532 }];
+
+/** Full primary, top end → bottom end (used to seed shard origins). */
+const CRACK_PRIMARY: Pt[] = [...CRACK_UP.slice().reverse(), ...CRACK_DOWN.slice(1)];
+
+function polyLen(pts: Pt[]): number[] {
+  const s = [0];
+  for (let i = 1; i < pts.length; i++) {
+    s.push(s[i - 1] + Math.hypot(pts[i].x - pts[i - 1].x, pts[i].y - pts[i - 1].y));
+  }
+  return s;
+}
+
+/** Point + unit tangent at fraction f (0..1) of a polyline's arc length. */
+function samplePolyline(pts: Pt[], f: number): { p: Pt; tx: number; ty: number } {
+  const s = polyLen(pts);
+  const target = Math.max(0, Math.min(1, f)) * s[s.length - 1];
+  let i = 1;
+  while (i < pts.length - 1 && s[i] < target) i++;
+  const a = pts[i - 1];
+  const b = pts[i];
+  const l = s[i] - s[i - 1] || 1;
+  const u = (target - s[i - 1]) / l;
+  return { p: { x: lerp(a.x, b.x, u), y: lerp(a.y, b.y, u) }, tx: (b.x - a.x) / l, ty: (b.y - a.y) / l };
+}
+
+/** First `f` of a polyline (by arc length). */
+function truncate(pts: Pt[], f: number): Pt[] {
+  if (f >= 1) return pts;
+  if (f <= 0) return [];
+  const s = polyLen(pts);
+  const target = f * s[s.length - 1];
+  const out: Pt[] = [pts[0]];
+  for (let i = 1; i < pts.length; i++) {
+    if (s[i] < target) {
+      out.push(pts[i]);
+      continue;
+    }
+    const u = (target - s[i - 1]) / (s[i] - s[i - 1] || 1);
+    out.push({ x: lerp(pts[i - 1].x, pts[i].x, u), y: lerp(pts[i - 1].y, pts[i].y, u) });
+    break;
+  }
+  return out;
+}
+
+/**
+ * Filled tapered outline of a polyline. Width is `w0` at arc-length `rootS`
+ * and falls to `wTip` at both ends (so one polygon can taper both ways from
+ * the stress origin). Vertex offsets use mitred normals; winding is
+ * normalised so concatenated subpaths never punch holes under nonzero fill.
+ */
+function taperPath(pts: Pt[], rootS: number, w0: number, wTip: number, dx = 0, dy = 0): string {
+  if (pts.length < 2) return "";
+  const s = polyLen(pts);
+  const L = s[s.length - 1];
+  const n = pts.length;
+  const left: Pt[] = [];
+  const right: Pt[] = [];
+  for (let i = 0; i < n; i++) {
+    const p = pts[i];
+    const prev = pts[Math.max(0, i - 1)];
+    const next = pts[Math.min(n - 1, i + 1)];
+    let tx = next.x - prev.x;
+    let ty = next.y - prev.y;
+    const tl = Math.hypot(tx, ty) || 1;
+    tx /= tl; ty /= tl;
+    // mitre against the incoming segment
+    const a = i > 0 ? pts[i - 1] : p;
+    const b = i > 0 ? p : pts[1];
+    const sl = Math.hypot(b.x - a.x, b.y - a.y) || 1;
+    const dot = (-ty) * (-(b.y - a.y) / sl) + tx * ((b.x - a.x) / sl);
+    const miter = 1 / Math.max(0.6, dot);
+    const u = s[i] < rootS ? (rootS - s[i]) / (rootS || 1) : (s[i] - rootS) / (L - rootS || 1);
+    const w = (wTip + (w0 - wTip) * Math.pow(1 - Math.min(1, u), 0.9)) * 0.5 * miter;
+    left.push({ x: p.x - ty * w + dx, y: p.y + tx * w + dy });
+    right.push({ x: p.x + ty * w + dx, y: p.y - tx * w + dy });
+  }
+  const ring = [...left, ...right.reverse()];
+  let area = 0;
+  for (let i = 0; i < ring.length; i++) {
+    const p = ring[i];
+    const q = ring[(i + 1) % ring.length];
+    area += p.x * q.y - q.x * p.y;
+  }
+  if (area < 0) ring.reverse();
+  return "M" + ring.map((p) => `${p.x.toFixed(1)} ${p.y.toFixed(1)}`).join(" L") + " Z";
+}
+
+type CrackStageSpec = { up: number; down: number; sec: number; tert: number };
+type CrackLayerPaths = {
+  pCore: string; pHi: string; // primary
+  bCore: string; bHi: string; // secondaries (+ tertiary)
+};
+
+const W_TIP = 0.3 * VB_PER_PX;
+const W_PRIMARY = 2.2 * VB_PER_PX;
+const W_BRANCH = 1.2 * VB_PER_PX;
+const W_TERT = 0.8 * VB_PER_PX;
+const HI_SCALE = 0.35;
+const HI_OFF = -VB_PER_PX / Math.SQRT2; // ≈1 screen px up-left
+const GLOW_SCALE = 2.0;
+
+/** Builds one stage's primary polyline (up-arm reversed + down-arm) and its root arc-length. */
+function primaryFor(spec: CrackStageSpec): { pts: Pt[]; rootS: number } {
+  const up = truncate(CRACK_UP, spec.up);
+  const down = truncate(CRACK_DOWN, spec.down);
+  const upRev = up.length >= 2 ? up.slice().reverse() : [CRACK_ORIGIN];
+  const pts = down.length >= 2 ? [...upRev, ...down.slice(1)] : upRev;
+  const rootS = polyLen(upRev)[upRev.length - 1];
+  return { pts, rootS };
+}
+
+function branchesFor(spec: CrackStageSpec): { pts: Pt[]; w0: number }[] {
+  const out: { pts: Pt[]; w0: number }[] = [];
+  for (const b of CRACK_BRANCHES) {
+    const pts = truncate(b, spec.sec);
+    if (pts.length >= 2) out.push({ pts, w0: W_BRANCH });
+  }
+  const t = truncate(CRACK_TERT, spec.tert);
+  if (t.length >= 2) out.push({ pts: t, w0: W_TERT });
+  return out;
+}
+
+function buildCrackLayer(spec: CrackStageSpec): CrackLayerPaths {
+  const { pts, rootS } = primaryFor(spec);
+  const br = branchesFor(spec);
+  return {
+    pCore: taperPath(pts, rootS, W_PRIMARY, W_TIP),
+    pHi: taperPath(pts, rootS, W_PRIMARY * HI_SCALE, W_TIP * HI_SCALE, HI_OFF, HI_OFF),
+    bCore: br.map((b) => taperPath(b.pts, 0, b.w0, W_TIP)).join(" "),
+    bHi: br.map((b) => taperPath(b.pts, 0, b.w0 * HI_SCALE, W_TIP * HI_SCALE, HI_OFF, HI_OFF)).join(" "),
+  };
+}
+
+/** Cumulative stages: origin burst → full primary → + branches → full pattern. */
+const CRACK_STAGES: CrackLayerPaths[] = [
+  { up: 0, down: 0.35, sec: 0, tert: 0 },
+  { up: 0.4, down: 1, sec: 0, tert: 0 },
+  { up: 0.75, down: 1, sec: 0.65, tert: 0 },
+  { up: 1, down: 1, sec: 1, tert: 1 },
+].map(buildCrackLayer);
+
+/** Peak-tension glow: the full pattern as wider soft tapered fills. */
+const CRACK_GLOW_PATH: string = (() => {
+  const full = { up: 1, down: 1, sec: 1, tert: 1 };
+  const { pts, rootS } = primaryFor(full);
+  return [
+    taperPath(pts, rootS, W_PRIMARY * GLOW_SCALE, W_TIP * GLOW_SCALE),
+    ...branchesFor(full).map((b) => taperPath(b.pts, 0, b.w0 * GLOW_SCALE, W_TIP * GLOW_SCALE)),
+  ].join(" ");
+})();
+
+/** Same size/viewBox as IcyBoltArt; children clipped to the union of the bolt facets. */
+function CrackSvg({ id, children }: { id: string; children: React.ReactNode }) {
   return (
-    <Svg width={s.box.w} height={s.box.h}>
-      <Line x1={s.a.x} y1={s.a.y} x2={s.b.x} y2={s.b.y} stroke={C.lavender} strokeOpacity={0.35} strokeWidth={4} strokeLinecap="round" />
-      <Line x1={s.a.x} y1={s.a.y} x2={s.b.x} y2={s.b.y} stroke={C.white} strokeWidth={1.5} strokeLinecap="round" />
+    <Svg width={ICY_BOLT_W} height={ICY_BOLT_H} viewBox="260 135 492 755">
+      <Defs>
+        <ClipPath id={`${id}clip`}>
+          {BOLT_FACETS.map((d) => (
+            <Path key={d} d={d} />
+          ))}
+        </ClipPath>
+        <SvgLinearGradient id={`${id}hi`} x1="300" y1="150" x2="560" y2="890" gradientUnits="userSpaceOnUse">
+          <Stop offset="0" stopColor={C.white} />
+          <Stop offset="1" stopColor={CRACK_HI_END} />
+        </SvgLinearGradient>
+      </Defs>
+      <G clipPath={`url(#${id}clip)`}>{children}</G>
     </Svg>
+  );
+}
+
+const CrackLayerArt = memo(function CrackLayerArt({ id, layer }: { id: string; layer: CrackLayerPaths }) {
+  return (
+    <CrackSvg id={id}>
+      {layer.bCore ? <Path d={layer.bCore} fill={CRACK_CORE} fillOpacity={0.55} /> : null}
+      {layer.bHi ? <Path d={layer.bHi} fill={`url(#${id}hi)`} fillOpacity={0.35} /> : null}
+      <Path d={layer.pCore} fill={CRACK_CORE} fillOpacity={0.8} />
+      <Path d={layer.pHi} fill={`url(#${id}hi)`} fillOpacity={0.6} />
+    </CrackSvg>
+  );
+});
+
+const CrackGlowArt = memo(function CrackGlowArt() {
+  return (
+    <CrackSvg id="crackGlow">
+      <Path d={CRACK_GLOW_PATH} fill={CRACK_GLOW} fillOpacity={0.22} />
+    </CrackSvg>
   );
 });
 
@@ -572,31 +776,54 @@ const Slab = memo(function Slab({ t, sc }: TProps & { sc: Scene }) {
       ],
     };
   });
+  // Center the icy bolt at sc.cx, sc.cy (same as the real bolt, but larger)
+  const icyLeft = sc.cx - ICY_BOLT_W / 2;
+  const icyTop = sc.cy - ICY_BOLT_H / 2;
+  const at = { position: "absolute" as const, left: icyLeft, top: icyTop };
+  // Crack layers live INSIDE the slab view, so they shake and hide at the
+  // shatter exactly with the icy bolt.
   return (
-    <Animated.View style={[{ position: "absolute", left: sc.L, top: sc.T, width: sc.S, height: sc.S }, style]}>
-      <SlabArt S={sc.S} R={sc.R} />
-      <View style={{ position: "absolute", left: (sc.S - sc.boltW) / 2, top: (sc.S - BOLT_H) / 2 }}>
-        <BoltArt id="frozen" opacity={0.3} />
+    <Animated.View style={[StyleSheet.absoluteFill, style]}>
+      {/* Icy bolt (the frozen version) */}
+      <View style={at}>
+        <IcyBoltArt />
       </View>
-      {sc.crackSegs.map((s) => (
-        <CrackSeg key={s.key} t={t} s={s} />
+      <CrackGlow t={t} at={at} />
+      {CRACK_STAGES.map((layer, i) => (
+        <CrackStage key={i} t={t} i={i} layer={layer} at={at} />
       ))}
     </Animated.View>
   );
 });
 
-const CrackSeg = memo(function CrackSeg({ t, s }: TProps & { s: CrackSegData }) {
-  const { start } = s;
+type At = { position: "absolute"; left: number; top: number };
+
+/** Stage i fades in over stageDur; it fades out as stage i+1 fades in
+ *  (cross-fade so semi-transparent cumulative layers never double up). */
+const CrackStage = memo(function CrackStage({ t, i, layer, at }: TProps & { i: number; layer: CrackLayerPaths; at: At }) {
+  const { start, stageStagger, stageDur } = TIMELINE.crack;
+  const s0 = start + i * stageStagger;
+  const hasNext = i < CRACK_STAGES.length - 1;
+  const s1 = start + (i + 1) * stageStagger;
   const style = useAnimatedStyle(() => {
-    const raw = seg(t.value, start, start + TIMELINE.crack.segDur);
-    return {
-      opacity: Math.min(1, raw * 1.6),
-      transform: [{ scale: lerp(0.6, 1, easeOutCubic(raw)) }],
-    };
+    const tv = t.value;
+    const inP = seg(tv, s0, s0 + stageDur);
+    const next = hasNext ? seg(tv, s1, s1 + stageDur) : 0;
+    return { opacity: inP * (1 - next) };
   });
   return (
-    <Animated.View style={[{ position: "absolute", left: s.box.x, top: s.box.y }, style]}>
-      <CrackArt s={s} />
+    <Animated.View style={[at, { opacity: 0 }, style]}>
+      <CrackLayerArt id={`crack${i}`} layer={layer} />
+    </Animated.View>
+  );
+});
+
+const CrackGlow = memo(function CrackGlow({ t, at }: TProps & { at: At }) {
+  const [g0, g1] = TIMELINE.crack.glow;
+  const style = useAnimatedStyle(() => ({ opacity: easeOutCubic(seg(t.value, g0, g1)) }));
+  return (
+    <Animated.View style={[at, { opacity: 0 }, style]}>
+      <CrackGlowArt />
     </Animated.View>
   );
 });
