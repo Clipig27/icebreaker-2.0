@@ -2,6 +2,7 @@ import { useEffect, useRef, useState } from "react";
 import { View, Text, Pressable, StyleSheet, Animated, ScrollView, Image, Alert } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { Ionicons } from "@expo/vector-icons";
+import { useRouter } from "expo-router";
 import * as ImagePicker from "expo-image-picker";
 import { useAuthStore } from "../../src/stores/authStore";
 import { supabase } from "../../src/lib/supabase";
@@ -47,7 +48,7 @@ const STAT_ACCENTS = [
   },
 ];
 
-function StatCard({ label, value, index }: { label: string; value: string; index: number }) {
+function StatCard({ label, value, index, onPress }: { label: string; value: string; index: number; onPress?: () => void }) {
   const accent = STAT_ACCENTS[index] ?? STAT_ACCENTS[0];
   const animValue = useRef(new Animated.Value(0)).current;
 
@@ -72,17 +73,19 @@ function StatCard({ label, value, index }: { label: string; value: string; index
         },
       ]}
     >
-      <GradientCard
-        radius={radii.lg}
-        style={s.statCard}
-        contentStyle={s.statContent}
-        fill={accent.fill}
-        borderColors={accent.edge}
-      >
-        <View style={[s.statAccent, { backgroundColor: accent.bar }]} />
-        <Text style={[s.statNum, { color: accent.num }]}>{value}</Text>
-        <Text style={s.statLabel}>{label}</Text>
-      </GradientCard>
+      <Pressable onPress={onPress} style={{ flex: 1 }} disabled={!onPress}>
+        <GradientCard
+          radius={radii.lg}
+          style={s.statCard}
+          contentStyle={s.statContent}
+          fill={accent.fill}
+          borderColors={accent.edge}
+        >
+          <View style={[s.statAccent, { backgroundColor: accent.bar }]} />
+          <Text style={[s.statNum, { color: accent.num }]}>{value}</Text>
+          <Text style={s.statLabel}>{label}</Text>
+        </GradientCard>
+      </Pressable>
     </Animated.View>
   );
 }
@@ -98,6 +101,7 @@ export default function Profile() {
   const perGameWins = useAuthStore((s) => s.perGameWins);
   const gameWinEntries = Object.entries(perGameWins).filter(([, count]) => count > 0);
 
+  const router = useRouter();
   const [uploading, setUploading] = useState(false);
   const [editVisible, setEditVisible] = useState(false);
   const [feedbackVisible, setFeedbackVisible] = useState(false);
@@ -236,7 +240,17 @@ export default function Profile() {
         {/* Stats row */}
         <View style={s.statsRow}>
           {STATS.map((stat, index) => (
-            <StatCard key={stat.label} label={stat.label} value={stat.value} index={index} />
+            <StatCard
+              key={stat.label}
+              label={stat.label}
+              value={stat.value}
+              index={index}
+              onPress={
+                stat.label === "Games" || stat.label === "Wins"
+                  ? () => router.push("/game-history")
+                  : undefined
+              }
+            />
           ))}
         </View>
 
@@ -283,6 +297,33 @@ export default function Profile() {
             ))}
           </>
         )}
+
+        {/* Bonus trophies — rewarded ad */}
+        <Pressable
+          style={({ pressed }) => [s.feedbackBtn, pressed && { opacity: 0.7 }]}
+          onPress={async () => {
+            const { showRewarded } = await import("../../src/utils/ads");
+            const earned = await showRewarded();
+            if (earned) {
+              await useAuthStore.getState().addTrophies(2);
+              Alert.alert("Nice!", "You earned 2 bonus trophies!");
+            }
+          }}
+        >
+          <Ionicons name="trophy" size={18} color={colors.goldStat} />
+          <Text style={s.feedbackText}>Watch Ad for 2 Trophies</Text>
+          <Ionicons name="play-circle-outline" size={18} color={colors.gray500} style={{ marginLeft: "auto" }} />
+        </Pressable>
+
+        {/* Store button */}
+        <Pressable
+          style={({ pressed }) => [s.feedbackBtn, pressed && { opacity: 0.7 }]}
+          onPress={() => router.push("/store")}
+        >
+          <Ionicons name="cart-outline" size={18} color={colors.goldStat} />
+          <Text style={s.feedbackText}>Trophy Store</Text>
+          <Ionicons name="chevron-forward" size={16} color={colors.gray500} style={{ marginLeft: "auto" }} />
+        </Pressable>
 
         {/* Feedback button */}
         <Pressable

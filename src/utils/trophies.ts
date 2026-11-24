@@ -1,20 +1,25 @@
 import { useRoomStore } from "../stores/roomStore";
 import { useAuthStore } from "../stores/authStore";
 
-/** Call once when the winner phase is reached. Awards trophies to winner, removes 1 from each loser. */
-export async function awardTrophies(winnerId: string, gameType: string) {
+/**
+ * Call once per player when the winner is decided.
+ * Winner gains trophies = number of players in the room.
+ * Everyone else loses 1 trophy (min 0).
+ * Returns the trophy delta for display purposes.
+ */
+export async function awardTrophies(winnerId: string, gameType: string): Promise<number> {
   const players = useRoomStore.getState().players;
   const myId = useAuthStore.getState().user?.id;
-  if (!myId || players.length < 2) return;
+  if (!myId || players.length < 2) return 0;
 
-  const otherCount = players.length - 1;
+  const playerCount = players.length;
 
   if (myId === winnerId) {
-    // I won — gain trophies equal to other players count
-    await useAuthStore.getState().addTrophies(otherCount);
+    await useAuthStore.getState().addTrophies(playerCount);
     await useAuthStore.getState().recordGameWin(gameType);
+    return playerCount;
   } else {
-    // I lost — lose 1 trophy
     await useAuthStore.getState().removeTrophy();
+    return -1;
   }
 }

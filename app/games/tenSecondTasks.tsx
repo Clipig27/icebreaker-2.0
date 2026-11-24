@@ -17,6 +17,7 @@ import { useRoomStore } from "../../src/stores/roomStore";
 import { useAuthStore } from "../../src/stores/authStore";
 import { getAllTasks, Task } from "../../src/data/tenSecondTasks";
 import { getRecent, loadRecent, markUsed, pickFresh } from "../../src/utils/deck";
+import { awardTrophies } from "../../src/utils/trophies";
 import HostWaitingPill from "../../src/components/HostWaitingPill";
 import GameHeader from "../../src/components/GameHeader";
 import GameLoadingScreen from "../../src/components/GameLoadingScreen";
@@ -27,6 +28,22 @@ import Pill from "../../src/components/Pill";
 import GradientCard from "../../src/components/GradientCard";
 import HeroGradient from "../../src/components/HeroGradient";
 import PlayerAvatar from "../../src/components/PlayerAvatar";
+import GameLogo from "../../src/components/GameLogo";
+
+// ---------------------------------------------------------------------------
+// Game-specific color palette (dark olive/orange)
+// ---------------------------------------------------------------------------
+const THEME = {
+  bg: "#2A2010",
+  card: "#362A18",
+  accent: "#F0A060",
+  deepOrange: "#E87040",
+  accentSoft: "rgba(240,160,96,0.15)",
+  accentBorder: "rgba(240,160,96,0.25)",
+  cardBorder: "rgba(240,160,96,0.12)",
+  surface: "#362A18",
+  surfaceLight: "#453520",
+};
 
 // ---------------------------------------------------------------------------
 // Types
@@ -167,6 +184,7 @@ export default function TenSecondTasksScreen() {
   const phase = gs?.phase ?? null;
   const myId = user?.id ?? "";
 
+  const [trophyDelta, setTrophyDelta] = useState(0);
   const secondsLeft = useCountdown(gs?.timerEnd ?? null);
   const isTimerExpired = gs?.timerEnd ? Date.now() >= gs.timerEnd : false;
 
@@ -217,6 +235,7 @@ export default function TenSecondTasksScreen() {
     trackedGameRef.current = true;
     useAuthStore.getState().incrementGamesPlayed();
     if (gs.winnerId === myId) useAuthStore.getState().incrementWins();
+    if (gs.winnerId) awardTrophies(gs.winnerId, "tenSecondTasks").then((d) => setTrophyDelta(d));
   }, [phase]);
 
   // Host: initialise
@@ -507,7 +526,7 @@ export default function TenSecondTasksScreen() {
                     pointerEvents="none"
                   />
                 ) : null}
-                <Ionicons name="thumbs-up" size={20} color={myVote === "pass" ? colors.onPrimary : colors.highlight} />
+                <Ionicons name="thumbs-up" size={20} color={myVote === "pass" ? colors.onPrimary : THEME.accent} />
                 <Text style={[st.voteBtnText, myVote === "pass" && { color: colors.onPrimary }]}>PASS</Text>
               </Pressable>
               <Pressable
@@ -633,6 +652,11 @@ export default function TenSecondTasksScreen() {
           </View>
           <Ionicons name="trophy" size={30} color={colors.onPrimary} />
         </GradientCard>
+        {trophyDelta !== 0 && (
+          <Text style={trophyDelta > 0 ? st.trophyGain : st.trophyLoss}>
+            {trophyDelta > 0 ? `\uD83C\uDFC6 +${trophyDelta} trophies!` : `\uD83C\uDFC6 -1 trophy`}
+          </Text>
+        )}
 
         {gs.eliminationOrder.length > 0 && (
           <>
@@ -691,10 +715,9 @@ function ScreenTitle({ title, subtitle, pill }: { title: string; subtitle?: stri
   return (
     <View style={st.titleBlock}>
       <View style={st.eyebrowRow}>
-        <Eyebrow tone="lavender">10 Second Tasks</Eyebrow>
+        <GameLogo gameId="tenSecondTasks" height={44} />
         {pill ? <Pill tone="peach" label={pill} /> : null}
       </View>
-      <Text style={type.title}>{title}</Text>
       {subtitle ? <Text style={type.subtitle}>{subtitle}</Text> : null}
     </View>
   );
@@ -703,7 +726,7 @@ function ScreenTitle({ title, subtitle, pill }: { title: string; subtitle?: stri
 function WaitingNote({ label }: { label: string }) {
   return (
     <View style={st.waiting}>
-      <ActivityIndicator size="small" color={colors.highlight} />
+      <ActivityIndicator size="small" color={THEME.accent} />
       <Text style={st.waitingText} numberOfLines={1}>
         {label}
       </Text>
@@ -752,7 +775,7 @@ function StatCard({ label, value, danger = false }: { label: string; value: numb
 // ---------------------------------------------------------------------------
 
 const st = StyleSheet.create({
-  container: { flex: 1, backgroundColor: colors.bgPurple },
+  container: { flex: 1, backgroundColor: THEME.bg },
   scroll: {
     flexGrow: 1,
     paddingHorizontal: spacing.screen,
@@ -778,9 +801,9 @@ const st = StyleSheet.create({
   waiting: {
     minHeight: 56,
     borderRadius: radii.pill,
-    backgroundColor: colors.surface,
+    backgroundColor: THEME.surface,
     borderWidth: 1,
-    borderColor: colors.cardBorder,
+    borderColor: THEME.cardBorder,
     flexDirection: "row",
     alignItems: "center",
     justifyContent: "center",
@@ -801,7 +824,7 @@ const st = StyleSheet.create({
     width: 40,
     height: 40,
     borderRadius: radii.md,
-    backgroundColor: colors.highlightSoft,
+    backgroundColor: THEME.accentSoft,
     alignItems: "center",
     justifyContent: "center",
   },
@@ -823,7 +846,7 @@ const st = StyleSheet.create({
     alignSelf: "stretch",
     height: 6,
     borderRadius: radii.pill,
-    backgroundColor: colors.surfaceLight,
+    backgroundColor: THEME.surfaceLight,
     overflow: "hidden",
     marginTop: spacing.md,
   },
@@ -847,13 +870,13 @@ const st = StyleSheet.create({
     width: 36,
     height: 36,
     borderRadius: radii.sm,
-    backgroundColor: colors.surfaceLight,
+    backgroundColor: THEME.surfaceLight,
     alignItems: "center",
     justifyContent: "center",
   },
   numTileHero: { backgroundColor: colors.onPrimary },
   numTileText: { fontFamily: fonts.extrabold, fontSize: 16, color: colors.white },
-  numTileTextHero: { color: colors.highlight },
+  numTileTextHero: { color: THEME.accent },
 
   // Voting (spectators)
   voteRow: { flexDirection: "row", gap: spacing.md },
@@ -866,11 +889,11 @@ const st = StyleSheet.create({
     justifyContent: "center",
     gap: 8,
     paddingHorizontal: 16,
-    backgroundColor: colors.surface,
+    backgroundColor: THEME.surface,
     borderWidth: 1.5,
-    borderColor: colors.highlight,
+    borderColor: THEME.accent,
   },
-  voteBtnPassOn: { borderColor: colors.highlight },
+  voteBtnPassOn: { borderColor: THEME.accent },
   voteBtnFail: { borderColor: colors.danger },
   voteBtnFailOn: { backgroundColor: colors.danger },
   voteBtnText: { fontFamily: fonts.bold, fontSize: 16, letterSpacing: 0.5, color: colors.white },
@@ -899,4 +922,6 @@ const st = StyleSheet.create({
   },
   rankName: { flex: 1, fontFamily: fonts.bold, fontSize: 16, color: colors.white },
   outTag: { fontFamily: fonts.bold, fontSize: 12, letterSpacing: 1.2, color: colors.danger },
+  trophyGain: { fontFamily: fonts.bold, fontSize: 16, color: "#FFD700", textAlign: "center", marginTop: spacing.sm },
+  trophyLoss: { fontFamily: fonts.bold, fontSize: 16, color: colors.gray400, textAlign: "center", marginTop: spacing.sm },
 });

@@ -132,12 +132,19 @@ export const useAuthStore = create<AuthState>((set, get) => ({
         }
       }
 
+      // Restore avatar: prefer DB, fall back to local backup
+      let avatarUrl = profile?.avatar_url ?? null;
+      if (!avatarUrl) {
+        const localAvatar = await AsyncStorage.getItem("icebreaker_avatar_url");
+        if (localAvatar) avatarUrl = localAvatar;
+      }
+
       set({
         session,
         user: session.user,
         username,
         displayName: profile?.display_name ?? null,
-        avatarUrl: profile?.avatar_url ?? null,
+        avatarUrl,
         wins: profile?.wins ?? 0,
         gamesPlayed: profile?.games_played ?? 0,
         trophies: profile?.trophies ?? 0,
@@ -217,13 +224,18 @@ export const useAuthStore = create<AuthState>((set, get) => ({
     const user = get().user;
     if (!user) return;
     set({ avatarUrl: url });
-    await supabase
-      .from("users")
-      .update({ avatar_url: url })
-      .eq("id", user.id)
-      .then(({ error }) => {
-        if (error) console.warn("[authStore] setAvatarUrl failed:", error.message);
-      });
+    // Only persist remote URLs to the DB (local file:// URIs won't survive app restart)
+    if (url.startsWith("http")) {
+      await supabase
+        .from("users")
+        .update({ avatar_url: url })
+        .eq("id", user.id)
+        .then(({ error }) => {
+          if (error) console.warn("[authStore] setAvatarUrl failed:", error.message);
+        });
+    }
+    // Always save locally as backup
+    await AsyncStorage.setItem("icebreaker_avatar_url", url);
   },
 
   addTrophies: async (count: number) => {
@@ -271,7 +283,7 @@ export const useAuthStore = create<AuthState>((set, get) => ({
 
   signOut: async () => {
     await supabase.auth.signOut();
-    await AsyncStorage.multiRemove([EMAIL_KEY, PASS_KEY, USERNAME_KEY]);
+    await AsyncStorage.multiRemove([EMAIL_KEY, PASS_KEY, USERNAME_KEY, "icebreaker_avatar_url"]);
     set({ session: null, user: null, username: null, displayName: null, avatarUrl: null, wins: 0, gamesPlayed: 0, trophies: 0, perGameWins: {}, needsUsername: false });
   },
 }));

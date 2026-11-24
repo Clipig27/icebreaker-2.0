@@ -9,6 +9,7 @@ export type Player = {
   username: string;
   score: number;
   is_host: boolean;
+  avatar_url?: string | null;
 };
 
 export type GameType =
@@ -551,6 +552,22 @@ export const useRoomStore = create<RoomState>((set, get) => ({
 
     // Ignore stale results for a room we're no longer in
     if (get().room?.id !== roomId) return;
+
+    // Fetch avatar URLs from users table
+    const userIds = data.map((p) => p.user_id);
+    const { data: profiles } = await supabase
+      .from("users")
+      .select("id, avatar_url")
+      .in("id", userIds);
+    const avatarMap: Record<string, string | null> = {};
+    if (profiles) {
+      for (const p of profiles) avatarMap[p.id] = p.avatar_url ?? null;
+    }
+    // Attach avatar_url to each player
+    for (const p of data) {
+      (p as any).avatar_url = avatarMap[p.user_id] ?? null;
+    }
+    console.log("[room] player avatars:", data.map((p) => `${p.username}: ${(p as any).avatar_url ?? "none"}`).join(", "));
 
     // If we're still in this room but no longer in its player list, the host kicked us.
     // Skip while leaving voluntarily (leaveRoom deletes our row before cleaning up),

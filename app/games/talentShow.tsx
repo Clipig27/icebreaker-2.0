@@ -20,6 +20,7 @@ import {
   TALENT_SHOW_FINAL_PROMPTS,
 } from "../../src/data/talentShow";
 import { getRecent, hashString, loadRecent, markUsed, pickFresh } from "../../src/utils/deck";
+import { awardTrophies } from "../../src/utils/trophies";
 import HostWaitingPill from "../../src/components/HostWaitingPill";
 import GameHeader from "../../src/components/GameHeader";
 import GameLoadingScreen from "../../src/components/GameLoadingScreen";
@@ -29,6 +30,22 @@ import Eyebrow from "../../src/components/Eyebrow";
 import Pill from "../../src/components/Pill";
 import GradientCard from "../../src/components/GradientCard";
 import PlayerAvatar from "../../src/components/PlayerAvatar";
+import GameLogo from "../../src/components/GameLogo";
+
+// ---------------------------------------------------------------------------
+// Game-specific color palette (dark maroon/pink)
+// ---------------------------------------------------------------------------
+const THEME = {
+  bg: "#2A1520",
+  card: "#3A1F30",
+  accent: "#E0457B",
+  gold: "#F5C842",
+  accentSoft: "rgba(224,69,123,0.15)",
+  accentBorder: "rgba(224,69,123,0.25)",
+  cardBorder: "rgba(224,69,123,0.12)",
+  surface: "#3A1F30",
+  surfaceLight: "#4A2A3F",
+};
 
 // ---------------------------------------------------------------------------
 // Types
@@ -187,6 +204,7 @@ export default function TalentShowScreen() {
 
   // R2 multi-select
   const [r2Selected, setR2Selected] = useState<string[]>([]);
+  const [trophyDelta, setTrophyDelta] = useState(0);
 
   const gs: GameState | null = room?.game_state ?? null;
   const phase = gs?.phase ?? null;
@@ -276,6 +294,7 @@ export default function TalentShowScreen() {
     trackedGameRef.current = true;
     useAuthStore.getState().incrementGamesPlayed();
     if (gs.winnerId === myId) useAuthStore.getState().incrementWins();
+    if (gs.winnerId) awardTrophies(gs.winnerId, "talentShow").then((d) => setTrophyDelta(d));
   }, [phase]);
 
   // Navigate away if room returns to lobby
@@ -1407,6 +1426,11 @@ export default function TalentShowScreen() {
           </View>
           <Ionicons name="trophy" size={30} color={colors.onPrimary} />
         </GradientCard>
+        {trophyDelta !== 0 && (
+          <Text style={trophyDelta > 0 ? st.trophyGain : st.trophyLoss}>
+            {trophyDelta > 0 ? `\uD83C\uDFC6 +${trophyDelta} trophies!` : `\uD83C\uDFC6 -1 trophy`}
+          </Text>
+        )}
         {gs.runnerUpId && (
           <GradientCard radius={radii.lg} contentStyle={st.candidateRow}>
             <View style={st.rankTile}>
@@ -1461,7 +1485,7 @@ const ROUND_NAMES: Record<number, string> = { 1: "Auditions", 2: "Semifinals", 3
 const HERO_BORDER = ["rgba(255,255,255,0.55)", "rgba(255,255,255,0.12)"] as const;
 const GOLD_BORDER = ["rgba(246,227,166,0.9)", "rgba(212,168,67,0.35)"] as const;
 const DANGER_BORDER = ["rgba(239,68,68,0.6)", "rgba(239,68,68,0.1)"] as const;
-const SELECTED_BORDER = [colors.highlight, colors.highlightGradientEnd] as const;
+const SELECTED_BORDER = [THEME.accent, THEME.accent] as const;
 const TASK_CARD_EDGE = ["rgba(186,162,249,0.38)", "rgba(186,162,249,0.16)"] as const;
 const SELECTED_FILL = ["rgba(184,174,232,0.20)", "rgba(184,174,232,0.05)"] as const;
 
@@ -1486,10 +1510,9 @@ function ScreenTitle({ title, subtitle, pill }: { title: string; subtitle?: stri
   return (
     <View style={st.titleBlock}>
       <View style={st.eyebrowRow}>
-        <Eyebrow tone="lavender">Nobody's Got Talent</Eyebrow>
+        <GameLogo gameId="talentShow" height={44} />
         {pill ? <Pill tone="peach" label={pill} /> : null}
       </View>
-      <Text style={type.title}>{title}</Text>
       {subtitle ? <Text style={type.subtitle}>{subtitle}</Text> : null}
     </View>
   );
@@ -1499,9 +1522,9 @@ function WaitingNote({ label, done = false }: { label: string; done?: boolean })
   return (
     <View style={st.waiting}>
       {done ? (
-        <Ionicons name="checkmark-circle" size={18} color={colors.highlight} />
+        <Ionicons name="checkmark-circle" size={18} color={THEME.accent} />
       ) : (
-        <ActivityIndicator size="small" color={colors.highlight} />
+        <ActivityIndicator size="small" color={THEME.accent} />
       )}
       <Text style={st.waitingText} numberOfLines={1}>
         {label}
@@ -1587,7 +1610,7 @@ function VoteTag() {
   return (
     <View style={st.voteTag}>
       <Text style={st.voteTagText}>VOTE</Text>
-      <Ionicons name="chevron-forward" size={16} color={colors.highlight} />
+      <Ionicons name="chevron-forward" size={16} color={THEME.accent} />
     </View>
   );
 }
@@ -1598,7 +1621,7 @@ function SubmittedScreen({ submitted, total }: { submitted: number; total: numbe
       <ScreenTitle title="Vote submitted!" subtitle={`${submitted} / ${total} voted`} />
       <GradientCard contentStyle={st.submittedCard}>
         <View style={st.submittedIcon}>
-          <Ionicons name="checkmark" size={36} color={colors.highlight} />
+          <Ionicons name="checkmark" size={36} color={THEME.accent} />
         </View>
         <Eyebrow>Votes in</Eyebrow>
         <View style={st.progressTrack}>
@@ -1619,7 +1642,7 @@ function SubmittedScreen({ submitted, total }: { submitted: number; total: numbe
 // ---------------------------------------------------------------------------
 
 const st = StyleSheet.create({
-  container: { flex: 1, backgroundColor: colors.bgPurple },
+  container: { flex: 1, backgroundColor: THEME.bg },
   scroll: {
     flexGrow: 1,
     paddingHorizontal: spacing.screen,
@@ -1646,9 +1669,9 @@ const st = StyleSheet.create({
   waiting: {
     minHeight: 56,
     borderRadius: radii.pill,
-    backgroundColor: colors.surface,
+    backgroundColor: THEME.surface,
     borderWidth: 1,
-    borderColor: colors.cardBorder,
+    borderColor: THEME.cardBorder,
     flexDirection: "row",
     alignItems: "center",
     justifyContent: "center",
@@ -1677,7 +1700,7 @@ const st = StyleSheet.create({
     width: 40,
     height: 40,
     borderRadius: radii.md,
-    backgroundColor: colors.highlightSoft,
+    backgroundColor: THEME.accentSoft,
     alignItems: "center",
     justifyContent: "center",
   },
@@ -1785,7 +1808,7 @@ const st = StyleSheet.create({
     gap: 8,
     paddingHorizontal: 16,
   },
-  buzzBtn: { backgroundColor: colors.surface, borderWidth: 1.5, borderColor: colors.danger },
+  buzzBtn: { backgroundColor: THEME.surface, borderWidth: 1.5, borderColor: colors.danger },
   buzzBtnText: { flexShrink: 1, fontFamily: fonts.bold, fontSize: 16, color: colors.white },
   goldenBtnText: { flexShrink: 1, fontFamily: fonts.bold, fontSize: 16, color: colors.onPrimary },
 
@@ -1818,7 +1841,7 @@ const st = StyleSheet.create({
     alignItems: "center",
     justifyContent: "center",
   },
-  checkOn: { backgroundColor: colors.highlight, borderColor: colors.highlight },
+  checkOn: { backgroundColor: THEME.accent, borderColor: THEME.accent },
   voteCountBadge: {
     backgroundColor: "rgba(184,174,232,0.18)",
     borderRadius: 10,
@@ -1827,7 +1850,7 @@ const st = StyleSheet.create({
   },
   voteCountText: { fontFamily: fonts.bold, fontSize: 13, color: colors.lavender },
   voteTag: { flexDirection: "row", alignItems: "center", gap: 2 },
-  voteTagText: { fontFamily: fonts.bold, fontSize: 12, letterSpacing: 1.2, color: colors.highlight },
+  voteTagText: { fontFamily: fonts.bold, fontSize: 12, letterSpacing: 1.2, color: THEME.accent },
 
   // Submitted
   submittedCard: { alignItems: "center", padding: 24, gap: spacing.md },
@@ -1835,7 +1858,7 @@ const st = StyleSheet.create({
     width: 72,
     height: 72,
     borderRadius: 36,
-    backgroundColor: colors.highlightSoft,
+    backgroundColor: THEME.accentSoft,
     alignItems: "center",
     justifyContent: "center",
   },
@@ -1846,12 +1869,14 @@ const st = StyleSheet.create({
     width: 36,
     height: 36,
     borderRadius: radii.sm,
-    backgroundColor: colors.surfaceLight,
+    backgroundColor: THEME.surfaceLight,
     alignItems: "center",
     justifyContent: "center",
   },
   rankTileHero: { backgroundColor: colors.onPrimary },
   rankText: { fontFamily: fonts.extrabold, fontSize: 16, color: colors.white },
-  rankTextHero: { color: colors.highlight },
+  rankTextHero: { color: THEME.accent },
   winnerName: { fontFamily: fonts.extrabold, fontSize: 24, color: colors.onPrimary },
+  trophyGain: { fontFamily: fonts.bold, fontSize: 16, color: "#FFD700", textAlign: "center", marginTop: spacing.sm },
+  trophyLoss: { fontFamily: fonts.bold, fontSize: 16, color: colors.gray400, textAlign: "center", marginTop: spacing.sm },
 });

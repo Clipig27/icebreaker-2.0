@@ -7,8 +7,6 @@ import {
   TextInput,
   Animated,
   Dimensions,
-  KeyboardAvoidingView,
-  Platform,
   ScrollView,
   ActivityIndicator,
 } from "react-native";
@@ -27,12 +25,29 @@ import { useRoomStore } from "../../src/stores/roomStore";
 import { useAuthStore } from "../../src/stores/authStore";
 import { getAllNumberPrompts } from "../../src/data/numberGuessor";
 import { drawFresh, loadRecent } from "../../src/utils/deck";
+import { awardTrophies } from "../../src/utils/trophies";
 
 const NG_DECK_KEY = "ng";
+
+// ---------------------------------------------------------------------------
+// Game-specific color palette (dark navy/teal)
+// ---------------------------------------------------------------------------
+const THEME = {
+  bg: "#0F1E2D",
+  card: "#162B3D",
+  accent: "#7FE0D6",
+  gold: "#E8C872",
+  accentSoft: "rgba(127,224,214,0.15)",
+  accentBorder: "rgba(127,224,214,0.25)",
+  cardBorder: "rgba(127,224,214,0.12)",
+  surface: "#1A3348",
+  surfaceLight: "#1F3B52",
+};
 import { competitionRanks, joinNames, ordinal } from "../../src/utils/rank";
 import HostWaitingPill from "../../src/components/HostWaitingPill";
 import GameHeader from "../../src/components/GameHeader";
 import GameLoadingScreen from "../../src/components/GameLoadingScreen";
+import GameLogo from "../../src/components/GameLogo";
 
 // ---------------------------------------------------------------------------
 // Types
@@ -69,7 +84,7 @@ type GameState = {
 // Helpers
 // ---------------------------------------------------------------------------
 
-const TIMER_SECONDS = 20;
+const TIMER_SECONDS = 10;
 const NO_GUESS_PENALTY = 120;
 const { width: SCREEN_WIDTH } = Dimensions.get("window");
 
@@ -108,6 +123,7 @@ export default function NumberGuessorScreen() {
   const [autoTimedOut, setAutoTimedOut] = useState(false);
   const [secondsLeft, setSecondsLeft] = useState(TIMER_SECONDS);
   const [selectedRounds, setSelectedRounds] = useState<number>(10);
+  const [trophyDelta, setTrophyDelta] = useState(0);
 
   // Animation refs
   const timerAnim = useRef(new Animated.Value(1)).current;
@@ -147,6 +163,9 @@ export default function NumberGuessorScreen() {
       const minPenalty = Math.min(...entries.map(([, p]) => p as number));
       const winners = entries.filter(([, p]) => p === minPenalty).map(([uid]) => uid);
       if (winners.includes(myId)) useAuthStore.getState().incrementWins();
+      if (winners.length > 0) {
+        awardTrophies(winners[0], "numberGuessor").then((d) => setTrophyDelta(d));
+      }
     }
   }, [phase]);
 
@@ -501,8 +520,8 @@ export default function NumberGuessorScreen() {
       <View style={styles.list}>
         {[
           ["🔢", "Each round shows a trivia question with a number answer (1-100)"],
-          ["⏱️", "You have 20 seconds to type your guess"],
-          ["📊", "Penalty = how far off + seconds taken. No guess = 120 penalty"],
+          ["⏱️", "You have 10 seconds to type your guess"],
+          ["📊", "Penalty = how far off + seconds taken. No guess = 110 penalty"],
           ["🏆", "Lowest total penalty after all rounds wins!"],
         ].map(([icon, text], i) => (
           <GradientCard key={i} radius={radii.lg} contentStyle={styles.ruleRow}>
@@ -577,98 +596,107 @@ export default function NumberGuessorScreen() {
     const urgent = secondsLeft <= 5;
 
     return (
-      // Whole guessing screen avoids the keyboard (not just the input row) so
-      // the layout shrinks and the timer + input row stay above the number pad.
-      // The KAV measures its frame relative to its parent, which sits below the
-      // SafeAreaView top inset, so offset by that inset to get the true overlap.
-      <KeyboardAvoidingView
-        style={styles.keyboardAvoid}
-        behavior={Platform.OS === "ios" ? "padding" : undefined}
-        keyboardVerticalOffset={0}
-      >
+      <View style={styles.keyboardAvoid}>
         <Animated.View
           style={[styles.guessBody, { opacity: fadeAnim, transform: [{ scale: scaleAnim }] }]}
         >
-          <View style={styles.eyebrowRow}>
-            <Eyebrow tone="lavender">1 to 100</Eyebrow>
-            <Pill tone="peach" label={roundPill} />
-          </View>
+          {/* Top section: logo, question, timer */}
+          <View style={styles.guessTop}>
+            <View style={styles.eyebrowRow}>
+              <GameLogo gameId="numberGuessor" height={44} />
+              <Pill tone="peach" label={roundPill} />
+            </View>
 
-          {/* Question */}
-          {/* Shrinks (and scales its font down) when space is tight, e.g. with
-              the keyboard open on smaller phones, instead of pushing the input
-              row below the keyboard. */}
-          <LinearGradient
-            colors={gradients.hero}
-            locations={[0, 0.35, 0.7, 1]}
-            start={{ x: 0, y: 0 }}
-            end={{ x: 1, y: 1 }}
-            style={styles.questionHero}
-          >
-            <Eyebrow tone="dark">
-              {prompt.category.charAt(0).toUpperCase() + prompt.category.slice(1)}
-            </Eyebrow>
-            <Text
-              style={[styles.questionText, styles.questionTextShrink]}
-              numberOfLines={4}
-              adjustsFontSizeToFit
-              minimumFontScale={0.7}
+            <Text style={styles.guessSubtitle}>Guess the number</Text>
+
+            <LinearGradient
+              colors={gradients.hero}
+              locations={[0, 0.35, 0.7, 1]}
+              start={{ x: 0, y: 0 }}
+              end={{ x: 1, y: 1 }}
+              style={styles.questionHero}
             >
-              {prompt.text}
-            </Text>
-          </LinearGradient>
+              <Eyebrow tone="dark">
+                {prompt.category.charAt(0).toUpperCase() + prompt.category.slice(1)}
+              </Eyebrow>
+              <Text
+                style={[styles.questionText, styles.questionTextShrink]}
+                numberOfLines={3}
+                adjustsFontSizeToFit
+                minimumFontScale={0.7}
+              >
+                {prompt.text}
+              </Text>
+            </LinearGradient>
 
-          {/* Timer */}
-          <View style={styles.timerBlock}>
-            <View style={styles.timerHead}>
-              <Text style={[styles.timerNum, urgent && { color: colors.danger }]}>{secondsLeft}</Text>
-              <View style={styles.timerSide}>
-                <Eyebrow tone={urgent ? "gray" : "lavender"} style={urgent ? { color: colors.danger } : undefined}>
-                  Seconds left
-                </Eyebrow>
+            {/* Timer — compact centered */}
+            <View style={styles.timerBlockCompact}>
+              <View style={styles.timerHeadCompact}>
+                <Text style={[styles.timerNumCompact, urgent && { color: colors.danger }]}>{secondsLeft}</Text>
                 <Text style={styles.guessCount}>
-                  {activeGuesses.length} / {players.length} guessed
+                  {activeGuesses.length}/{players.length} guessed
                 </Text>
               </View>
-            </View>
-            <View style={styles.progressTrack}>
-              <Animated.View
-                style={[
-                  styles.progressFill,
-                  {
-                    width: timerAnim.interpolate({
-                      inputRange: [0, 1],
-                      outputRange: ["0%", "100%"],
-                    }),
-                  },
-                ]}
-              >
-                <LinearGradient
-                  colors={urgent ? DANGER_GRADIENT : gradients.primaryButton}
-                  start={{ x: 0, y: 0 }}
-                  end={{ x: 1, y: 0 }}
-                  style={StyleSheet.absoluteFill}
-                />
-              </Animated.View>
+              <View style={styles.progressTrackCompact}>
+                <Animated.View
+                  style={[
+                    styles.progressFill,
+                    {
+                      width: timerAnim.interpolate({
+                        inputRange: [0, 1],
+                        outputRange: ["0%", "100%"],
+                      }),
+                    },
+                  ]}
+                >
+                  <LinearGradient
+                    colors={urgent ? DANGER_GRADIENT : gradients.primaryButton}
+                    start={{ x: 0, y: 0 }}
+                    end={{ x: 1, y: 0 }}
+                    style={StyleSheet.absoluteFill}
+                  />
+                </Animated.View>
+              </View>
             </View>
           </View>
 
-          {/* Input */}
+          {/* Bottom section: input + submit */}
           {!hasGuessed ? (
-            <TextInput
-              testID="ng-guess-input"
-              style={styles.guessInput}
-              value={guessText}
-              onChangeText={(t) => {
-                const cleaned = t.replace(/[^0-9]/g, "").slice(0, 3);
-                setGuessText(cleaned);
-              }}
-              keyboardType="number-pad"
-              placeholder="0 - 100"
-              placeholderTextColor={colors.gray600}
-              maxLength={3}
-              autoFocus
-            />
+            <View style={styles.inputRow}>
+              <TextInput
+                testID="ng-guess-input"
+                style={styles.guessInputCompact}
+                value={guessText}
+                onChangeText={(t) => {
+                  const cleaned = t.replace(/[^0-9]/g, "").slice(0, 3);
+                  setGuessText(cleaned);
+                }}
+                keyboardType="number-pad"
+                placeholder="0 - 100"
+                placeholderTextColor={colors.gray600}
+                maxLength={3}
+                autoFocus
+              />
+              <Pressable
+                testID="ng-submit-guess"
+                style={({ pressed }) => [
+                  styles.inlineSubmit,
+                  (!guessText || guessText === "") && styles.inlineSubmitDisabled,
+                  pressed && { opacity: 0.85, transform: [{ scale: 0.97 }] },
+                ]}
+                onPress={() => submitGuess(false)}
+                disabled={!guessText || guessText === ""}
+              >
+                <LinearGradient
+                  colors={gradients.primaryButton}
+                  start={{ x: 0, y: 0 }}
+                  end={{ x: 0.6, y: 1 }}
+                  style={[StyleSheet.absoluteFill, { borderRadius: radii.lg }]}
+                  pointerEvents="none"
+                />
+                <Ionicons name="send" size={22} color={colors.onPrimary} />
+              </Pressable>
+            </View>
           ) : myGuessTimedOut ? (
             <GradientCard radius={radii.lg} borderColors={DANGER_BORDER} contentStyle={styles.submittedCard}>
               <Ionicons name="alert-circle" size={28} color={colors.danger} />
@@ -680,7 +708,7 @@ export default function NumberGuessorScreen() {
           ) : (
             <GradientCard radius={radii.lg} contentStyle={styles.submittedCard}>
               <View style={styles.submittedIcon}>
-                <Ionicons name="checkmark" size={22} color={colors.highlight} />
+                <Ionicons name="checkmark" size={22} color={THEME.accent} />
               </View>
               <View style={styles.flex1}>
                 <Text style={styles.submittedText}>Guess submitted!</Text>
@@ -689,24 +717,7 @@ export default function NumberGuessorScreen() {
             </GradientCard>
           )}
         </Animated.View>
-
-        <PrimaryActionBar>
-          {!hasGuessed ? (
-            <PrimaryAction
-              testID="ng-submit-guess"
-              label="Submit guess"
-              icon="send"
-              onPress={() => submitGuess(false)}
-              disabled={!guessText || guessText === ""}
-            />
-          ) : (
-            <WaitingNote
-              done={!myGuessTimedOut}
-              label={`${activeGuesses.length} / ${players.length} guessed`}
-            />
-          )}
-        </PrimaryActionBar>
-      </KeyboardAvoidingView>
+      </View>
     );
   };
 
@@ -774,7 +785,7 @@ export default function NumberGuessorScreen() {
                     </Text>
                   </Text>
                 </View>
-                <Text style={[styles.rowPenalty, first && { color: colors.highlight }]}>
+                <Text style={[styles.rowPenalty, first && { color: THEME.accent }]}>
                   +{formatPenalty(roundPenalty)}
                 </Text>
               </GradientCard>
@@ -809,7 +820,7 @@ export default function NumberGuessorScreen() {
               {item.username}{isMe ? " (You)" : ""}
             </Text>
             <View style={styles.rowRight}>
-              <Text style={[styles.rowPenalty, first && { color: colors.highlight }]}>
+              <Text style={[styles.rowPenalty, first && { color: THEME.accent }]}>
                 {formatPenalty(item.penalty)}
               </Text>
               <Eyebrow style={styles.rowRightLabel}>Penalty</Eyebrow>
@@ -869,13 +880,22 @@ export default function NumberGuessorScreen() {
           )
         }
       >
-        <ScreenTitle title="Game Over!" subtitle="Final results" />
+        <ScreenTitle
+          title={
+            coWinners.some((w) => w.userId === myId)
+              ? "YOU WIN!"
+              : coWinners.length > 1
+                ? `${joinNames(coWinners.map((p) => p.username))} tie!`
+                : `${winner?.username ?? "?"} WINS!`
+          }
+          subtitle="Final results"
+        />
 
         {winner && (
           <HeroGradient>
             <View style={styles.winnerContent}>
               <View style={styles.flex1}>
-                <Eyebrow tone="dark">Winner</Eyebrow>
+                <Eyebrow tone="dark">{coWinners.length > 1 ? "Co-winners" : "Winner"}</Eyebrow>
                 <Text style={styles.winnerName}>
                   {coWinners.length > 1
                     ? `${joinNames(coWinners.map((p) => p.username))} tie!`
@@ -885,9 +905,14 @@ export default function NumberGuessorScreen() {
                   {formatPenalty(winner.penalty)} total penalty
                 </Text>
               </View>
-              <Ionicons name="trophy" size={40} color={colors.onPrimary} />
+              <Ionicons name="trophy" size={48} color="#FFD700" />
             </View>
           </HeroGradient>
+        )}
+        {trophyDelta !== 0 && (
+          <Text style={trophyDelta > 0 ? styles.trophyGain : styles.trophyLoss}>
+            {trophyDelta > 0 ? `\uD83C\uDFC6 +${trophyDelta} trophies!` : `\uD83C\uDFC6 -1 trophy`}
+          </Text>
         )}
 
         <Eyebrow style={styles.sectionEyebrow}>Standings</Eyebrow>
@@ -922,7 +947,7 @@ export default function NumberGuessorScreen() {
 // Presentational helpers (no game logic)
 // ---------------------------------------------------------------------------
 
-const SELECTED_BORDER = [colors.highlight, colors.highlightGradientEnd] as const;
+const SELECTED_BORDER = [THEME.accent, THEME.accent] as const;
 const SELECTED_FILL = ["rgba(184,174,232,0.20)", "rgba(184,174,232,0.05)"] as const;
 const DANGER_BORDER = ["rgba(239,68,68,0.6)", "rgba(239,68,68,0.1)"] as const;
 const DANGER_GRADIENT = ["#F87171", "#EF4444"] as const;
@@ -954,10 +979,9 @@ function ScreenTitle({ title, subtitle, pill }: { title: string; subtitle?: stri
   return (
     <View style={styles.titleBlock}>
       <View style={styles.eyebrowRow}>
-        <Eyebrow tone="lavender">1 to 100</Eyebrow>
+        <GameLogo gameId="numberGuessor" height={44} />
         {pill ? <Pill tone="peach" label={pill} /> : null}
       </View>
-      <Text style={type.title}>{title}</Text>
       {subtitle ? <Text style={type.subtitle}>{subtitle}</Text> : null}
     </View>
   );
@@ -967,9 +991,9 @@ function WaitingNote({ label, done = false }: { label: string; done?: boolean })
   return (
     <View style={styles.waiting}>
       {done ? (
-        <Ionicons name="checkmark-circle" size={18} color={colors.highlight} />
+        <Ionicons name="checkmark-circle" size={18} color={THEME.accent} />
       ) : (
-        <ActivityIndicator size="small" color={colors.highlight} />
+        <ActivityIndicator size="small" color={THEME.accent} />
       )}
       <Text style={styles.waitingText} numberOfLines={1}>
         {label}
@@ -985,7 +1009,7 @@ function WaitingNote({ label, done = false }: { label: string; done?: boolean })
 const styles = StyleSheet.create({
   safeArea: {
     flex: 1,
-    backgroundColor: colors.bgPurple,
+    backgroundColor: THEME.bg,
   },
   scroll: {
     flexGrow: 1,
@@ -1010,9 +1034,9 @@ const styles = StyleSheet.create({
   waiting: {
     minHeight: 56,
     borderRadius: radii.pill,
-    backgroundColor: colors.surface,
+    backgroundColor: THEME.surface,
     borderWidth: 1,
-    borderColor: colors.cardBorder,
+    borderColor: THEME.cardBorder,
     flexDirection: "row",
     alignItems: "center",
     justifyContent: "center",
@@ -1031,7 +1055,7 @@ const styles = StyleSheet.create({
     width: 40,
     height: 40,
     borderRadius: radii.md,
-    backgroundColor: colors.highlightSoft,
+    backgroundColor: THEME.accentSoft,
     alignItems: "center",
     justifyContent: "center",
   },
@@ -1063,7 +1087,7 @@ const styles = StyleSheet.create({
     fontVariant: ["tabular-nums"],
   },
   roundOptionTextActive: {
-    color: colors.highlight,
+    color: THEME.accent,
   },
 
   // ── Guessing ───────────────────────────────────────────────────────────
@@ -1073,37 +1097,63 @@ const styles = StyleSheet.create({
   guessBody: {
     flex: 1,
     paddingHorizontal: spacing.screen,
-    paddingTop: spacing.lg,
-    paddingBottom: spacing.sm,
-    gap: spacing.md,
+    paddingTop: spacing.sm,
+    paddingBottom: spacing.lg,
+    justifyContent: "space-between",
   },
   questionHero: {
-    flexShrink: 0,
+    flexShrink: 1,
     borderRadius: radii.xl,
-    padding: 18,
-    gap: spacing.sm,
+    padding: 14,
+    gap: spacing.xs,
     overflow: "hidden",
   },
   questionText: {
     fontFamily: fonts.extrabold,
-    fontSize: 24,
-    lineHeight: 31,
+    fontSize: 21,
+    lineHeight: 27,
     color: colors.onPrimary,
   },
   questionTextShrink: {
     flexShrink: 1,
   },
-  timerBlock: { gap: spacing.sm },
+  guessTop: {
+    gap: spacing.sm,
+  },
+  guessSubtitle: {
+    fontFamily: fonts.medium,
+    fontSize: 14,
+    color: colors.gray400,
+    textAlign: "center",
+  },
+  timerBlockCompact: {
+    gap: 4,
+    alignItems: "center",
+  },
+  timerHeadCompact: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: spacing.sm,
+  },
+  timerNumCompact: {
+    fontFamily: fonts.extrabold,
+    fontSize: 28,
+    lineHeight: 32,
+    letterSpacing: -1,
+    color: colors.white,
+    fontVariant: ["tabular-nums"],
+  },
+  timerBlock: { gap: spacing.xs },
   timerHead: { flexDirection: "row", alignItems: "flex-end", justifyContent: "space-between" },
   timerNum: {
     fontFamily: fonts.extrabold,
-    fontSize: 60,
-    lineHeight: 64,
+    fontSize: 48,
+    lineHeight: 52,
     letterSpacing: -3,
     color: colors.white,
     fontVariant: ["tabular-nums"],
   },
-  timerSide: { alignItems: "flex-end", gap: 4, paddingBottom: 10 },
+  timerSide: { alignItems: "flex-end", gap: 4, paddingBottom: 6 },
   guessCount: {
     fontFamily: fonts.medium,
     fontSize: 13,
@@ -1113,17 +1163,31 @@ const styles = StyleSheet.create({
     alignSelf: "stretch",
     height: 6,
     borderRadius: radii.pill,
-    backgroundColor: colors.surfaceLight,
+    backgroundColor: THEME.surfaceLight,
+    overflow: "hidden",
+  },
+  progressTrackCompact: {
+    alignSelf: "center",
+    width: "60%",
+    height: 4,
+    borderRadius: radii.pill,
+    backgroundColor: THEME.surfaceLight,
     overflow: "hidden",
   },
   progressFill: { height: "100%", borderRadius: radii.pill, overflow: "hidden" },
+  inputRow: {
+    flexDirection: "row",
+    alignSelf: "stretch",
+    gap: spacing.sm,
+    alignItems: "center",
+  },
   guessInput: {
     alignSelf: "stretch",
     minHeight: 72,
-    backgroundColor: colors.surface,
+    backgroundColor: THEME.surface,
     borderRadius: radii.xl,
     borderWidth: 1,
-    borderColor: colors.cardBorder,
+    borderColor: THEME.cardBorder,
     paddingVertical: 14,
     paddingHorizontal: 20,
     fontFamily: fonts.extrabold,
@@ -1131,6 +1195,32 @@ const styles = StyleSheet.create({
     color: colors.white,
     textAlign: "center",
     fontVariant: ["tabular-nums"],
+  },
+  guessInputCompact: {
+    flex: 1,
+    minHeight: 60,
+    backgroundColor: THEME.surface,
+    borderRadius: radii.xl,
+    borderWidth: 1,
+    borderColor: THEME.cardBorder,
+    paddingVertical: 10,
+    paddingHorizontal: 16,
+    fontFamily: fonts.extrabold,
+    fontSize: 36,
+    color: colors.white,
+    textAlign: "center",
+    fontVariant: ["tabular-nums"],
+  },
+  inlineSubmit: {
+    width: 56,
+    height: 56,
+    borderRadius: radii.lg,
+    alignItems: "center",
+    justifyContent: "center",
+    overflow: "hidden",
+  },
+  inlineSubmitDisabled: {
+    opacity: 0.4,
   },
   submittedCard: {
     flexDirection: "row",
@@ -1142,7 +1232,7 @@ const styles = StyleSheet.create({
     width: 40,
     height: 40,
     borderRadius: 20,
-    backgroundColor: colors.highlightSoft,
+    backgroundColor: THEME.accentSoft,
     alignItems: "center",
     justifyContent: "center",
   },
@@ -1185,8 +1275,8 @@ const styles = StyleSheet.create({
     alignItems: "center",
     justifyContent: "center",
   },
-  numTileOn: { backgroundColor: colors.highlight },
-  numTileMuted: { backgroundColor: colors.surfaceLight },
+  numTileOn: { backgroundColor: THEME.accent },
+  numTileMuted: { backgroundColor: THEME.surfaceLight },
   numTileText: { fontFamily: fonts.extrabold, fontSize: 14, color: colors.white },
   numTileTextOn: { color: colors.onPrimary },
   rowName: { fontFamily: fonts.bold, fontSize: 16, color: colors.white },
@@ -1204,9 +1294,9 @@ const styles = StyleSheet.create({
   winnerContent: { flexDirection: "row", alignItems: "center", gap: spacing.md, padding: 22 },
   winnerName: {
     fontFamily: fonts.extrabold,
-    fontSize: 26,
-    lineHeight: 31,
-    color: colors.onPrimary,
+    fontSize: 28,
+    lineHeight: 34,
+    color: "#FFD700",
     marginTop: 4,
   },
   winnerPenalty: {
@@ -1215,4 +1305,6 @@ const styles = StyleSheet.create({
     color: "rgba(14,12,26,0.7)",
     marginTop: 4,
   },
+  trophyGain: { fontFamily: fonts.bold, fontSize: 16, color: "#FFD700", textAlign: "center", marginTop: spacing.sm },
+  trophyLoss: { fontFamily: fonts.bold, fontSize: 16, color: colors.gray400, textAlign: "center", marginTop: spacing.sm },
 });

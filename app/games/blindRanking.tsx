@@ -30,8 +30,25 @@ import Pill from "../../src/components/Pill";
 import GradientCard from "../../src/components/GradientCard";
 import HeroGradient from "../../src/components/HeroGradient";
 import PlayerAvatar from "../../src/components/PlayerAvatar";
+import GameLogo from "../../src/components/GameLogo";
 import { competitionRanks } from "../../src/utils/rank";
 import { BANKS, BANK_KEYS, drawBankItems, preloadBankRecents } from "../../src/data/blindRankingBanks";
+import { awardTrophies } from "../../src/utils/trophies";
+
+// ---------------------------------------------------------------------------
+// Game-specific color palette (dark indigo/purple)
+// ---------------------------------------------------------------------------
+const THEME = {
+  bg: "#1A1830",
+  card: "#242040",
+  accent: "#A88BFA",
+  secondary: "#C0B0F0",
+  accentSoft: "rgba(168,139,250,0.15)",
+  accentBorder: "rgba(168,139,250,0.25)",
+  cardBorder: "rgba(168,139,250,0.12)",
+  surface: "#242040",
+  surfaceLight: "#2E2A50",
+};
 
 // ---------------------------------------------------------------------------
 // Types
@@ -116,6 +133,7 @@ export default function BlindRankingScreen() {
   const [editingCategory, setEditingCategory] = useState<CustomCategory | null>(null);
   const [customName, setCustomName] = useState("");
   const [customItems, setCustomItems] = useState("");
+  const [trophyDelta, setTrophyDelta] = useState(0);
 
   useEffect(() => {
     AsyncStorage.getItem(CUSTOM_CATEGORIES_KEY).then((raw) => {
@@ -228,6 +246,11 @@ export default function BlindRankingScreen() {
     const scores = gs.brScores ?? {};
     const maxScore = Math.max(...Object.values(scores), 0);
     if (maxScore > 0 && (scores[myId] ?? 0) === maxScore) useAuthStore.getState().incrementWins();
+    // Award trophies to top scorer
+    if (maxScore > 0) {
+      const winnerId = Object.entries(scores).find(([, s]) => s === maxScore)?.[0];
+      if (winnerId) awardTrophies(winnerId, "blindRanking").then((d) => setTrophyDelta(d));
+    }
   }, [phase]);
 
   const navigatedBackRef = useRef(false);
@@ -704,7 +727,7 @@ export default function BlindRankingScreen() {
       >
         <View style={st.titleBlock}>
           <View style={st.eyebrowRow}>
-            <Eyebrow tone="lavender">Blind Ranking</Eyebrow>
+            <GameLogo gameId="blindRanking" height={44} />
             <Pill tone="peach" label={`Top ${gs.size}`} />
           </View>
           <View style={st.promptRow}>
@@ -885,7 +908,7 @@ export default function BlindRankingScreen() {
                 <View style={st.compRankCol}><Text style={st.compHeaderText}>#</Text></View>
                 {pids.map((pid) => (
                   <View key={pid} style={[st.compPlayerCol, { width: colWidth }]}>
-                    <Text style={[st.compHeaderText, pid === myId && { color: colors.highlight }]} numberOfLines={1}>
+                    <Text style={[st.compHeaderText, pid === myId && { color: THEME.accent }]} numberOfLines={1}>
                       {playerMap[pid]?.username ?? "Player"}
                     </Text>
                   </View>
@@ -924,7 +947,7 @@ export default function BlindRankingScreen() {
           <ScreenTitle title="Vote submitted!" subtitle={`${votesIn} / ${players.length} voted`} />
           <GradientCard contentStyle={st.centerCard}>
             <View style={st.submittedIcon}>
-              <Ionicons name="checkmark" size={36} color={colors.highlight} />
+              <Ionicons name="checkmark" size={36} color={THEME.accent} />
             </View>
             <Eyebrow>Votes in</Eyebrow>
             <View style={st.progressTrack}>
@@ -957,7 +980,7 @@ export default function BlindRankingScreen() {
                   <Text style={st.candidateName} numberOfLines={1}>{p.username}</Text>
                   <View style={st.voteTag}>
                     <Text style={st.slotTagText}>VOTE</Text>
-                    <Ionicons name="chevron-forward" size={16} color={colors.highlight} />
+                    <Ionicons name="chevron-forward" size={16} color={THEME.accent} />
                   </View>
                 </GradientCard>
               </Pressable>
@@ -1064,6 +1087,11 @@ export default function BlindRankingScreen() {
             </View>
           </HeroGradient>
         )}
+        {trophyDelta !== 0 && (
+          <Text style={trophyDelta > 0 ? st.trophyGain : st.trophyLoss}>
+            {trophyDelta > 0 ? `\uD83C\uDFC6 +${trophyDelta} trophies!` : `\uD83C\uDFC6 -1 trophy`}
+          </Text>
+        )}
 
         <Eyebrow style={st.sectionEyebrow}>Standings</Eyebrow>
         <View style={st.list}>
@@ -1092,7 +1120,7 @@ export default function BlindRankingScreen() {
 // Presentational helpers (no game logic)
 // ---------------------------------------------------------------------------
 
-const SELECTED_BORDER = [colors.highlight, colors.highlightGradientEnd] as const;
+const SELECTED_BORDER = [THEME.accent, THEME.accent] as const;
 const OPEN_BORDER = ["rgba(184,174,232,0.6)", "rgba(184,174,232,0.15)"] as const;
 const WARN_BORDER = ["rgba(245,158,11,0.6)", "rgba(245,158,11,0.1)"] as const;
 const SUCCESS_BORDER = ["rgba(16,185,129,0.6)", "rgba(16,185,129,0.1)"] as const;
@@ -1132,7 +1160,7 @@ function SlotTile({
           {isFilled ? (
             <Text style={compact ? st.numTileTextOnCompact : st.numTileTextOn}>{idx + 1}</Text>
           ) : canPlace ? (
-            <Ionicons name="add" size={compact ? 14 : 18} color={colors.highlight} />
+            <Ionicons name="add" size={compact ? 14 : 18} color={THEME.accent} />
           ) : (
             <Text style={compact ? st.numTileTextCompact : st.numTileText}>{idx + 1}</Text>
           )}
@@ -1203,10 +1231,9 @@ function ScreenTitle({ title, subtitle, pill }: { title: string; subtitle?: stri
   return (
     <View style={st.titleBlock}>
       <View style={st.eyebrowRow}>
-        <Eyebrow tone="lavender">Blind Ranking</Eyebrow>
+        <GameLogo gameId="blindRanking" height={44} />
         {pill ? <Pill tone="peach" label={pill} /> : null}
       </View>
-      <Text style={type.title}>{title}</Text>
       {subtitle ? <Text style={type.subtitle}>{subtitle}</Text> : null}
     </View>
   );
@@ -1226,7 +1253,7 @@ function CategoryTitle({
   return (
     <View style={st.titleBlock}>
       <View style={st.eyebrowRow}>
-        <Eyebrow tone="lavender">Blind Ranking</Eyebrow>
+        <GameLogo gameId="blindRanking" height={44} />
         {pill ? <Pill tone="peach" label={pill} /> : null}
       </View>
       <View style={st.promptRow}>
@@ -1269,9 +1296,9 @@ function WaitingNote({ label, done = false }: { label: string; done?: boolean })
   return (
     <View style={st.waiting}>
       {done ? (
-        <Ionicons name="checkmark-circle" size={18} color={colors.highlight} />
+        <Ionicons name="checkmark-circle" size={18} color={THEME.accent} />
       ) : (
-        <ActivityIndicator size="small" color={colors.highlight} />
+        <ActivityIndicator size="small" color={THEME.accent} />
       )}
       <Text style={st.waitingText} numberOfLines={1}>
         {label}
@@ -1298,7 +1325,7 @@ function RankRow({
         <Text style={first ? st.numTileTextOn : st.numTileText}>{rank}</Text>
       </View>
       <Text style={st.candidateName} numberOfLines={1}>{name}</Text>
-      <Text style={[st.rankValue, first && { color: colors.highlight }]}>{value}</Text>
+      <Text style={[st.rankValue, first && { color: THEME.accent }]}>{value}</Text>
     </GradientCard>
   );
 }
@@ -1308,7 +1335,7 @@ function RankRow({
 // ---------------------------------------------------------------------------
 
 const st = StyleSheet.create({
-  container: { flex: 1, backgroundColor: colors.bgPurple },
+  container: { flex: 1, backgroundColor: THEME.bg },
   scroll: {
     flexGrow: 1,
     paddingHorizontal: spacing.screen,
@@ -1334,23 +1361,23 @@ const st = StyleSheet.create({
     width: 64,
     height: 64,
     borderRadius: radii.lg,
-    backgroundColor: colors.highlightSoft,
+    backgroundColor: THEME.accentSoft,
     borderWidth: 1,
-    borderColor: colors.cardBorder,
+    borderColor: THEME.cardBorder,
     alignItems: "center",
     justifyContent: "center",
     transform: [{ rotate: "6deg" }],
   },
-  artEmoji: { fontSize: 32, color: colors.highlight },
+  artEmoji: { fontSize: 32, color: THEME.accent },
   artTileLg: {
     width: 80,
     height: 80,
     borderRadius: radii.xl,
-    backgroundColor: colors.highlightSoft,
+    backgroundColor: THEME.accentSoft,
     alignItems: "center",
     justifyContent: "center",
   },
-  artEmojiLg: { fontSize: 40, color: colors.highlight },
+  artEmojiLg: { fontSize: 40, color: THEME.accent },
 
   // Generic centered card
   centerCard: { alignItems: "center", padding: 24, gap: spacing.md },
@@ -1368,7 +1395,7 @@ const st = StyleSheet.create({
     width: 40,
     height: 40,
     borderRadius: radii.md,
-    backgroundColor: colors.highlightSoft,
+    backgroundColor: THEME.accentSoft,
     alignItems: "center",
     justifyContent: "center",
   },
@@ -1379,9 +1406,9 @@ const st = StyleSheet.create({
   waiting: {
     minHeight: 56,
     borderRadius: radii.pill,
-    backgroundColor: colors.surface,
+    backgroundColor: THEME.surface,
     borderWidth: 1,
-    borderColor: colors.cardBorder,
+    borderColor: THEME.cardBorder,
     flexDirection: "row",
     alignItems: "center",
     justifyContent: "center",
@@ -1398,11 +1425,11 @@ const st = StyleSheet.create({
     width: 44,
     height: 44,
     borderRadius: radii.md,
-    backgroundColor: colors.highlightSoft,
+    backgroundColor: THEME.accentSoft,
     alignItems: "center",
     justifyContent: "center",
   },
-  catEmoji: { fontSize: 22, color: colors.highlight },
+  catEmoji: { fontSize: 22, color: THEME.accent },
   catLabel: { fontFamily: fonts.semibold, fontSize: 12, lineHeight: 16, color: colors.white, textAlign: "center" },
   catItemCount: { fontFamily: fonts.medium, fontSize: 10, color: colors.gray500 },
 
@@ -1412,15 +1439,15 @@ const st = StyleSheet.create({
   optionCard: { alignItems: "center", paddingVertical: 22, gap: 4 },
   optionNum: { fontFamily: fonts.extrabold, fontSize: 40, color: colors.white, fontVariant: ["tabular-nums"] },
   textLink: { alignSelf: "center", paddingVertical: spacing.sm },
-  textLinkText: { fontFamily: fonts.semibold, fontSize: 14, color: colors.highlight },
+  textLinkText: { fontFamily: fonts.semibold, fontSize: 14, color: THEME.accent },
 
   // Custom editor
   field: { gap: spacing.sm },
   fieldLabelRow: { flexDirection: "row", alignItems: "center", justifyContent: "space-between" },
   input: {
-    backgroundColor: colors.surface,
+    backgroundColor: THEME.surface,
     borderWidth: 1,
-    borderColor: colors.cardBorder,
+    borderColor: THEME.cardBorder,
     borderRadius: radii.lg,
     paddingHorizontal: 16,
     paddingVertical: 14,
@@ -1429,7 +1456,7 @@ const st = StyleSheet.create({
     fontFamily: fonts.medium,
   },
   inputMultiline: { height: 180, textAlignVertical: "top" },
-  editorCount: { fontFamily: fonts.semibold, fontSize: 12, color: colors.highlight },
+  editorCount: { fontFamily: fonts.semibold, fontSize: 12, color: THEME.accent },
 
   // Playing: progress
   progressBlock: { gap: spacing.sm },
@@ -1448,7 +1475,7 @@ const st = StyleSheet.create({
     alignSelf: "stretch",
     height: 6,
     borderRadius: radii.pill,
-    backgroundColor: colors.surfaceLight,
+    backgroundColor: THEME.surfaceLight,
     overflow: "hidden",
   },
   progressFill: { height: "100%", borderRadius: radii.pill },
@@ -1474,23 +1501,23 @@ const st = StyleSheet.create({
     alignItems: "center",
     justifyContent: "center",
   },
-  numTileOn: { backgroundColor: colors.highlight },
+  numTileOn: { backgroundColor: THEME.accent },
   numTileOpen: {
     borderWidth: 1.5,
     borderStyle: "dashed",
     borderColor: "rgba(184,174,232,0.55)",
-    backgroundColor: colors.highlightSoft,
+    backgroundColor: THEME.accentSoft,
   },
-  numTileMuted: { backgroundColor: colors.surfaceLight },
+  numTileMuted: { backgroundColor: THEME.surfaceLight },
   numTileHero: { backgroundColor: colors.onPrimary },
   numTileText: { fontFamily: fonts.extrabold, fontSize: 16, color: colors.white },
   numTileTextOn: { fontFamily: fonts.extrabold, fontSize: 16, color: colors.onPrimary },
-  numTileTextHero: { fontFamily: fonts.extrabold, fontSize: 16, color: colors.highlight },
+  numTileTextHero: { fontFamily: fonts.extrabold, fontSize: 16, color: THEME.accent },
   slotItemText: { flex: 1, fontFamily: fonts.bold, fontSize: 16, color: colors.white },
   slotEmpty: { flex: 1, fontFamily: fonts.medium, fontSize: 15, color: colors.gray400 },
   slotTag: { flexDirection: "row", alignItems: "center", gap: 4 },
   slotTagMuted: { fontFamily: fonts.bold, fontSize: 11, letterSpacing: 1.2, color: colors.gray500 },
-  slotTagText: { fontFamily: fonts.bold, fontSize: 12, letterSpacing: 1.2, color: colors.highlight },
+  slotTagText: { fontFamily: fonts.bold, fontSize: 12, letterSpacing: 1.2, color: THEME.accent },
 
   // Two-column layout for 10-item games
   twoColWrap: { flexDirection: "row", gap: spacing.sm },
@@ -1521,14 +1548,14 @@ const st = StyleSheet.create({
     width: 64,
     height: 64,
     borderRadius: radii.lg,
-    backgroundColor: colors.highlightSoft,
+    backgroundColor: THEME.accentSoft,
     borderWidth: 1,
-    borderColor: colors.cardBorder,
+    borderColor: THEME.cardBorder,
     alignItems: "center",
     justifyContent: "center",
   },
   rankBadgeEmoji: { fontSize: 22 },
-  rankBadgeText: { fontFamily: fonts.extrabold, fontSize: 13, color: colors.highlight, marginTop: 1 },
+  rankBadgeText: { fontFamily: fonts.extrabold, fontSize: 13, color: THEME.accent, marginTop: 1 },
 
   // Reveal
   callout: { padding: spacing.lg, gap: spacing.sm },
@@ -1541,7 +1568,7 @@ const st = StyleSheet.create({
     flexDirection: "row",
     paddingBottom: 10,
     borderBottomWidth: 1,
-    borderBottomColor: colors.cardBorder,
+    borderBottomColor: THEME.cardBorder,
   },
   compRankCol: { width: 40, alignItems: "center", justifyContent: "center" },
   compPlayerCol: { alignItems: "center", justifyContent: "center", paddingHorizontal: 4 },
@@ -1552,11 +1579,11 @@ const st = StyleSheet.create({
     width: 24,
     height: 24,
     borderRadius: 7,
-    backgroundColor: colors.highlightSoft,
+    backgroundColor: THEME.accentSoft,
     alignItems: "center",
     justifyContent: "center",
   },
-  compRankNum: { fontFamily: fonts.bold, fontSize: 12, color: colors.highlight },
+  compRankNum: { fontFamily: fonts.bold, fontSize: 12, color: THEME.accent },
   compItemText: { fontFamily: fonts.medium, fontSize: 13, color: colors.white, textAlign: "center" },
 
   // Voting / ranked rows
@@ -1574,7 +1601,7 @@ const st = StyleSheet.create({
     width: 72,
     height: 72,
     borderRadius: 36,
-    backgroundColor: colors.highlightSoft,
+    backgroundColor: THEME.accentSoft,
     alignItems: "center",
     justifyContent: "center",
   },
@@ -1583,4 +1610,6 @@ const st = StyleSheet.create({
   winnerContent: { flexDirection: "row", alignItems: "center", gap: spacing.md, padding: 20 },
   winnerName: { fontFamily: fonts.extrabold, fontSize: 24, color: colors.onPrimary },
   winnerScore: { fontFamily: fonts.semibold, fontSize: 13, color: "rgba(14,12,26,0.65)" },
+  trophyGain: { fontFamily: fonts.bold, fontSize: 16, color: "#FFD700", textAlign: "center", marginTop: spacing.sm },
+  trophyLoss: { fontFamily: fonts.bold, fontSize: 16, color: colors.gray400, textAlign: "center", marginTop: spacing.sm },
 });

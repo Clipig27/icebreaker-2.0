@@ -28,7 +28,9 @@ import GradientCard from "../../src/components/GradientCard";
 import HeroGradient from "../../src/components/HeroGradient";
 import PlayerAvatar from "../../src/components/PlayerAvatar";
 import CountdownBar from "../../src/components/CountdownBar";
+import GameLogo from "../../src/components/GameLogo";
 import { competitionRanks, joinNames } from "../../src/utils/rank";
+import { awardTrophies } from "../../src/utils/trophies";
 import {
   AUCTION_GAME_NAME,
   AUCTION_THEMES,
@@ -65,6 +67,21 @@ import {
   validatePlayerCount,
 } from "../../src/data/auctionDraft";
 import { getRecent, loadRecent, markUsed } from "../../src/utils/deck";
+
+// ---------------------------------------------------------------------------
+// Game-specific color palette (dark green)
+// ---------------------------------------------------------------------------
+const THEME = {
+  bg: "#1A2E1A",
+  card: "#243824",
+  accent: "#5ABF9C",
+  gold: "#F0C66A",
+  accentSoft: "rgba(90,191,156,0.15)",
+  accentBorder: "rgba(90,191,156,0.25)",
+  cardBorder: "rgba(90,191,156,0.12)",
+  surface: "#243824",
+  surfaceLight: "#2E4A2E",
+};
 
 // ---------------------------------------------------------------------------
 // Types
@@ -143,6 +160,7 @@ export default function AuctionDraftScreen() {
   // Voting (local)
   const [myVote, setMyVote] = useState<string | null>(null);
   const [submittingVote, setSubmittingVote] = useState(false);
+  const [trophyDelta, setTrophyDelta] = useState(0);
 
   const presentIds = useMemo(() => new Set(players.map((p) => p.user_id)), [players]);
   const presentKey = players.map((p) => p.user_id).join(",");
@@ -296,6 +314,10 @@ export default function AuctionDraftScreen() {
     trackedGameRef.current = true;
     useAuthStore.getState().incrementGamesPlayed();
     if ((gs.winners ?? []).includes(myId)) useAuthStore.getState().incrementWins();
+    const winners = gs.winners ?? [];
+    if (winners.length > 0) {
+      awardTrophies(winners[0], "auctionDraft").then((d) => setTrophyDelta(d));
+    }
   }, [phase]);
 
   const navigatedBackRef = useRef(false);
@@ -561,7 +583,7 @@ export default function AuctionDraftScreen() {
         >
           <View style={st.titleBlock}>
             <View style={st.eyebrowRow}>
-              <Eyebrow tone="lavender">{AUCTION_GAME_NAME}</Eyebrow>
+              <GameLogo gameId="auctionDraft" height={44} />
               <Pill tone="peach" label="Custom" />
             </View>
             <Text style={type.title}>Custom Theme</Text>
@@ -805,7 +827,7 @@ export default function AuctionDraftScreen() {
           />
           <GradientCard contentStyle={st.centerCard}>
             <View style={st.submittedIcon}>
-              <Ionicons name={iHaveVoted ? "checkmark" : "hourglass-outline"} size={36} color={colors.highlight} />
+              <Ionicons name={iHaveVoted ? "checkmark" : "hourglass-outline"} size={36} color={THEME.accent} />
             </View>
             <Eyebrow>Votes in</Eyebrow>
             <Text style={st.bigCount}>
@@ -967,6 +989,11 @@ export default function AuctionDraftScreen() {
             </View>
           </HeroGradient>
         )}
+        {trophyDelta !== 0 && (
+          <Text style={trophyDelta > 0 ? st.trophyGain : st.trophyLoss}>
+            {trophyDelta > 0 ? `\uD83C\uDFC6 +${trophyDelta} trophies!` : `\uD83C\uDFC6 -1 trophy`}
+          </Text>
+        )}
         <View style={st.list}>
           {[...auction.order]
             .sort((a, b) => Number(winners.includes(b)) - Number(winners.includes(a)))
@@ -1088,7 +1115,7 @@ function AuctionView({
   return (
     <Shell footer={footer}>
       <View style={st.eyebrowRow}>
-        <Eyebrow tone="lavender">{AUCTION_GAME_NAME}</Eyebrow>
+        <GameLogo gameId="auctionDraft" height={44} />
         <Pill tone="peach" label={`Item ${showing + 1} of ${total}`} />
         <Pill tone="dark" label={theme.name} />
       </View>
@@ -1223,7 +1250,7 @@ function ResultHero({
 const noop = () => {};
 const cap = (s: string) => (s ? s.charAt(0).toUpperCase() + s.slice(1) : s);
 
-const SELECTED_BORDER = [colors.highlight, colors.highlightGradientEnd] as const;
+const SELECTED_BORDER = [THEME.accent, THEME.accent] as const;
 const GOLD_BORDER = ["#F6E3A6", "#D4A843"] as const;
 
 const STATUS_LABEL: Record<PlayerAuctionStatus, string> = {
@@ -1434,10 +1461,9 @@ function ScreenTitle({ title, subtitle, pill }: { title: string; subtitle?: stri
   return (
     <View style={st.titleBlock}>
       <View style={st.eyebrowRow}>
-        <Eyebrow tone="lavender">{AUCTION_GAME_NAME}</Eyebrow>
+        <GameLogo gameId="auctionDraft" height={44} />
         {pill ? <Pill tone="peach" label={pill} /> : null}
       </View>
-      <Text style={type.title}>{title}</Text>
       {subtitle ? <Text style={type.subtitle}>{subtitle}</Text> : null}
     </View>
   );
@@ -1455,9 +1481,9 @@ function WaitingNote({ label, done = false }: { label: string; done?: boolean })
   return (
     <View style={st.waiting}>
       {done ? (
-        <Ionicons name="checkmark-circle" size={18} color={colors.highlight} />
+        <Ionicons name="checkmark-circle" size={18} color={THEME.accent} />
       ) : (
-        <ActivityIndicator size="small" color={colors.highlight} />
+        <ActivityIndicator size="small" color={THEME.accent} />
       )}
       <Text style={st.waitingText} numberOfLines={1}>
         {label}
@@ -1471,7 +1497,7 @@ function WaitingNote({ label, done = false }: { label: string; done?: boolean })
 // ---------------------------------------------------------------------------
 
 const st = StyleSheet.create({
-  container: { flex: 1, backgroundColor: colors.bgPurple },
+  container: { flex: 1, backgroundColor: THEME.bg },
   scroll: {
     flexGrow: 1,
     paddingHorizontal: spacing.screen,
@@ -1495,7 +1521,7 @@ const st = StyleSheet.create({
     width: 80,
     height: 80,
     borderRadius: radii.xl,
-    backgroundColor: colors.highlightSoft,
+    backgroundColor: THEME.accentSoft,
     alignItems: "center",
     justifyContent: "center",
   },
@@ -1514,7 +1540,7 @@ const st = StyleSheet.create({
     width: 40,
     height: 40,
     borderRadius: radii.md,
-    backgroundColor: colors.highlightSoft,
+    backgroundColor: THEME.accentSoft,
     alignItems: "center",
     justifyContent: "center",
   },
@@ -1525,9 +1551,9 @@ const st = StyleSheet.create({
   waiting: {
     minHeight: 56,
     borderRadius: radii.pill,
-    backgroundColor: colors.surface,
+    backgroundColor: THEME.surface,
     borderWidth: 1,
-    borderColor: colors.cardBorder,
+    borderColor: THEME.cardBorder,
     flexDirection: "row",
     alignItems: "center",
     justifyContent: "center",
@@ -1546,7 +1572,7 @@ const st = StyleSheet.create({
     width: 44,
     height: 44,
     borderRadius: radii.md,
-    backgroundColor: colors.highlightSoft,
+    backgroundColor: THEME.accentSoft,
     alignItems: "center",
     justifyContent: "center",
   },
@@ -1555,15 +1581,15 @@ const st = StyleSheet.create({
   catLabel: { fontFamily: fonts.semibold, fontSize: 12, lineHeight: 16, color: colors.white, textAlign: "center" },
   catItemCount: { fontFamily: fonts.medium, fontSize: 10, color: colors.gray500 },
   textLink: { alignSelf: "center", paddingVertical: spacing.sm },
-  textLinkText: { fontFamily: fonts.semibold, fontSize: 14, color: colors.highlight },
+  textLinkText: { fontFamily: fonts.semibold, fontSize: 14, color: THEME.accent },
 
   // Custom editor
   field: { gap: spacing.sm },
   fieldLabelRow: { flexDirection: "row", alignItems: "center", justifyContent: "space-between" },
   input: {
-    backgroundColor: colors.surface,
+    backgroundColor: THEME.surface,
     borderWidth: 1,
-    borderColor: colors.cardBorder,
+    borderColor: THEME.cardBorder,
     borderRadius: radii.lg,
     paddingHorizontal: 16,
     paddingVertical: 14,
@@ -1571,7 +1597,7 @@ const st = StyleSheet.create({
     color: colors.white,
     fontFamily: fonts.medium,
   },
-  editorCount: { fontFamily: fonts.semibold, fontSize: 12, color: colors.highlight },
+  editorCount: { fontFamily: fonts.semibold, fontSize: 12, color: THEME.accent },
   addRow: { flexDirection: "row", alignItems: "center", gap: spacing.sm },
   addBtn: {
     width: 50,
@@ -1596,7 +1622,7 @@ const st = StyleSheet.create({
     borderRadius: radii.pill,
     backgroundColor: colors.cardRaised,
     borderWidth: 1,
-    borderColor: colors.cardBorder,
+    borderColor: THEME.cardBorder,
   },
   chipText: { flexShrink: 1, fontFamily: fonts.medium, fontSize: 13, color: colors.white },
 
@@ -1645,7 +1671,7 @@ const st = StyleSheet.create({
     borderRadius: radii.md,
     backgroundColor: colors.cardRaised,
     borderWidth: 1,
-    borderColor: colors.cardBorder,
+    borderColor: THEME.cardBorder,
     alignItems: "center",
     justifyContent: "center",
   },
@@ -1668,10 +1694,10 @@ const st = StyleSheet.create({
     borderRadius: radii.pill,
     backgroundColor: colors.cardRaised,
     borderWidth: 1,
-    borderColor: colors.cardBorder,
+    borderColor: THEME.cardBorder,
     maxWidth: "100%",
   },
-  baseChip: { backgroundColor: colors.highlightSoft },
+  baseChip: { backgroundColor: THEME.accentSoft },
   itemChipText: { fontFamily: fonts.medium, fontSize: 13, color: colors.white },
   candidateRow: {
     flexDirection: "row",
@@ -1684,14 +1710,14 @@ const st = StyleSheet.create({
   rankValue: { fontFamily: fonts.bold, fontSize: 15, color: colors.gray300, fontVariant: ["tabular-nums"] },
   numTile: { width: 32, height: 32, borderRadius: radii.sm, alignItems: "center", justifyContent: "center" },
   numTileGold: { backgroundColor: colors.goldStat },
-  numTileMuted: { backgroundColor: colors.surfaceLight },
+  numTileMuted: { backgroundColor: THEME.surfaceLight },
   numTileText: { fontFamily: fonts.extrabold, fontSize: 15, color: colors.white },
   numTileTextOn: { fontFamily: fonts.extrabold, fontSize: 15, color: colors.onPrimary },
   submittedIcon: {
     width: 72,
     height: 72,
     borderRadius: 36,
-    backgroundColor: colors.highlightSoft,
+    backgroundColor: THEME.accentSoft,
     alignItems: "center",
     justifyContent: "center",
   },
@@ -1701,4 +1727,6 @@ const st = StyleSheet.create({
   // Game over
   winnerContent: { flexDirection: "row", alignItems: "center", gap: spacing.md, padding: 20 },
   winnerName: { fontFamily: fonts.extrabold, fontSize: 24, color: colors.onPrimary },
+  trophyGain: { fontFamily: fonts.bold, fontSize: 16, color: "#FFD700", textAlign: "center", marginTop: spacing.sm },
+  trophyLoss: { fontFamily: fonts.bold, fontSize: 16, color: colors.gray400, textAlign: "center", marginTop: spacing.sm },
 });

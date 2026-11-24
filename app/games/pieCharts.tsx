@@ -23,6 +23,21 @@ import { getAllPieChartPrompts, PieChartPrompt } from "../../src/data/pieCharts"
 import { drawFresh, loadRecent } from "../../src/utils/deck";
 
 const PC_DECK_KEY = "pc";
+
+// ---------------------------------------------------------------------------
+// Game-specific color palette (dark charcoal/rose)
+// ---------------------------------------------------------------------------
+const THEME = {
+  bg: "#1E1A20",
+  card: "#2A2530",
+  accent: "#E8A0B8",
+  gold: "#F5C842",
+  accentSoft: "rgba(232,160,184,0.15)",
+  accentBorder: "rgba(232,160,184,0.25)",
+  cardBorder: "rgba(232,160,184,0.12)",
+  surface: "#2A2530",
+  surfaceLight: "#3A3040",
+};
 import HostWaitingPill from "../../src/components/HostWaitingPill";
 import GameHeader from "../../src/components/GameHeader";
 import GameLoadingScreen from "../../src/components/GameLoadingScreen";
@@ -33,6 +48,7 @@ import Pill from "../../src/components/Pill";
 import GradientCard from "../../src/components/GradientCard";
 import HeroGradient from "../../src/components/HeroGradient";
 import PlayerAvatar from "../../src/components/PlayerAvatar";
+import GameLogo from "../../src/components/GameLogo";
 
 // ---------------------------------------------------------------------------
 // Types
@@ -172,11 +188,11 @@ function DonutChart({
             key={pid}
             d={donutSegmentPath(cx, cy, or, ir, start, end)}
             fill={PLAYER_COLORS[(playerMap[pid]?.index ?? 0) % PLAYER_COLORS.length]}
-            stroke={colors.card}
+            stroke={THEME.card}
             strokeWidth={3}
           />
         ))}
-        <Circle cx={cx} cy={cy} r={ir - 1} fill={colors.card} />
+        <Circle cx={cx} cy={cy} r={ir - 1} fill={THEME.card} />
       </Svg>
       <View style={s.donutCenter} pointerEvents="none">
         <Text style={[s.donutCenterNum, { fontSize: Math.max(18, size * 0.14) }]}>{total}</Text>
@@ -551,7 +567,7 @@ export default function PieChartsScreen() {
           <ScreenTitle title="You voted!" subtitle={`${votesIn} / ${players.length} players have voted`} />
           <GradientCard contentStyle={s.submittedCard}>
             <View style={s.submittedIcon}>
-              <Ionicons name="checkmark" size={36} color={colors.highlight} />
+              <Ionicons name="checkmark" size={36} color={THEME.accent} />
             </View>
             <Eyebrow>Votes in</Eyebrow>
             <ProgressBar progress={players.length > 0 ? votesIn / players.length : 0} />
@@ -643,22 +659,7 @@ export default function PieChartsScreen() {
               <Eyebrow tone="lavender">The person most likely to...</Eyebrow>
               <Text style={s.promptDarkText}>"{revQ?.text ?? ""}"</Text>
             </GradientCard>
-            <HeroGradient>
-              <View style={s.winnerHero}>
-                <Eyebrow tone="dark">{isTie ? "It's a tie!" : "Most likely"}</Eyebrow>
-                {winners.map((wid) => (
-                  <View key={wid} style={s.winnerRow}>
-                    <View style={[s.swatchLg, { backgroundColor: colorFor(wid) }]} />
-                    <Text style={s.winnerName} numberOfLines={1}>
-                      {playerMap[wid]?.username ?? "Unknown"}
-                    </Text>
-                  </View>
-                ))}
-                <Text style={s.votesSub}>
-                  {maxVotes} of {totalForQ} vote{maxVotes !== 1 ? "s" : ""}{isTie ? " each" : ""}
-                </Text>
-              </View>
-            </HeroGradient>
+            {/* Pie chart first — the main visual */}
             <GradientCard contentStyle={s.chartCard}>
               <DonutChart playerIds={playerIds} playerMap={playerMap} counts={counts} size={SW * 0.55} />
               <View style={s.legend}>
@@ -681,6 +682,20 @@ export default function PieChartsScreen() {
                 })}
               </View>
             </GradientCard>
+            {/* Small winner/tie label below the chart */}
+            <View style={s.winnerSmall}>
+              {winners.map((wid) => (
+                <View key={wid} style={s.winnerSmallRow}>
+                  <View style={[s.legendDot, { backgroundColor: colorFor(wid) }]} />
+                  <Text style={s.winnerSmallName} numberOfLines={1}>
+                    {playerMap[wid]?.username ?? "Unknown"}
+                  </Text>
+                </View>
+              ))}
+              <Text style={s.winnerSmallSub}>
+                {isTie ? "Tie!" : "Most likely"} · {maxVotes} vote{maxVotes !== 1 ? "s" : ""}{isTie ? " each" : ""}
+              </Text>
+            </View>
           </>
         )}
       </Shell>
@@ -797,10 +812,9 @@ function ScreenTitle({ title, subtitle, pill }: { title: string; subtitle?: stri
   return (
     <View style={s.titleBlock}>
       <View style={s.eyebrowRow}>
-        <Eyebrow tone="lavender">Pie Charts</Eyebrow>
+        <GameLogo gameId="pieCharts" height={44} />
         {pill ? <Pill tone="peach" label={pill} /> : null}
       </View>
-      <Text style={type.title}>{title}</Text>
       {subtitle ? <Text style={type.subtitle}>{subtitle}</Text> : null}
     </View>
   );
@@ -809,7 +823,7 @@ function ScreenTitle({ title, subtitle, pill }: { title: string; subtitle?: stri
 function WaitingNote({ label }: { label: string }) {
   return (
     <View style={s.waiting}>
-      <ActivityIndicator size="small" color={colors.highlight} />
+      <ActivityIndicator size="small" color={THEME.accent} />
       <Text style={s.waitingText} numberOfLines={1}>
         {label}
       </Text>
@@ -854,7 +868,7 @@ function VoteTag() {
   return (
     <View style={s.voteTag}>
       <Text style={s.voteTagText}>VOTE</Text>
-      <Ionicons name="chevron-forward" size={16} color={colors.highlight} />
+      <Ionicons name="chevron-forward" size={16} color={THEME.accent} />
     </View>
   );
 }
@@ -864,7 +878,7 @@ function VoteTag() {
 // ---------------------------------------------------------------------------
 
 const s = StyleSheet.create({
-  container: { flex: 1, backgroundColor: colors.bgPurple },
+  container: { flex: 1, backgroundColor: THEME.bg },
   scroll: {
     flexGrow: 1,
     paddingHorizontal: spacing.screen,
@@ -890,9 +904,9 @@ const s = StyleSheet.create({
   waiting: {
     minHeight: 56,
     borderRadius: radii.pill,
-    backgroundColor: colors.surface,
+    backgroundColor: THEME.surface,
     borderWidth: 1,
-    borderColor: colors.cardBorder,
+    borderColor: THEME.cardBorder,
     flexDirection: "row",
     alignItems: "center",
     justifyContent: "center",
@@ -921,7 +935,7 @@ const s = StyleSheet.create({
     width: 40,
     height: 40,
     borderRadius: radii.md,
-    backgroundColor: colors.highlightSoft,
+    backgroundColor: THEME.accentSoft,
     alignItems: "center",
     justifyContent: "center",
   },
@@ -938,9 +952,9 @@ const s = StyleSheet.create({
   customInput: {
     flex: 1,
     minHeight: 52,
-    backgroundColor: colors.surface,
+    backgroundColor: THEME.surface,
     borderWidth: 1,
-    borderColor: colors.cardBorder,
+    borderColor: THEME.cardBorder,
     borderRadius: radii.md,
     paddingHorizontal: spacing.lg,
     paddingVertical: 14,
@@ -952,7 +966,7 @@ const s = StyleSheet.create({
     flexDirection: "row",
     alignItems: "center",
     gap: 4,
-    backgroundColor: colors.highlight,
+    backgroundColor: THEME.accent,
     borderRadius: radii.md,
     paddingHorizontal: spacing.lg,
     justifyContent: "center",
@@ -972,7 +986,7 @@ const s = StyleSheet.create({
     width: 30,
     height: 30,
     borderRadius: 15,
-    backgroundColor: colors.surfaceLight,
+    backgroundColor: THEME.surfaceLight,
     alignItems: "center",
     justifyContent: "center",
   },
@@ -990,7 +1004,7 @@ const s = StyleSheet.create({
   candidateNameText: { flexShrink: 1, fontFamily: fonts.bold, fontSize: 17, color: colors.white },
   youPill: { alignSelf: "center" },
   voteTag: { flexDirection: "row", alignItems: "center", gap: 2 },
-  voteTagText: { fontFamily: fonts.bold, fontSize: 12, letterSpacing: 1.2, color: colors.highlight },
+  voteTagText: { fontFamily: fonts.bold, fontSize: 12, letterSpacing: 1.2, color: THEME.accent },
 
   // Submitted
   submittedCard: { alignItems: "center", padding: 24, gap: spacing.md },
@@ -998,7 +1012,7 @@ const s = StyleSheet.create({
     width: 72,
     height: 72,
     borderRadius: 36,
-    backgroundColor: colors.highlightSoft,
+    backgroundColor: THEME.accentSoft,
     alignItems: "center",
     justifyContent: "center",
   },
@@ -1006,7 +1020,7 @@ const s = StyleSheet.create({
     alignSelf: "stretch",
     height: 6,
     borderRadius: radii.pill,
-    backgroundColor: colors.surfaceLight,
+    backgroundColor: THEME.surfaceLight,
     overflow: "hidden",
     marginTop: spacing.sm,
   },
@@ -1014,7 +1028,7 @@ const s = StyleSheet.create({
 
   // Reveal
   suspense: { alignItems: "center", paddingVertical: 32 },
-  dots: { fontFamily: fonts.extrabold, fontSize: 64, color: colors.highlight, letterSpacing: 10 },
+  dots: { fontFamily: fonts.extrabold, fontSize: 64, color: THEME.accent, letterSpacing: 10 },
   winnerHero: { padding: 22, gap: spacing.sm },
   winnerRow: { flexDirection: "row", alignItems: "center", gap: spacing.md },
   swatchLg: {
@@ -1033,6 +1047,26 @@ const s = StyleSheet.create({
     color: colors.onPrimary,
   },
   votesSub: { fontFamily: fonts.semibold, fontSize: 14, color: "rgba(14,12,26,0.7)" },
+  winnerSmall: {
+    alignItems: "center",
+    gap: 4,
+    paddingVertical: 10,
+  },
+  winnerSmallRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 6,
+  },
+  winnerSmallName: {
+    fontFamily: fonts.bold,
+    fontSize: 15,
+    color: colors.white,
+  },
+  winnerSmallSub: {
+    fontFamily: fonts.regular,
+    fontSize: 12,
+    color: colors.gray400,
+  },
   chartCard: { padding: 20, gap: spacing.xl, alignItems: "center" },
   donutCenter: { position: "absolute", alignItems: "center", justifyContent: "center" },
   donutCenterNum: { fontFamily: fonts.extrabold, color: colors.white, fontVariant: ["tabular-nums"] },
@@ -1044,7 +1078,7 @@ const s = StyleSheet.create({
   legendName: { flex: 1, fontSize: 15, fontFamily: fonts.bold, color: colors.white },
   legendPct: { fontSize: 15, fontFamily: fonts.extrabold, color: colors.white, minWidth: 42, textAlign: "right" },
   legendCnt: { fontSize: 12, fontFamily: fonts.medium, color: colors.gray400, minWidth: 28, textAlign: "right" },
-  legendTrack: { height: 4, borderRadius: radii.pill, backgroundColor: colors.surfaceLight, overflow: "hidden" },
+  legendTrack: { height: 4, borderRadius: radii.pill, backgroundColor: THEME.surfaceLight, overflow: "hidden" },
   legendFill: { height: "100%", borderRadius: radii.pill },
 
   // Final results
@@ -1054,11 +1088,11 @@ const s = StyleSheet.create({
     width: 36,
     height: 36,
     borderRadius: radii.sm,
-    backgroundColor: colors.surfaceLight,
+    backgroundColor: THEME.surfaceLight,
     alignItems: "center",
     justifyContent: "center",
   },
-  numTileText: { fontFamily: fonts.extrabold, fontSize: 16, color: colors.highlight },
+  numTileText: { fontFamily: fonts.extrabold, fontSize: 16, color: THEME.accent },
   finalQText: { flex: 1, fontFamily: fonts.bold, fontSize: 16, lineHeight: 22, color: colors.white },
   finalWRow: { flexDirection: "row", alignItems: "center", gap: spacing.sm, flexWrap: "wrap", justifyContent: "center" },
   finalWinnerChip: {
@@ -1068,9 +1102,9 @@ const s = StyleSheet.create({
     paddingHorizontal: 12,
     paddingVertical: 6,
     borderRadius: radii.pill,
-    backgroundColor: colors.surface,
+    backgroundColor: THEME.surface,
     borderWidth: 1,
-    borderColor: colors.cardBorder,
+    borderColor: THEME.cardBorder,
   },
   finalWinner: { fontFamily: fonts.extrabold, fontSize: 18 },
 });

@@ -17,6 +17,7 @@ import { useRoomStore } from "../../src/stores/roomStore";
 import { useAuthStore } from "../../src/stores/authStore";
 import { DEFAULT_QUESTIONS, PotLuckQuestion, getAllPotLuckQuestions } from "../../src/data/potLuck";
 import { getRecent, loadRecent, markUsed, pickFresh } from "../../src/utils/deck";
+import { awardTrophies } from "../../src/utils/trophies";
 import HostWaitingPill from "../../src/components/HostWaitingPill";
 import GameHeader from "../../src/components/GameHeader";
 import GameLoadingScreen from "../../src/components/GameLoadingScreen";
@@ -27,7 +28,23 @@ import Pill from "../../src/components/Pill";
 import GradientCard from "../../src/components/GradientCard";
 import HeroGradient from "../../src/components/HeroGradient";
 import PlayerAvatar from "../../src/components/PlayerAvatar";
+import GameLogo from "../../src/components/GameLogo";
 import { competitionRanks } from "../../src/utils/rank";
+
+// ---------------------------------------------------------------------------
+// Game-specific color palette (dark forest green/gold)
+// ---------------------------------------------------------------------------
+const THEME = {
+  bg: "#1A2A1A",
+  card: "#243024",
+  accent: "#5ABF6A",
+  gold: "#F0C66A",
+  accentSoft: "rgba(90,191,106,0.15)",
+  accentBorder: "rgba(90,191,106,0.25)",
+  cardBorder: "rgba(90,191,106,0.12)",
+  surface: "#243024",
+  surfaceLight: "#2E3B2E",
+};
 
 // ---------------------------------------------------------------------------
 // Types
@@ -137,6 +154,7 @@ export default function PotLuckScreen() {
   // Delta animation (flashes +N or -N next to score)
   const [deltaText, setDeltaText] = useState<string | null>(null);
   const [deltaColor, setDeltaColor] = useState(colors.success);
+  const [trophyDelta, setTrophyDelta] = useState(0);
   const deltaOpacity = useRef(new Animated.Value(0)).current;
   const deltaTranslateY = useRef(new Animated.Value(0)).current;
   const prevLastResultRef = useRef<string | null>(null);
@@ -207,6 +225,7 @@ export default function PotLuckScreen() {
     trackedGameRef.current = true;
     useAuthStore.getState().incrementGamesPlayed();
     if (gs.winnerId === myId) useAuthStore.getState().incrementWins();
+    if (gs.winnerId) awardTrophies(gs.winnerId, "potLuck").then((d) => setTrophyDelta(d));
   }, [phase]);
 
   const navigatedBackRef = useRef(false);
@@ -812,7 +831,7 @@ export default function PotLuckScreen() {
                       <Text style={st.liveChoiceLetterText}>{String.fromCharCode(65 + i)}</Text>
                     </View>
                     <Text style={st.liveChoiceText} numberOfLines={2}>{choice}</Text>
-                    <Ionicons name="chevron-forward" size={14} color={colors.highlight} />
+                    <Ionicons name="chevron-forward" size={14} color={THEME.accent} />
                   </View>
                 </Pressable>
               ))}
@@ -842,7 +861,7 @@ export default function PotLuckScreen() {
             {isMyTurn ? (
               actionSent ? (
                 <View style={st.liveWaiting}>
-                  <ActivityIndicator size="small" color={colors.highlight} />
+                  <ActivityIndicator size="small" color={THEME.accent} />
                   <Text style={st.liveWaitingText}>Locking in...</Text>
                 </View>
               ) : (
@@ -853,7 +872,7 @@ export default function PotLuckScreen() {
               )
             ) : (
               <View style={st.liveWaiting}>
-                <ActivityIndicator size="small" color={colors.highlight} />
+                <ActivityIndicator size="small" color={THEME.accent} />
                 <Text style={st.liveWaitingText}>{currentActor} is deciding...</Text>
               </View>
             )}
@@ -952,6 +971,11 @@ export default function PotLuckScreen() {
           </View>
           <Ionicons name="trophy" size={30} color={colors.onPrimary} />
         </GradientCard>
+        {trophyDelta !== 0 && (
+          <Text style={trophyDelta > 0 ? st.trophyGain : st.trophyLoss}>
+            {trophyDelta > 0 ? `\uD83C\uDFC6 +${trophyDelta} trophies!` : `\uD83C\uDFC6 -1 trophy`}
+          </Text>
+        )}
 
         <Eyebrow style={st.sectionEyebrow}>Leaderboard</Eyebrow>
         <View style={st.list}>
@@ -976,7 +1000,7 @@ export default function PotLuckScreen() {
 
 const HERO_BORDER = ["rgba(255,255,255,0.55)", "rgba(255,255,255,0.12)"] as const;
 const DANGER_BORDER = ["rgba(239,68,68,0.6)", "rgba(239,68,68,0.1)"] as const;
-const SELECTED_BORDER = [colors.highlight, colors.highlightGradientEnd] as const;
+const SELECTED_BORDER = [THEME.accent, THEME.accent] as const;
 const SELECTED_FILL = ["rgba(184,174,232,0.20)", "rgba(184,174,232,0.05)"] as const;
 
 /** Screen frame: background, room toolbar, scrolling body and pinned footer. */
@@ -1000,10 +1024,9 @@ function ScreenTitle({ title, subtitle, pill }: { title: string; subtitle?: stri
   return (
     <View style={st.titleBlock}>
       <View style={st.eyebrowRow}>
-        <Eyebrow tone="lavender">Smarty Pot</Eyebrow>
+        <GameLogo gameId="potLuck" height={44} />
         {pill ? <Pill tone="peach" label={pill} /> : null}
       </View>
-      <Text style={type.title}>{title}</Text>
       {subtitle ? <Text style={type.subtitle}>{subtitle}</Text> : null}
     </View>
   );
@@ -1012,7 +1035,7 @@ function ScreenTitle({ title, subtitle, pill }: { title: string; subtitle?: stri
 function WaitingNote({ label }: { label: string }) {
   return (
     <View style={st.waiting}>
-      <ActivityIndicator size="small" color={colors.highlight} />
+      <ActivityIndicator size="small" color={THEME.accent} />
       <Text style={st.waitingText} numberOfLines={1}>
         {label}
       </Text>
@@ -1060,7 +1083,7 @@ function StandingRow({ rank, name, score, isMe }: { rank: number; name: string; 
 // ---------------------------------------------------------------------------
 
 const st = StyleSheet.create({
-  container: { flex: 1, backgroundColor: colors.bgPurple },
+  container: { flex: 1, backgroundColor: THEME.bg },
   scroll: {
     flexGrow: 1,
     paddingHorizontal: spacing.screen,
@@ -1091,9 +1114,9 @@ const st = StyleSheet.create({
   waiting: {
     minHeight: 56,
     borderRadius: radii.pill,
-    backgroundColor: colors.surface,
+    backgroundColor: THEME.surface,
     borderWidth: 1,
-    borderColor: colors.cardBorder,
+    borderColor: THEME.cardBorder,
     flexDirection: "row",
     alignItems: "center",
     justifyContent: "center",
@@ -1114,7 +1137,7 @@ const st = StyleSheet.create({
     width: 40,
     height: 40,
     borderRadius: radii.md,
-    backgroundColor: colors.highlightSoft,
+    backgroundColor: THEME.accentSoft,
     alignItems: "center",
     justifyContent: "center",
   },
@@ -1134,15 +1157,15 @@ const st = StyleSheet.create({
     width: 36,
     height: 36,
     borderRadius: radii.sm,
-    backgroundColor: colors.surfaceLight,
+    backgroundColor: THEME.surfaceLight,
     alignItems: "center",
     justifyContent: "center",
   },
-  numTileOn: { backgroundColor: colors.highlight },
+  numTileOn: { backgroundColor: THEME.accent },
   numTileHero: { backgroundColor: colors.onPrimary },
   numTileText: { fontFamily: fonts.extrabold, fontSize: 16, color: colors.white },
   numTileTextOn: { color: colors.onPrimary },
-  numTileTextHero: { color: colors.highlight },
+  numTileTextHero: { color: THEME.accent },
   scoreCol: { alignItems: "flex-end" },
   rankScore: { fontFamily: fonts.extrabold, fontSize: 20, color: colors.white, fontVariant: ["tabular-nums"] },
   rankScoreLabel: { ...type.eyebrow, fontSize: 9, letterSpacing: 1 },
@@ -1162,7 +1185,7 @@ const st = StyleSheet.create({
     alignSelf: "stretch",
     height: 6,
     borderRadius: radii.pill,
-    backgroundColor: colors.surfaceLight,
+    backgroundColor: THEME.surfaceLight,
     overflow: "hidden",
     marginTop: spacing.md,
   },
@@ -1175,8 +1198,8 @@ const st = StyleSheet.create({
   statTarget: { fontFamily: fonts.semibold, fontSize: 16, color: colors.gray500 },
   deltaAnim: { fontFamily: fonts.extrabold, fontSize: 20, position: "absolute", right: spacing.lg, top: spacing.lg },
   potTrack: { flexDirection: "row", flexWrap: "wrap", gap: 5, marginTop: 6 },
-  potDot: { width: 10, height: 10, borderRadius: 5, backgroundColor: colors.surfaceLight },
-  potDotOn: { backgroundColor: colors.highlight },
+  potDot: { width: 10, height: 10, borderRadius: 5, backgroundColor: THEME.surfaceLight },
+  potDotOn: { backgroundColor: THEME.accent },
   potDotMax: { backgroundColor: colors.danger },
 
   // Question hero
@@ -1219,15 +1242,15 @@ const st = StyleSheet.create({
     paddingVertical: 12,
     paddingHorizontal: 14,
     borderRadius: radii.pill,
-    backgroundColor: colors.surfaceLight,
+    backgroundColor: THEME.surfaceLight,
     borderWidth: 1,
-    borderColor: colors.cardBorder,
+    borderColor: THEME.cardBorder,
     alignItems: "center",
     justifyContent: "center",
   },
   targetChipActive: {
-    backgroundColor: colors.highlight,
-    borderColor: colors.highlight,
+    backgroundColor: THEME.accent,
+    borderColor: THEME.accent,
   },
   targetChipText: {
     fontFamily: fonts.bold,
@@ -1256,7 +1279,7 @@ const st = StyleSheet.create({
     fontFamily: fonts.extrabold,
     fontSize: 120,
     lineHeight: 130,
-    color: colors.highlight,
+    color: THEME.accent,
     letterSpacing: -4,
     fontVariant: ["tabular-nums"] as any,
   },
@@ -1271,7 +1294,7 @@ const st = StyleSheet.create({
     backgroundColor: "rgba(26, 23, 48, 0.9)",
     borderRadius: radii.md,
     borderWidth: 1,
-    borderColor: colors.cardBorder,
+    borderColor: THEME.cardBorder,
     paddingVertical: 6,
     paddingHorizontal: 10,
     minWidth: 120,
@@ -1305,7 +1328,7 @@ const st = StyleSheet.create({
   },
   scoreboardNameMe: {
     fontFamily: fonts.bold,
-    color: colors.highlight,
+    color: THEME.accent,
   },
   scoreboardScore: {
     fontFamily: fonts.extrabold,
@@ -1314,7 +1337,7 @@ const st = StyleSheet.create({
     fontVariant: ["tabular-nums"] as any,
   },
   scoreboardScoreActive: {
-    color: colors.highlight,
+    color: THEME.accent,
   },
   scoreboardMore: {
     fontFamily: fonts.medium,
@@ -1413,7 +1436,7 @@ const st = StyleSheet.create({
     backgroundColor: "rgba(26, 23, 48, 0.7)",
     borderRadius: radii.md,
     borderWidth: 1,
-    borderColor: colors.cardBorder,
+    borderColor: THEME.cardBorder,
     paddingVertical: 10,
     paddingHorizontal: 12,
   },
@@ -1421,14 +1444,14 @@ const st = StyleSheet.create({
     width: 28,
     height: 28,
     borderRadius: radii.sm,
-    backgroundColor: colors.surfaceLight,
+    backgroundColor: THEME.surfaceLight,
     alignItems: "center",
     justifyContent: "center",
   },
   liveChoiceLetterText: {
     fontFamily: fonts.extrabold,
     fontSize: 13,
-    color: colors.highlight,
+    color: THEME.accent,
   },
   liveChoiceText: {
     flex: 1,
@@ -1443,7 +1466,7 @@ const st = StyleSheet.create({
     backgroundColor: "rgba(26, 23, 48, 0.7)",
     borderRadius: radii.md,
     borderWidth: 1,
-    borderColor: colors.cardBorder,
+    borderColor: THEME.cardBorder,
     paddingVertical: 10,
     paddingHorizontal: 12,
   },
@@ -1455,7 +1478,7 @@ const st = StyleSheet.create({
   liveSpectateAway: {
     fontFamily: fonts.bold,
     fontSize: 12,
-    color: colors.highlight,
+    color: THEME.accent,
   },
   liveTimerRow: {
     flexDirection: "row",
@@ -1482,11 +1505,11 @@ const st = StyleSheet.create({
     alignItems: "center",
     justifyContent: "center",
     gap: 8,
-    backgroundColor: colors.surfaceLight,
+    backgroundColor: THEME.surfaceLight,
     borderRadius: radii.pill,
     paddingVertical: 12,
     borderWidth: 1,
-    borderColor: colors.cardBorder,
+    borderColor: THEME.cardBorder,
   },
   liveSkipText: {
     fontFamily: fonts.semibold,
@@ -1499,14 +1522,16 @@ const st = StyleSheet.create({
     justifyContent: "center",
     gap: 8,
     paddingVertical: 12,
-    backgroundColor: colors.surface,
+    backgroundColor: THEME.surface,
     borderRadius: radii.pill,
     borderWidth: 1,
-    borderColor: colors.cardBorder,
+    borderColor: THEME.cardBorder,
   },
   liveWaitingText: {
     fontFamily: fonts.semibold,
     fontSize: 14,
     color: colors.gray300,
   },
+  trophyGain: { fontFamily: fonts.bold, fontSize: 16, color: "#FFD700", textAlign: "center", marginTop: spacing.sm },
+  trophyLoss: { fontFamily: fonts.bold, fontSize: 16, color: colors.gray400, textAlign: "center", marginTop: spacing.sm },
 });

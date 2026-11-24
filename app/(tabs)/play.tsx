@@ -144,10 +144,10 @@ export default function Play() {
             <View style={s.heroMainRow}>
               <View style={{ flex: 1 }}>
                 <Eyebrow tone="dark" style={s.heroLabel}>
-                  THE GROUP CHAT, BUT BETTER
+                  MADE FOR GAME NIGHT
                 </Eyebrow>
                 <Text style={s.heroMainText}>
-                  {"Your people.\nYour game night."}
+                  {"Grab your friends.\nLet's have fun."}
                 </Text>
               </View>
               <View style={s.heroArt}>

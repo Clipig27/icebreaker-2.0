@@ -1,5 +1,5 @@
 import React from "react";
-import { View, Text, StyleSheet } from "react-native";
+import { View, Text, Image, StyleSheet } from "react-native";
 import { colors, fonts } from "../theme";
 
 interface PlayerAvatarProps {
@@ -7,6 +7,7 @@ interface PlayerAvatarProps {
   size?: number;
   color?: string;
   showBorder?: boolean;
+  avatarUrl?: string | null;
 }
 
 const AVATAR_PALETTE = [
@@ -35,12 +36,14 @@ export default function PlayerAvatar({
   size = 40,
   color,
   showBorder = false,
+  avatarUrl,
 }: PlayerAvatarProps) {
   const bgColor =
     color ?? AVATAR_PALETTE[hashUsername(username) % AVATAR_PALETTE.length];
 
   const firstLetter = username.charAt(0).toUpperCase();
   const fontSize = size * 0.42;
+  const radius = size / 2;
 
   return (
     <View
@@ -49,8 +52,9 @@ export default function PlayerAvatar({
         {
           width: size,
           height: size,
-          borderRadius: size / 2,
+          borderRadius: radius,
           backgroundColor: bgColor,
+          overflow: "hidden",
         },
         showBorder && {
           borderWidth: 2,
@@ -58,17 +62,24 @@ export default function PlayerAvatar({
         },
       ]}
     >
-      <Text
-        style={[
-          styles.letter,
-          {
-            fontSize,
-            lineHeight: fontSize * 1.2,
-          },
-        ]}
-      >
-        {firstLetter}
-      </Text>
+      {avatarUrl ? (
+        <Image
+          source={{ uri: avatarUrl }}
+          style={{ width: size, height: size, borderRadius: radius }}
+        />
+      ) : (
+        <Text
+          style={[
+            styles.letter,
+            {
+              fontSize,
+              lineHeight: fontSize * 1.2,
+            },
+          ]}
+        >
+          {firstLetter}
+        </Text>
+      )}
     </View>
   );
 }

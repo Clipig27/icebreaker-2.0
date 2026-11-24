@@ -271,6 +271,15 @@ export default function Lobby() {
     router.push(`/games/${room.game_type}`);
   }, [room?.id, room?.status, room?.game_type, isFocused]);
 
+  // Show an interstitial ad when returning from a game
+  const prevStatusRef = useRef(room?.status);
+  useEffect(() => {
+    if (prevStatusRef.current === "playing" && room?.status === "lobby") {
+      import("../src/utils/ads").then((m) => m.showInterstitial()).catch(() => {});
+    }
+    prevStatusRef.current = room?.status;
+  }, [room?.status]);
+
   // Fallback for non-hosts: if a realtime rooms UPDATE (game start) is ever
   // missed, poll the room row while we sit focused in the lobby, and refetch
   // whenever the app returns to the foreground. The navigation effect above
@@ -535,7 +544,7 @@ export default function Lobby() {
             >
               <GradientCard radius={radii.md} contentStyle={s.playerRow}>
                 <View>
-                  <PlayerAvatar username={item.username} size={28} />
+                  <PlayerAvatar username={item.username} size={28} avatarUrl={item.avatar_url} />
                   <View style={s.onlineDotWrap}>
                     <PulsingDot />
                   </View>

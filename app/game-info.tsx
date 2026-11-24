@@ -1,4 +1,7 @@
-import { View, Text, ScrollView, StyleSheet, Image, type ImageSourcePropType } from "react-native";
+import { useState } from "react";
+import { View, Text, ScrollView, Pressable, StyleSheet, Image, Alert, type ImageSourcePropType } from "react-native";
+import * as Haptics from "expo-haptics";
+import { useRoomStore } from "../src/stores/roomStore";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { useLocalSearchParams } from "expo-router";
 import { Ionicons } from "@expo/vector-icons";
@@ -189,6 +192,27 @@ export default function GameInfoScreen() {
     ? `${info.minPlayers}–${info.maxPlayers} players`
     : `${info.minPlayers}+ players`;
 
+  const [tab, setTab] = useState<"video" | "rules">("video");
+  const { createRoom } = useRoomStore();
+  const [creating, setCreating] = useState(false);
+
+  const handlePlayNow = async () => {
+    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
+    setCreating(true);
+    try {
+      await createRoom();
+      const state = useRoomStore.getState();
+      if (state.error) {
+        Alert.alert("Error", state.error);
+      } else if (state.room) {
+        router.replace("/lobby");
+      }
+    } catch {
+      Alert.alert("Error", "Could not create room.");
+    }
+    setCreating(false);
+  };
+
   return (
     <SafeAreaView style={s.safe} edges={["top"]}>
       <ScreenBackground />
@@ -196,74 +220,93 @@ export default function GameInfoScreen() {
         if (router.canGoBack()) router.back();
         else router.replace("/(tabs)/games");
       }} />
-      <ScrollView style={s.scroll} contentContainerStyle={s.scrollContent} showsVerticalScrollIndicator={false}>
-        {/* Hero */}
-        {logo ? (
-          <View style={s.heroLogoBlock}>
+
+      {/* Header: logo left, player count + play now right */}
+      <View style={s.header}>
+        <View style={s.headerLeft}>
+          {logo ? (
             <Image
               source={logo.src}
-              style={{ height: HERO_LOGO_H, width: HERO_LOGO_H * logo.aspect, marginLeft: -4 }}
+              style={{ height: HERO_LOGO_H, width: HERO_LOGO_H * logo.aspect }}
               resizeMode="contain"
-              accessibilityLabel={info.name}
             />
-            <Text style={s.heroTagline}>{info.tagline}</Text>
-          </View>
-        ) : (
-          <View style={s.heroRow}>
-            <View style={[s.heroIcon, { backgroundColor: info.color + "25" }]}>
-              <Ionicons name={info.icon} size={28} color={info.color} />
-            </View>
-            <View style={s.heroText}>
-              <Text style={s.heroTitle}>{info.name}</Text>
-              <Text style={s.heroTagline}>{info.tagline}</Text>
-            </View>
-          </View>
-        )}
-
-        {/* Player count */}
-        <GradientCard radius={radii.lg} contentStyle={s.metaCard}>
-          <View style={s.metaRow}>
-            <Ionicons name="people" size={18} color={colors.lavender} />
-            <Text style={s.metaText}>{playerText}</Text>
-          </View>
-        </GradientCard>
-
-        {/* Video placeholder (9:16 aspect ratio) */}
-        <GradientCard radius={radii.lg} contentStyle={s.videoPlaceholder}>
-          <View style={s.videoFrame}>
-            <Ionicons name="play-circle-outline" size={48} color={colors.gray500} />
-            <Text style={s.videoText}>Video tutorial coming soon</Text>
-          </View>
-        </GradientCard>
-
-        {/* Rules */}
-        <Eyebrow style={s.sectionLabel}>HOW TO PLAY</Eyebrow>
-        <View style={s.rulesList}>
-          {info.rules.map((rule, i) => (
-            <GradientCard key={i} radius={radii.lg} contentStyle={s.ruleRow}>
-              <View style={s.ruleNumber}>
-                <Text style={s.ruleNumberText}>{i + 1}</Text>
-              </View>
-              <Text style={s.ruleText}>{rule}</Text>
-            </GradientCard>
-          ))}
+          ) : (
+            <Text style={s.heroTitle}>{info.name}</Text>
+          )}
         </View>
+        <View style={s.headerRight}>
+          <View style={s.playerPill}>
+            <Ionicons name="people" size={12} color={colors.lavender} />
+            <Text style={s.playerPillText}>{playerText}</Text>
+          </View>
+          <Pressable
+            style={({ pressed }) => [s.playNowBtn, pressed && { opacity: 0.8 }]}
+            onPress={handlePlayNow}
+            disabled={creating}
+          >
+            <Ionicons name="play" size={14} color={colors.onLavender} />
+            <Text style={s.playNowText}>{creating ? "..." : "Play Now"}</Text>
+          </Pressable>
+        </View>
+      </View>
 
-        {/* Tips */}
-        {info.tips.length > 0 && (
-          <>
-            <Eyebrow style={s.sectionLabel}>TIPS</Eyebrow>
-            <View style={s.rulesList}>
-              {info.tips.map((tip, i) => (
-                <GradientCard key={i} radius={radii.lg} contentStyle={s.ruleRow}>
-                  <Ionicons name="bulb-outline" size={18} color={colors.goldStat} />
-                  <Text style={s.ruleText}>{tip}</Text>
-                </GradientCard>
-              ))}
+      {/* Tab switcher */}
+      <View style={s.tabRow}>
+        <Pressable
+          style={[s.tab, tab === "video" && s.tabActive]}
+          onPress={() => setTab("video")}
+        >
+          <Ionicons name="play-circle-outline" size={16} color={tab === "video" ? colors.lavender : colors.gray500} />
+          <Text style={[s.tabText, tab === "video" && s.tabTextActive]}>Video</Text>
+        </Pressable>
+        <Pressable
+          style={[s.tab, tab === "rules" && s.tabActive]}
+          onPress={() => setTab("rules")}
+        >
+          <Ionicons name="list-outline" size={16} color={tab === "rules" ? colors.lavender : colors.gray500} />
+          <Text style={[s.tabText, tab === "rules" && s.tabTextActive]}>Rules</Text>
+        </Pressable>
+      </View>
+
+      {/* Tab content */}
+      {tab === "video" ? (
+        <View style={s.videoContainer}>
+          <GradientCard radius={radii.lg} contentStyle={s.videoPlaceholder}>
+            <View style={s.videoFrame}>
+              <Ionicons name="play-circle-outline" size={56} color={colors.gray500} />
+              <Text style={s.videoText}>Video tutorial coming soon</Text>
             </View>
-          </>
-        )}
-      </ScrollView>
+          </GradientCard>
+        </View>
+      ) : (
+        <ScrollView style={s.scroll} contentContainerStyle={s.scrollContent} showsVerticalScrollIndicator={false}>
+          <Eyebrow style={s.sectionLabel}>HOW TO PLAY</Eyebrow>
+          <View style={s.rulesList}>
+            {info.rules.map((rule, i) => (
+              <GradientCard key={i} radius={radii.lg} contentStyle={s.ruleRow}>
+                <View style={s.ruleNumber}>
+                  <Text style={s.ruleNumberText}>{i + 1}</Text>
+                </View>
+                <Text style={s.ruleText}>{rule}</Text>
+              </GradientCard>
+            ))}
+          </View>
+
+          {info.tips.length > 0 && (
+            <>
+              <Eyebrow style={s.sectionLabel}>TIPS</Eyebrow>
+              <View style={s.rulesList}>
+                {info.tips.map((tip, i) => (
+                  <GradientCard key={i} radius={radii.lg} contentStyle={s.ruleRow}>
+                    <Ionicons name="bulb-outline" size={18} color={colors.goldStat} />
+                    <Text style={s.ruleText}>{tip}</Text>
+                  </GradientCard>
+                ))}
+              </View>
+            </>
+          )}
+        </ScrollView>
+      )}
     </SafeAreaView>
   );
 }
@@ -273,56 +316,96 @@ const s = StyleSheet.create({
   scroll: { flex: 1 },
   scrollContent: { paddingHorizontal: 24, paddingBottom: 40 },
 
-  heroRow: {
+  // Header
+  header: {
     flexDirection: "row",
     alignItems: "center",
-    gap: 16,
-    marginBottom: 16,
-  },
-  heroLogoBlock: {
-    alignItems: "flex-start",
-    gap: 6,
-    marginBottom: 16,
-  },
-  heroIcon: {
-    width: 56,
-    height: 56,
-    borderRadius: 16,
-    alignItems: "center",
-    justifyContent: "center",
-  },
-  heroText: { flex: 1 },
-  heroTitle: {
-    fontFamily: fonts.extrabold,
-    fontSize: 24,
-    color: colors.white,
-    letterSpacing: -0.3,
-    marginBottom: 4,
-  },
-  heroTagline: {
-    fontFamily: fonts.regular,
-    fontSize: 14,
-    color: colors.gray400,
-  },
-
-  metaCard: {
-    paddingVertical: 14,
-    paddingHorizontal: 16,
+    justifyContent: "space-between",
+    paddingHorizontal: 24,
     marginBottom: 12,
   },
-  metaRow: {
+  headerLeft: {
+    flex: 1,
+    marginRight: 12,
+  },
+  headerRight: {
+    alignItems: "flex-end",
+    gap: 8,
+  },
+  heroTitle: {
+    fontFamily: fonts.extrabold,
+    fontSize: 22,
+    color: colors.white,
+    letterSpacing: -0.3,
+  },
+  playerPill: {
     flexDirection: "row",
     alignItems: "center",
-    gap: 10,
+    gap: 6,
+    backgroundColor: "rgba(186,162,249,0.12)",
+    borderWidth: 1,
+    borderColor: "rgba(186,162,249,0.25)",
+    borderRadius: 999,
+    paddingHorizontal: 12,
+    paddingVertical: 6,
   },
-  metaText: {
+  playerPillText: {
     fontFamily: fonts.semibold,
-    fontSize: 15,
-    color: colors.white,
+    fontSize: 12,
+    color: colors.lavender,
+  },
+  playNowBtn: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 5,
+    backgroundColor: colors.lavender,
+    borderRadius: 10,
+    paddingHorizontal: 14,
+    paddingVertical: 8,
+    paddingLeft: 11,
+  },
+  playNowText: {
+    fontFamily: fonts.bold,
+    fontSize: 13,
+    color: colors.onLavender,
   },
 
+  // Tabs
+  tabRow: {
+    flexDirection: "row",
+    marginHorizontal: 24,
+    marginBottom: 16,
+    backgroundColor: colors.cardFill,
+    borderRadius: 12,
+    padding: 3,
+  },
+  tab: {
+    flex: 1,
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "center",
+    gap: 6,
+    paddingVertical: 10,
+    borderRadius: 10,
+  },
+  tabActive: {
+    backgroundColor: "rgba(186,162,249,0.15)",
+  },
+  tabText: {
+    fontFamily: fonts.semibold,
+    fontSize: 13,
+    color: colors.gray500,
+  },
+  tabTextActive: {
+    color: colors.lavender,
+  },
+
+  // Video
+  videoContainer: {
+    flex: 1,
+    paddingHorizontal: 24,
+  },
   videoPlaceholder: {
-    marginBottom: 20,
     padding: 0,
   },
   videoFrame: {
@@ -330,7 +413,7 @@ const s = StyleSheet.create({
     width: "100%",
     alignItems: "center",
     justifyContent: "center",
-    gap: 10,
+    gap: 12,
     borderRadius: radii.lg,
     backgroundColor: "rgba(0,0,0,0.15)",
   },

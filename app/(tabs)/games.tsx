@@ -217,6 +217,7 @@ function FeaturedCard({ featuredId }: { featuredId: string }) {
             <Text style={s.featuredTitle}>{featured.name}</Text>
             <Text style={s.featuredDesc}>{featured.desc}</Text>
             <Text style={s.featuredPlayers}>{formatPlayerCount(featured.minPlayers, featured.maxPlayers)}</Text>
+          </View>
         </View>
       </Pressable>
     </Animated.View>

@@ -73,7 +73,10 @@ export default function TabLayout() {
       <Tabs.Screen
         name="social"
         options={{
-          href: null,
+          title: "Friends",
+          tabBarIcon: ({ focused }) => (
+            <TabPill focused={focused} label="Friends" icon="people-outline" iconActive="people" />
+          ),
         }}
       />
       <Tabs.Screen
