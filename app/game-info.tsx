@@ -180,6 +180,29 @@ const GAME_INFO: Record<GameId, GameInfo> = {
       "Let others overpay for items you don't care about.",
     ],
   },
+  blindSpot: {
+    name: "Blind Spot",
+    tagline: "One is blind. One is lying. Find the saboteur.",
+    minPlayers: 4,
+    maxPlayers: 8,
+    icon: "eye-off",
+    color: "#4ECDC4",
+    rules: [
+      "One player closes their eyes -- they're the Blind player.",
+      "Everyone else gives voice instructions to help them complete a physical task.",
+      "But ONE person is secretly the Saboteur, giving bad instructions.",
+      "Each guide gets 10 seconds to speak. The order goes around twice.",
+      "After guiding, the host decides if the task was completed.",
+      "The Blind player opens their eyes and guesses who the Saboteur was.",
+      "Correct guess = 3 points for the Blind player. Wrong guess = Saboteur scores.",
+      "If the task fails and the Saboteur isn't caught, they get 5 points!",
+    ],
+    tips: [
+      "Saboteurs: be subtle! Give instructions that sound helpful but lead astray.",
+      "Guides: be specific and clear so the Blind player trusts you.",
+      "Blind players: listen for inconsistencies between instructions.",
+    ],
+  },
 };
 
 export default function GameInfoScreen() {

@@ -1214,7 +1214,7 @@ function Shell({
   );
   return (
     <SafeAreaView style={st.container} edges={["top", "left", "right"]}>
-      <ScreenBackground />
+      
       <GameHeader />
       {keyboard ? (
         <KeyboardAvoidingView style={st.flex1} behavior={Platform.OS === "ios" ? "padding" : undefined}>
@@ -1610,6 +1610,6 @@ const st = StyleSheet.create({
   winnerContent: { flexDirection: "row", alignItems: "center", gap: spacing.md, padding: 20 },
   winnerName: { fontFamily: fonts.extrabold, fontSize: 24, color: colors.onPrimary },
   winnerScore: { fontFamily: fonts.semibold, fontSize: 13, color: "rgba(14,12,26,0.65)" },
-  trophyGain: { fontFamily: fonts.bold, fontSize: 16, color: "#FFD700", textAlign: "center", marginTop: spacing.sm },
+  trophyGain: { fontFamily: fonts.bold, fontSize: 16, color: colors.lavender, textAlign: "center", marginTop: spacing.sm },
   trophyLoss: { fontFamily: fonts.bold, fontSize: 16, color: colors.gray400, textAlign: "center", marginTop: spacing.sm },
 });

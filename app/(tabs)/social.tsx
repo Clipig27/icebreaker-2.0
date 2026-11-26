@@ -229,7 +229,7 @@ export default function Social() {
         <AppHeader />
 
         <Text style={s.heading}>Friends</Text>
-        <Text style={s.subtitle}>Find players and add them.</Text>
+        <Text style={s.subtitle}>Get your friends, break the ice!</Text>
 
         {/* Search bar */}
         <View style={s.searchBar}>

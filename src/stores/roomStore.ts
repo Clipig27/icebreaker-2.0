@@ -19,7 +19,8 @@ export type GameType =
   | "potLuck"
   | "blindRanking"
   | "tenSecondTasks"
-  | "auctionDraft";
+  | "auctionDraft"
+  | "blindSpot";
 
 export type Room = {
   id: string;

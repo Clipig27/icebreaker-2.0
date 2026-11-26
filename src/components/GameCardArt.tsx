@@ -105,6 +105,16 @@ export const CARD_THEMES: Record<GameType, CardTheme> = {
       { points: "88,0 100,0 100,100 78,100", color: "#C8E89A", opacity: 0.05 },
     ],
   },
+  blindSpot: {
+    bg: ["#0F1A1A", "#162626"],
+    border: withAlpha("#4ECDC4", 0.4),
+    accent: "#4ECDC4",
+    text: "#4ECDC4",
+    rays: [
+      { points: "66,0 84,0 70,100 52,100", color: "#4ECDC4", opacity: 0.08 },
+      { points: "88,0 100,0 100,100 78,100", color: "#4ECDC4", opacity: 0.05 },
+    ],
+  },
 };
 
 /* ------------------------------------------------------------------ */

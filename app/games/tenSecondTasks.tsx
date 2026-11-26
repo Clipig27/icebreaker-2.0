@@ -12,7 +12,7 @@ import { useRouter } from "expo-router";
 import { Ionicons } from "@expo/vector-icons";
 import { LinearGradient } from "expo-linear-gradient";
 import * as Haptics from "expo-haptics";
-import { colors, fonts, gradients, radii, spacing, type } from "../../src/theme";
+import { colors, fonts, radii, spacing, type } from "../../src/theme";
 import { useRoomStore } from "../../src/stores/roomStore";
 import { useAuthStore } from "../../src/stores/authStore";
 import { getAllTasks, Task } from "../../src/data/tenSecondTasks";
@@ -26,7 +26,7 @@ import PrimaryAction, { PrimaryActionBar } from "../../src/components/PrimaryAct
 import Eyebrow from "../../src/components/Eyebrow";
 import Pill from "../../src/components/Pill";
 import GradientCard from "../../src/components/GradientCard";
-import HeroGradient from "../../src/components/HeroGradient";
+
 import PlayerAvatar from "../../src/components/PlayerAvatar";
 import GameLogo from "../../src/components/GameLogo";
 
@@ -44,6 +44,9 @@ const THEME = {
   surface: "#362A18",
   surfaceLight: "#453520",
 };
+
+const HERO_GRADIENT = ["#F0A060", "#E08040", "#D06830", "#C05020"] as const;
+const BTN_GRADIENT = ["#F0A060", "#E08040", "#D06830"] as const;
 
 // ---------------------------------------------------------------------------
 // Types
@@ -145,7 +148,7 @@ function TaskStack({ stack, large, isPerformer = false }: { stack: StackItem[]; 
         if (isNewest) {
           // Newest task is the hero moment
           return (
-            <HeroGradient key={item.id} radius={radii.lg}>
+            <LinearGradient key={item.id} colors={HERO_GRADIENT} start={{ x: 0, y: 0 }} end={{ x: 1, y: 1 }} style={{ borderRadius: radii.lg, overflow: "hidden" }}>
               <View style={st.taskHero}>
                 <View style={st.taskHeroHead}>
                   <View style={[st.numTile, st.numTileHero]}>
@@ -155,7 +158,7 @@ function TaskStack({ stack, large, isPerformer = false }: { stack: StackItem[]; 
                 </View>
                 <Text style={[st.taskHeroText, large && st.taskHeroTextLg]}>{item.text}</Text>
               </View>
-            </HeroGradient>
+            </LinearGradient>
           );
         }
         return (
@@ -428,7 +431,7 @@ export default function TenSecondTasksScreen() {
           subtitle="Stack tasks. Beat the timer. Don't get buzzed."
           pill={gs.isSuddenDeath ? "Sudden death" : undefined}
         />
-        <HeroGradient>
+        <LinearGradient colors={HERO_GRADIENT} start={{ x: 0, y: 0 }} end={{ x: 1, y: 1 }} style={{ borderRadius: radii.xl, overflow: "hidden" }}>
           <View style={st.heroRow}>
             <View style={st.heroCopy}>
               <Eyebrow tone="dark">{"Up to 5 tasks \u00B7 1 survivor"}</Eyebrow>
@@ -436,7 +439,7 @@ export default function TenSecondTasksScreen() {
             </View>
             <Text style={st.heroEmoji}>{"\u23F1\uFE0F"}</Text>
           </View>
-        </HeroGradient>
+        </LinearGradient>
         <Eyebrow style={st.sectionEyebrow}>How it works</Eyebrow>
         <View style={st.list}>
           {[
@@ -519,7 +522,7 @@ export default function TenSecondTasksScreen() {
               >
                 {myVote === "pass" ? (
                   <LinearGradient
-                    colors={gradients.primaryButton}
+                    colors={BTN_GRADIENT}
                     start={{ x: 0, y: 0 }}
                     end={{ x: 0.6, y: 1 }}
                     style={[StyleSheet.absoluteFill, st.pillRadius]}
@@ -581,7 +584,7 @@ export default function TenSecondTasksScreen() {
           pill={gs.timerExpired ? "Timer expired" : undefined}
         />
         <GradientCard
-          fill={isPassed ? gradients.hero : undefined}
+          fill={isPassed ? HERO_GRADIENT : undefined}
           borderColors={isPassed ? HERO_BORDER : DANGER_BORDER}
           contentStyle={st.resultCard}
         >
@@ -639,7 +642,7 @@ export default function TenSecondTasksScreen() {
           subtitle={`${gs.turnNumber} turns played`}
           pill="Final results"
         />
-        <GradientCard fill={gradients.hero} borderColors={HERO_BORDER} contentStyle={st.winnerContent}>
+        <GradientCard fill={HERO_GRADIENT} borderColors={HERO_BORDER} contentStyle={st.winnerContent}>
           <View style={[st.numTile, st.numTileHero]}>
             <Text style={[st.numTileText, st.numTileTextHero]}>1</Text>
           </View>
@@ -698,7 +701,7 @@ const PEACH_BORDER = ["rgba(246,201,168,0.8)", "rgba(246,201,168,0.15)"] as cons
 function Shell({ children, footer }: { children: React.ReactNode; footer?: React.ReactNode }) {
   return (
     <SafeAreaView style={st.container} edges={["top", "left", "right"]}>
-      <ScreenBackground />
+      
       <GameHeader />
       <ScrollView
         contentContainerStyle={[st.scroll, !footer && st.scrollNoFooter]}
@@ -751,7 +754,7 @@ function Countdown({
       <Eyebrow>{label}</Eyebrow>
       <View style={st.progressTrack}>
         <LinearGradient
-          colors={gradients.primaryButton}
+          colors={BTN_GRADIENT}
           start={{ x: 0, y: 0 }}
           end={{ x: 1, y: 0 }}
           style={[st.progressFill, { width: `${Math.min(1, Math.max(0, progress)) * 100}%` }]}
@@ -922,6 +925,6 @@ const st = StyleSheet.create({
   },
   rankName: { flex: 1, fontFamily: fonts.bold, fontSize: 16, color: colors.white },
   outTag: { fontFamily: fonts.bold, fontSize: 12, letterSpacing: 1.2, color: colors.danger },
-  trophyGain: { fontFamily: fonts.bold, fontSize: 16, color: "#FFD700", textAlign: "center", marginTop: spacing.sm },
+  trophyGain: { fontFamily: fonts.bold, fontSize: 16, color: THEME.accent, textAlign: "center", marginTop: spacing.sm },
   trophyLoss: { fontFamily: fonts.bold, fontSize: 16, color: colors.gray400, textAlign: "center", marginTop: spacing.sm },
 });

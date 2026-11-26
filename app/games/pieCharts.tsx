@@ -16,7 +16,7 @@ import { useRouter } from "expo-router";
 import { Ionicons } from "@expo/vector-icons";
 import { LinearGradient } from "expo-linear-gradient";
 import Svg, { Path, Circle } from "react-native-svg";
-import { colors, fonts, gradients, radii, spacing, type } from "../../src/theme";
+import { colors, fonts, radii, spacing, type } from "../../src/theme";
 import { useRoomStore } from "../../src/stores/roomStore";
 import { useAuthStore } from "../../src/stores/authStore";
 import { getAllPieChartPrompts, PieChartPrompt } from "../../src/data/pieCharts";
@@ -38,6 +38,9 @@ const THEME = {
   surface: "#2A2530",
   surfaceLight: "#3A3040",
 };
+
+const HERO_GRADIENT = ["#E8A0B8", "#D080A0", "#B86088", "#A04870"] as const;
+const BTN_GRADIENT = ["#E8A0B8", "#D080A0", "#B86088"] as const;
 import HostWaitingPill from "../../src/components/HostWaitingPill";
 import GameHeader from "../../src/components/GameHeader";
 import GameLoadingScreen from "../../src/components/GameLoadingScreen";
@@ -46,7 +49,7 @@ import PrimaryAction, { PrimaryActionBar } from "../../src/components/PrimaryAct
 import Eyebrow from "../../src/components/Eyebrow";
 import Pill from "../../src/components/Pill";
 import GradientCard from "../../src/components/GradientCard";
-import HeroGradient from "../../src/components/HeroGradient";
+
 import PlayerAvatar from "../../src/components/PlayerAvatar";
 import GameLogo from "../../src/components/GameLogo";
 
@@ -409,7 +412,7 @@ export default function PieChartsScreen() {
         }
       >
         <ScreenTitle title="Pie Charts" subtitle="See who the group thinks fits each question." />
-        <HeroGradient>
+        <LinearGradient colors={HERO_GRADIENT} start={{ x: 0, y: 0 }} end={{ x: 1, y: 1 }} style={{ borderRadius: radii.xl, overflow: "hidden" }}>
           <View style={s.heroRow}>
             <View style={s.heroCopy}>
               <Eyebrow tone="dark">Who's most likely to...</Eyebrow>
@@ -417,7 +420,7 @@ export default function PieChartsScreen() {
             </View>
             <Text style={s.heroEmoji}>{"\uD83E\uDD67"}</Text>
           </View>
-        </HeroGradient>
+        </LinearGradient>
         <Eyebrow style={s.sectionEyebrow}>How it works</Eyebrow>
         <View style={s.list}>
           {[
@@ -444,7 +447,7 @@ export default function PieChartsScreen() {
       return (
         <Shell footer={<WaitingNote label="Host is setting up..." />}>
           <ScreenTitle title="Pie Charts" subtitle="Host is setting up..." />
-          <HeroGradient>
+          <LinearGradient colors={HERO_GRADIENT} start={{ x: 0, y: 0 }} end={{ x: 1, y: 1 }} style={{ borderRadius: radii.xl, overflow: "hidden" }}>
             <View style={s.heroRow}>
               <View style={s.heroCopy}>
                 <Eyebrow tone="dark">Get ready</Eyebrow>
@@ -452,7 +455,7 @@ export default function PieChartsScreen() {
               </View>
               <Text style={s.heroEmoji}>{"\uD83E\uDD67"}</Text>
             </View>
-          </HeroGradient>
+          </LinearGradient>
         </Shell>
       );
     }
@@ -656,7 +659,7 @@ export default function PieChartsScreen() {
         ) : (
           <>
             <GradientCard contentStyle={s.promptDarkCard}>
-              <Eyebrow tone="lavender">The person most likely to...</Eyebrow>
+              <Eyebrow style={{ color: THEME.accent }}>The person most likely to...</Eyebrow>
               <Text style={s.promptDarkText}>"{revQ?.text ?? ""}"</Text>
             </GradientCard>
             {/* Pie chart first — the main visual */}
@@ -795,7 +798,7 @@ function Shell({
   );
   return (
     <SafeAreaView style={s.container} edges={["top", "left", "right"]}>
-      <ScreenBackground />
+      
       <GameHeader />
       {keyboard ? (
         <KeyboardAvoidingView style={s.flex1} behavior={Platform.OS === "ios" ? "padding" : undefined}>
@@ -833,12 +836,12 @@ function WaitingNote({ label }: { label: string }) {
 
 function PromptHero({ text, compact = false }: { text: string; compact?: boolean }) {
   return (
-    <HeroGradient>
+    <LinearGradient colors={HERO_GRADIENT} start={{ x: 0, y: 0 }} end={{ x: 1, y: 1 }} style={{ borderRadius: radii.xl, overflow: "hidden" }}>
       <View style={[s.promptHero, compact && s.promptHeroCompact]}>
         <Eyebrow tone="dark">The person most likely to...</Eyebrow>
         <Text style={[s.promptHeroText, compact && s.promptHeroTextCompact]}>"{text}"</Text>
       </View>
-    </HeroGradient>
+    </LinearGradient>
   );
 }
 
@@ -855,7 +858,7 @@ function ProgressBar({ progress }: { progress: number }) {
   return (
     <View style={s.progressTrack}>
       <LinearGradient
-        colors={gradients.primaryButton}
+        colors={BTN_GRADIENT}
         start={{ x: 0, y: 0 }}
         end={{ x: 1, y: 0 }}
         style={[s.progressFill, { width: `${Math.min(1, Math.max(0, progress)) * 100}%` }]}

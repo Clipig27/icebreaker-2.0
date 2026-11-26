@@ -9,6 +9,7 @@ import PotLuck from "../games/PotLuck";
 import BlindRanking from "../games/BlindRanking";
 import TenSecondTasks from "../games/TenSecondTasks";
 import AuctionDraft from "../games/AuctionDraft";
+import BlindSpot from "../games/BlindSpot";
 
 const GAME_COMPONENTS: Record<string, React.FC> = {
   numberGuessor: NumberGuessor,
@@ -18,6 +19,7 @@ const GAME_COMPONENTS: Record<string, React.FC> = {
   blindRanking: BlindRanking,
   tenSecondTasks: TenSecondTasks,
   auctionDraft: AuctionDraft,
+  blindSpot: BlindSpot,
 };
 
 export default function RoomPage() {

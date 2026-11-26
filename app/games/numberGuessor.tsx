@@ -14,13 +14,13 @@ import { SafeAreaView, useSafeAreaInsets } from "react-native-safe-area-context"
 import { useRouter } from "expo-router";
 import { Ionicons } from "@expo/vector-icons";
 import { LinearGradient } from "expo-linear-gradient";
-import { colors, fonts, gradients, radii, spacing, type } from "../../src/theme";
+import { colors, fonts, radii, spacing, type } from "../../src/theme";
 import ScreenBackground from "../../src/components/ScreenBackground";
 import PrimaryAction, { PrimaryActionBar } from "../../src/components/PrimaryAction";
 import Eyebrow from "../../src/components/Eyebrow";
 import Pill from "../../src/components/Pill";
 import GradientCard from "../../src/components/GradientCard";
-import HeroGradient from "../../src/components/HeroGradient";
+
 import { useRoomStore } from "../../src/stores/roomStore";
 import { useAuthStore } from "../../src/stores/authStore";
 import { getAllNumberPrompts } from "../../src/data/numberGuessor";
@@ -43,6 +43,9 @@ const THEME = {
   surface: "#1A3348",
   surfaceLight: "#1F3B52",
 };
+
+const HERO_GRADIENT = ["#7FE0D6", "#5BC8BE", "#3AA89E", "#2A8E86"] as const;
+const BTN_GRADIENT = ["#7FE0D6", "#5BC8BE", "#3AA89E"] as const;
 import { competitionRanks, joinNames, ordinal } from "../../src/utils/rank";
 import HostWaitingPill from "../../src/components/HostWaitingPill";
 import GameHeader from "../../src/components/GameHeader";
@@ -507,7 +510,7 @@ export default function NumberGuessorScreen() {
       }
     >
       <ScreenTitle title="1 to 100" subtitle="Guess closest to the correct number." />
-      <HeroGradient>
+      <LinearGradient colors={HERO_GRADIENT} start={{ x: 0, y: 0 }} end={{ x: 1, y: 1 }} style={{ borderRadius: radii.xl, overflow: "hidden" }}>
         <View style={styles.heroContent}>
           <View style={styles.heroCopy}>
             <Eyebrow tone="dark">Trivia · Numbers</Eyebrow>
@@ -515,7 +518,7 @@ export default function NumberGuessorScreen() {
           </View>
           <Text style={styles.heroEmoji}>{"🎯"}</Text>
         </View>
-      </HeroGradient>
+      </LinearGradient>
       <Eyebrow style={styles.sectionEyebrow}>How it works</Eyebrow>
       <View style={styles.list}>
         {[
@@ -548,7 +551,7 @@ export default function NumberGuessorScreen() {
       <ScreenTitle title="1 to 100" subtitle="Guess the number. Lowest penalty wins!" />
 
       <GradientCard contentStyle={styles.rulesCard}>
-        <Eyebrow tone="lavender">How to Play</Eyebrow>
+        <Eyebrow style={{ color: THEME.accent }}>How to Play</Eyebrow>
         <Text style={styles.rulesText}>
           Each round shows a trivia question with a numeric answer.{"\n\n"}
           You have {TIMER_SECONDS} seconds to type your guess.{"\n\n"}
@@ -610,7 +613,7 @@ export default function NumberGuessorScreen() {
             <Text style={styles.guessSubtitle}>Guess the number</Text>
 
             <LinearGradient
-              colors={gradients.hero}
+              colors={HERO_GRADIENT}
               locations={[0, 0.35, 0.7, 1]}
               start={{ x: 0, y: 0 }}
               end={{ x: 1, y: 1 }}
@@ -650,7 +653,7 @@ export default function NumberGuessorScreen() {
                   ]}
                 >
                   <LinearGradient
-                    colors={urgent ? DANGER_GRADIENT : gradients.primaryButton}
+                    colors={urgent ? DANGER_GRADIENT : BTN_GRADIENT}
                     start={{ x: 0, y: 0 }}
                     end={{ x: 1, y: 0 }}
                     style={StyleSheet.absoluteFill}
@@ -660,7 +663,7 @@ export default function NumberGuessorScreen() {
             </View>
           </View>
 
-          {/* Bottom section: input + submit */}
+          {/* Input + submit — centered */}
           {!hasGuessed ? (
             <View style={styles.inputRow}>
               <TextInput
@@ -688,7 +691,7 @@ export default function NumberGuessorScreen() {
                 disabled={!guessText || guessText === ""}
               >
                 <LinearGradient
-                  colors={gradients.primaryButton}
+                  colors={BTN_GRADIENT}
                   start={{ x: 0, y: 0 }}
                   end={{ x: 0.6, y: 1 }}
                   style={[StyleSheet.absoluteFill, { borderRadius: radii.lg }]}
@@ -739,7 +742,7 @@ export default function NumberGuessorScreen() {
         <ScreenTitle title="The answer" subtitle={lastResult.promptText} pill={roundPill} />
 
         {/* Correct answer */}
-        <HeroGradient>
+        <LinearGradient colors={HERO_GRADIENT} start={{ x: 0, y: 0 }} end={{ x: 1, y: 1 }} style={{ borderRadius: radii.xl, overflow: "hidden" }}>
           <View style={styles.answerHero}>
             <View style={styles.flex1}>
               <Eyebrow tone="dark">Correct Answer</Eyebrow>
@@ -747,7 +750,7 @@ export default function NumberGuessorScreen() {
             </View>
             <Text style={styles.correctValue}>{lastResult.correctAnswer}</Text>
           </View>
-        </HeroGradient>
+        </LinearGradient>
 
         {/* Player guesses */}
         <Eyebrow style={styles.sectionEyebrow}>Penalties this round</Eyebrow>
@@ -892,7 +895,7 @@ export default function NumberGuessorScreen() {
         />
 
         {winner && (
-          <HeroGradient>
+          <LinearGradient colors={HERO_GRADIENT} start={{ x: 0, y: 0 }} end={{ x: 1, y: 1 }} style={{ borderRadius: radii.xl, overflow: "hidden" }}>
             <View style={styles.winnerContent}>
               <View style={styles.flex1}>
                 <Eyebrow tone="dark">{coWinners.length > 1 ? "Co-winners" : "Winner"}</Eyebrow>
@@ -905,9 +908,9 @@ export default function NumberGuessorScreen() {
                   {formatPenalty(winner.penalty)} total penalty
                 </Text>
               </View>
-              <Ionicons name="trophy" size={48} color="#FFD700" />
+              <Ionicons name="trophy" size={48} color={THEME.accent} />
             </View>
-          </HeroGradient>
+          </LinearGradient>
         )}
         {trophyDelta !== 0 && (
           <Text style={trophyDelta > 0 ? styles.trophyGain : styles.trophyLoss}>
@@ -931,7 +934,7 @@ export default function NumberGuessorScreen() {
 
   return (
     <SafeAreaView style={styles.safeArea} edges={["top", "left", "right"]}>
-      <ScreenBackground />
+      
       <GameHeader />
       {phase === "intro" && renderIntro()}
       {phase === "setup" && renderSetup()}
@@ -1099,7 +1102,7 @@ const styles = StyleSheet.create({
     paddingHorizontal: spacing.screen,
     paddingTop: spacing.sm,
     paddingBottom: spacing.lg,
-    justifyContent: "space-between",
+    gap: spacing.md,
   },
   questionHero: {
     flexShrink: 1,
@@ -1137,8 +1140,8 @@ const styles = StyleSheet.create({
   },
   timerNumCompact: {
     fontFamily: fonts.extrabold,
-    fontSize: 28,
-    lineHeight: 32,
+    fontSize: 40,
+    lineHeight: 44,
     letterSpacing: -1,
     color: colors.white,
     fontVariant: ["tabular-nums"],
@@ -1198,15 +1201,15 @@ const styles = StyleSheet.create({
   },
   guessInputCompact: {
     flex: 1,
-    minHeight: 60,
+    minHeight: 68,
     backgroundColor: THEME.surface,
     borderRadius: radii.xl,
-    borderWidth: 1,
-    borderColor: THEME.cardBorder,
-    paddingVertical: 10,
-    paddingHorizontal: 16,
+    borderWidth: 2,
+    borderColor: THEME.accent + "40",
+    paddingVertical: 12,
+    paddingHorizontal: 20,
     fontFamily: fonts.extrabold,
-    fontSize: 36,
+    fontSize: 40,
     color: colors.white,
     textAlign: "center",
     fontVariant: ["tabular-nums"],
@@ -1296,7 +1299,7 @@ const styles = StyleSheet.create({
     fontFamily: fonts.extrabold,
     fontSize: 28,
     lineHeight: 34,
-    color: "#FFD700",
+    color: THEME.accent,
     marginTop: 4,
   },
   winnerPenalty: {
@@ -1305,6 +1308,6 @@ const styles = StyleSheet.create({
     color: "rgba(14,12,26,0.7)",
     marginTop: 4,
   },
-  trophyGain: { fontFamily: fonts.bold, fontSize: 16, color: "#FFD700", textAlign: "center", marginTop: spacing.sm },
+  trophyGain: { fontFamily: fonts.bold, fontSize: 16, color: THEME.accent, textAlign: "center", marginTop: spacing.sm },
   trophyLoss: { fontFamily: fonts.bold, fontSize: 16, color: colors.gray400, textAlign: "center", marginTop: spacing.sm },
 });

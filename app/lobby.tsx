@@ -54,6 +54,7 @@ const GAMES: { id: GameType; name: string; desc: string; emoji: string; icon: st
   { id: "blindRanking", name: "Blind Ranking", desc: "Rank items blind, vote for the best.", emoji: "📊", icon: "list", color: "#A78BFA", tint: "purple", minPlayers: 2, maxPlayers: 5 },
   { id: "tenSecondTasks", name: "10 Second Tasks", desc: "Stack tasks. Beat the timer.", emoji: "⏱️", icon: "timer", color: "#F97316", tint: "orange", iconText: "10", minPlayers: 3, maxPlayers: 6 },
   { id: "auctionDraft", name: AUCTION_GAME_NAME, desc: "Outbid your rivals.", emoji: "💰", icon: "pricetags", color: "#5ABF9C", tint: "green", minPlayers: 2, maxPlayers: 4 },
+  { id: "blindSpot", name: "Blind Spot", desc: "Find the saboteur.", emoji: "🕵️", icon: "eye-off", color: "#4ECDC4", tint: "teal", minPlayers: 4, maxPlayers: 8 },
 ];
 
 /** Same per-game row tints as the Games tab list. */
@@ -528,7 +529,7 @@ export default function Lobby() {
         <Pressable
           style={({ pressed }) => [s.shareLinkBtn, pressed && { opacity: 0.7 }]}
           onPress={() => {
-            const url = `https://play.icebreaker.app/join/${room.code}`;
+            const url = `https://icebreaker-2-0.vercel.app/join/${room.code}`;
             Clipboard.setStringAsync(url);
             Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
             Alert.alert("Link Copied!", `Share this link:\n${url}\n\nFriends can join from their browser — no download needed!`);

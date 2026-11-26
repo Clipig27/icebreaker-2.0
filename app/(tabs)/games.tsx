@@ -40,7 +40,7 @@ const GAMES_LIST: {
   id: string;
   name: string;
   desc: string;
-  icon: "star" | "text" | "pie-chart" | "trophy" | "list" | "timer" | "pricetags";
+  icon: "star" | "text" | "pie-chart" | "trophy" | "list" | "timer" | "pricetags" | "eye-off";
   color: string;
   iconText?: string;
   emoji: string;
@@ -55,6 +55,7 @@ const GAMES_LIST: {
   { id: "blindRanking", name: "Blind Ranking", desc: "Rank items one by one with no take-backs. Trust your gut.", icon: "list", color: "#A78BFA", emoji: "📊", tint: "purple", minPlayers: 2, maxPlayers: 5 },
   { id: "tenSecondTasks", name: "10 Second Tasks", desc: "Stack crazy tasks and beat the clock before time runs out.", icon: "timer", color: "#F97316", iconText: "10", emoji: "⏱️", tint: "orange", minPlayers: 3, maxPlayers: 6 },
   { id: "auctionDraft", name: "Bid Wars", desc: "Outbid your rivals in a high-stakes auction showdown.", icon: "pricetags", color: "#5ABF9C", emoji: "💰", tint: "green", minPlayers: 2, maxPlayers: 4 },
+  { id: "blindSpot", name: "Blind Spot", desc: "One player is blind. One is the saboteur. Find the mole.", icon: "eye-off", color: "#4ECDC4", emoji: "🕵️", tint: "teal", minPlayers: 4, maxPlayers: 8 },
 ];
 
 function formatPlayerCount(min: number, max: number | null): string {

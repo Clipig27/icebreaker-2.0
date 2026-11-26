@@ -57,6 +57,12 @@ const GAME_INFO: Record<string, { name: string; icon: string; color: string; des
     color: "#F472B6",
     description: "Everyone starts with $20 and the same base. Bid on items one at a time to build the best creation, then vote for the winner!",
   },
+  blindSpot: {
+    name: "Blind Spot",
+    icon: "eye-off",
+    color: "#4ECDC4",
+    description: "One player closes their eyes while everyone else gives voice instructions — but one guide is secretly the Saboteur! The blind player must figure out who was lying.",
+  },
 };
 
 export default function GameScreen() {

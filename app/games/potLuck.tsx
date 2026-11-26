@@ -12,7 +12,7 @@ import { SafeAreaView } from "react-native-safe-area-context";
 import { useRouter } from "expo-router";
 import { Ionicons } from "@expo/vector-icons";
 import { LinearGradient } from "expo-linear-gradient";
-import { colors, fonts, gradients, radii, spacing, type } from "../../src/theme";
+import { colors, fonts, radii, spacing, type } from "../../src/theme";
 import { useRoomStore } from "../../src/stores/roomStore";
 import { useAuthStore } from "../../src/stores/authStore";
 import { DEFAULT_QUESTIONS, PotLuckQuestion, getAllPotLuckQuestions } from "../../src/data/potLuck";
@@ -26,7 +26,7 @@ import PrimaryAction, { PrimaryActionBar } from "../../src/components/PrimaryAct
 import Eyebrow from "../../src/components/Eyebrow";
 import Pill from "../../src/components/Pill";
 import GradientCard from "../../src/components/GradientCard";
-import HeroGradient from "../../src/components/HeroGradient";
+
 import PlayerAvatar from "../../src/components/PlayerAvatar";
 import GameLogo from "../../src/components/GameLogo";
 import { competitionRanks } from "../../src/utils/rank";
@@ -45,6 +45,9 @@ const THEME = {
   surface: "#243024",
   surfaceLight: "#2E3B2E",
 };
+
+const HERO_GRADIENT = ["#5ABF6A", "#48A858", "#358840", "#2A7035"] as const;
+const BTN_GRADIENT = ["#5ABF6A", "#48A858", "#358840"] as const;
 
 // ---------------------------------------------------------------------------
 // Types
@@ -585,7 +588,7 @@ export default function PotLuckScreen() {
         }
       >
         <ScreenTitle title="Smarty Pot" subtitle="Risk the growing pot or pass it on." />
-        <HeroGradient>
+        <LinearGradient colors={HERO_GRADIENT} start={{ x: 0, y: 0 }} end={{ x: 1, y: 1 }} style={{ borderRadius: radii.xl, overflow: "hidden" }}>
           <View style={st.heroRow}>
             <View style={st.heroCopy}>
               <Eyebrow tone="dark">{`First to ${isHost ? selectedTarget : (gs.target ?? DEFAULT_TARGET)} wins`}</Eyebrow>
@@ -593,7 +596,7 @@ export default function PotLuckScreen() {
             </View>
             <Text style={st.heroEmoji}>{"\uD83E\uDDE0"}</Text>
           </View>
-        </HeroGradient>
+        </LinearGradient>
         {/* Target score selector (host only) */}
         {isHost && (
           <>
@@ -676,7 +679,7 @@ export default function PotLuckScreen() {
                 <Text style={st.rankName} numberOfLines={1}>
                   {playerMap[pid]?.username ?? "Player"}
                 </Text>
-                {isMe && <Pill tone="lavender" label="You" />}
+                {isMe && <Pill tone="lime" label="You" />}
               </GradientCard>
             );
           })}
@@ -728,7 +731,7 @@ export default function PotLuckScreen() {
 
     return (
       <SafeAreaView style={st.container} edges={["top", "left", "right"]}>
-        <ScreenBackground />
+        
         <GameHeader />
         <View style={st.liveBody}>
           {/* Floating scoreboard - top right */}
@@ -903,12 +906,12 @@ export default function PotLuckScreen() {
           title={gs.revealInfo?.scored ? `${gs.revealInfo.by} took the pot!` : "Pot voided"}
           subtitle={gs.revealInfo?.scored ? "Correct answer!" : "Everyone skipped \u2014 pot voided"}
         />
-        <HeroGradient>
+        <LinearGradient colors={HERO_GRADIENT} start={{ x: 0, y: 0 }} end={{ x: 1, y: 1 }} style={{ borderRadius: radii.xl, overflow: "hidden" }}>
           <View style={st.answerHero}>
             <Eyebrow tone="dark">Answer</Eyebrow>
             <Text style={st.answerText}>{gs.revealInfo?.answer ?? "\u2014"}</Text>
           </View>
-        </HeroGradient>
+        </LinearGradient>
 
         <View style={st.sectionHead}>
           <Eyebrow>Standings</Eyebrow>
@@ -958,7 +961,7 @@ export default function PotLuckScreen() {
           subtitle="Final standings"
           pill="Final results"
         />
-        <GradientCard fill={gradients.hero} borderColors={HERO_BORDER} contentStyle={st.winnerContent}>
+        <GradientCard fill={HERO_GRADIENT} borderColors={HERO_BORDER} contentStyle={st.winnerContent}>
           <View style={[st.numTile, st.numTileHero]}>
             <Text style={[st.numTileText, st.numTileTextHero]}>1</Text>
           </View>
@@ -1007,7 +1010,7 @@ const SELECTED_FILL = ["rgba(184,174,232,0.20)", "rgba(184,174,232,0.05)"] as co
 function Shell({ children, footer }: { children: React.ReactNode; footer?: React.ReactNode }) {
   return (
     <SafeAreaView style={st.container} edges={["top", "left", "right"]}>
-      <ScreenBackground />
+      
       <GameHeader />
       <ScrollView
         contentContainerStyle={[st.scroll, !footer && st.scrollNoFooter]}
@@ -1047,7 +1050,7 @@ function ProgressBar({ progress }: { progress: number }) {
   return (
     <View style={st.progressTrack}>
       <LinearGradient
-        colors={gradients.primaryButton}
+        colors={BTN_GRADIENT}
         start={{ x: 0, y: 0 }}
         end={{ x: 1, y: 0 }}
         style={[st.progressFill, { width: `${Math.min(1, Math.max(0, progress)) * 100}%` }]}
@@ -1532,6 +1535,6 @@ const st = StyleSheet.create({
     fontSize: 14,
     color: colors.gray300,
   },
-  trophyGain: { fontFamily: fonts.bold, fontSize: 16, color: "#FFD700", textAlign: "center", marginTop: spacing.sm },
+  trophyGain: { fontFamily: fonts.bold, fontSize: 16, color: THEME.gold, textAlign: "center", marginTop: spacing.sm },
   trophyLoss: { fontFamily: fonts.bold, fontSize: 16, color: colors.gray400, textAlign: "center", marginTop: spacing.sm },
 });

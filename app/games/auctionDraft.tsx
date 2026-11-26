@@ -14,6 +14,7 @@ import {
 import { SafeAreaView } from "react-native-safe-area-context";
 import { useRouter } from "expo-router";
 import { Ionicons } from "@expo/vector-icons";
+import { LinearGradient } from "expo-linear-gradient";
 import { colors, fonts, radii, spacing, type } from "../../src/theme";
 import { useRoomStore } from "../../src/stores/roomStore";
 import { useAuthStore } from "../../src/stores/authStore";
@@ -25,7 +26,7 @@ import PrimaryAction, { PrimaryActionBar } from "../../src/components/PrimaryAct
 import Eyebrow from "../../src/components/Eyebrow";
 import Pill from "../../src/components/Pill";
 import GradientCard from "../../src/components/GradientCard";
-import HeroGradient from "../../src/components/HeroGradient";
+
 import PlayerAvatar from "../../src/components/PlayerAvatar";
 import CountdownBar from "../../src/components/CountdownBar";
 import GameLogo from "../../src/components/GameLogo";
@@ -82,6 +83,9 @@ const THEME = {
   surface: "#243824",
   surfaceLight: "#2E4A2E",
 };
+
+const HERO_GRADIENT = ["#5ABF9C", "#48A888", "#358870", "#2A7060"] as const;
+const BTN_GRADIENT = ["#5ABF9C", "#48A888", "#358870"] as const;
 
 // ---------------------------------------------------------------------------
 // Types
@@ -511,7 +515,7 @@ export default function AuctionDraftScreen() {
         }
       >
         <ScreenTitle title={AUCTION_GAME_NAME} subtitle="Bid on items one at a time and build the best creation." />
-        <HeroGradient>
+        <LinearGradient colors={HERO_GRADIENT} start={{ x: 0, y: 0 }} end={{ x: 1, y: 1 }} style={{ borderRadius: radii.xl, overflow: "hidden" }}>
           <View style={st.heroContent}>
             <View style={st.heroCopy}>
               <Eyebrow tone="dark">${STARTING_MONEY} each · 2-4 players</Eyebrow>
@@ -519,7 +523,7 @@ export default function AuctionDraftScreen() {
             </View>
             <Text style={st.heroEmoji}>{"🔨"}</Text>
           </View>
-        </HeroGradient>
+        </LinearGradient>
         <Eyebrow style={st.sectionEyebrow}>How it works</Eyebrow>
         <View style={st.list}>
           {[
@@ -979,7 +983,7 @@ export default function AuctionDraftScreen() {
       >
         <ScreenTitle title={title} subtitle={`Best ${theme.finishedNoun}, as voted by the table`} pill={roundPill} />
         {winners.length > 0 && (
-          <HeroGradient>
+          <LinearGradient colors={HERO_GRADIENT} start={{ x: 0, y: 0 }} end={{ x: 1, y: 1 }} style={{ borderRadius: radii.xl, overflow: "hidden" }}>
             <View style={st.winnerContent}>
               <Ionicons name="trophy" size={30} color={colors.onPrimary} />
               <View style={st.flex1}>
@@ -987,7 +991,7 @@ export default function AuctionDraftScreen() {
                 <Text style={st.winnerName} numberOfLines={2}>{joinNames(winners.map(nameOf))}</Text>
               </View>
             </View>
-          </HeroGradient>
+          </LinearGradient>
         )}
         {trophyDelta !== 0 && (
           <Text style={trophyDelta > 0 ? st.trophyGain : st.trophyLoss}>
@@ -1120,7 +1124,7 @@ function AuctionView({
         <Pill tone="dark" label={theme.name} />
       </View>
 
-      <HeroGradient>
+      <LinearGradient colors={HERO_GRADIENT} start={{ x: 0, y: 0 }} end={{ x: 1, y: 1 }} style={{ borderRadius: radii.xl, overflow: "hidden" }}>
         {isBidding ? (
           <View style={st.auctionHero}>
             <View style={st.auctionHeroTop}>
@@ -1147,7 +1151,7 @@ function AuctionView({
         ) : (
           <ResultHero auction={auction} theme={theme} myId={myId} nameOf={nameOf} />
         )}
-      </HeroGradient>
+      </LinearGradient>
 
       {isBidding ? (
         <View style={st.turnBlock}>
@@ -1157,7 +1161,7 @@ function AuctionView({
               {nameOf(auction.turn)}
             </Text>
           </View>
-          <CountdownBar key={`${auction.seq}`} seconds={turnSeconds} onExpire={noop} color={colors.lavender} />
+          <CountdownBar key={`${auction.seq}`} seconds={turnSeconds} onExpire={noop} color={THEME.accent} />
         </View>
       ) : null}
 
@@ -1300,7 +1304,7 @@ function PlayerChip({
         style={[
           st.chipStatus,
           status === "high" && { color: colors.goldStat },
-          status === "turn" && { color: colors.lavender },
+          status === "turn" && { color: THEME.accent },
         ]}
         numberOfLines={1}
       >
@@ -1345,7 +1349,7 @@ function CreationCard({
           {left ? " (left)" : ""}
         </Text>
         {winner ? <Ionicons name="trophy" size={18} color={colors.goldStat} /> : null}
-        {selected ? <Ionicons name="checkmark-circle" size={22} color={colors.lavender} /> : null}
+        {selected ? <Ionicons name="checkmark-circle" size={22} color={THEME.accent} /> : null}
         <Text style={st.moneyLeft}>${money} left</Text>
       </View>
       {compact ? (
@@ -1444,7 +1448,7 @@ function Shell({
   );
   return (
     <SafeAreaView style={st.container} edges={["top", "left", "right"]}>
-      <ScreenBackground />
+      
       <GameHeader />
       {keyboard ? (
         <KeyboardAvoidingView style={st.flex1} behavior={Platform.OS === "ios" ? "padding" : undefined}>
@@ -1603,7 +1607,7 @@ const st = StyleSheet.create({
     width: 50,
     height: 50,
     borderRadius: radii.md,
-    backgroundColor: colors.lavender,
+    backgroundColor: THEME.accent,
     alignItems: "center",
     justifyContent: "center",
   },
@@ -1647,7 +1651,7 @@ const st = StyleSheet.create({
   turnBlock: { gap: spacing.sm },
   turnRow: { flexDirection: "row", alignItems: "baseline", gap: 6 },
   turnLabel: { fontFamily: fonts.semibold, fontSize: 15, color: colors.gray400 },
-  turnLabelMine: { fontFamily: fonts.extrabold, fontSize: 20, color: colors.lavender },
+  turnLabelMine: { fontFamily: fonts.extrabold, fontSize: 20, color: THEME.accent },
   turnName: { flexShrink: 1, fontFamily: fonts.bold, fontSize: 15, color: colors.white },
   turnNameHidden: { fontSize: 12, color: colors.gray500 },
 
@@ -1727,6 +1731,6 @@ const st = StyleSheet.create({
   // Game over
   winnerContent: { flexDirection: "row", alignItems: "center", gap: spacing.md, padding: 20 },
   winnerName: { fontFamily: fonts.extrabold, fontSize: 24, color: colors.onPrimary },
-  trophyGain: { fontFamily: fonts.bold, fontSize: 16, color: "#FFD700", textAlign: "center", marginTop: spacing.sm },
+  trophyGain: { fontFamily: fonts.bold, fontSize: 16, color: THEME.gold, textAlign: "center", marginTop: spacing.sm },
   trophyLoss: { fontFamily: fonts.bold, fontSize: 16, color: colors.gray400, textAlign: "center", marginTop: spacing.sm },
 });

@@ -164,6 +164,30 @@ export default function StoreScreen() {
           <Text style={s.balanceText}>{trophies} trophies</Text>
         </View>
 
+        {/* Buy Trophies */}
+        <Eyebrow style={s.sectionLabel}>BUY TROPHIES</Eyebrow>
+        <View style={s.trophyGrid}>
+          {[
+            { amount: 50, price: "$2.99" },
+            { amount: 150, price: "$9.99" },
+            { amount: 350, price: "$19.99" },
+            { amount: 1000, price: "$49.99" },
+            { amount: 2500, price: "$99.99" },
+          ].map((tier) => (
+            <Pressable
+              key={tier.amount}
+              style={({ pressed }) => [s.trophyTier, pressed && { opacity: 0.7 }]}
+              onPress={() => Alert.alert("Coming Soon", "Trophy purchases will be available on the App Store.")}
+            >
+              <View style={s.trophyTierTop}>
+                <Ionicons name="trophy" size={22} color={colors.goldStat} />
+                <Text style={s.trophyTierAmount}>{tier.amount}</Text>
+              </View>
+              <Text style={s.trophyTierPrice}>{tier.price}</Text>
+            </Pressable>
+          ))}
+        </View>
+
         {/* Party Pass */}
         <Eyebrow style={s.sectionLabel}>PARTY PASS</Eyebrow>
         {pass.map((item) => (
@@ -261,6 +285,42 @@ const s = StyleSheet.create({
     marginBottom: 10,
     fontSize: 10,
     letterSpacing: 0.8,
+  },
+  trophyGrid: {
+    flexDirection: "row",
+    flexWrap: "wrap",
+    gap: 10,
+    marginBottom: 8,
+  },
+  trophyTier: {
+    width: "47%",
+    backgroundColor: colors.cardFill,
+    borderWidth: 1,
+    borderColor: "rgba(240,198,106,0.2)",
+    borderRadius: radii.lg,
+    padding: 16,
+    alignItems: "center",
+    gap: 8,
+  },
+  trophyTierTop: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 6,
+  },
+  trophyTierAmount: {
+    fontFamily: fonts.extrabold,
+    fontSize: 24,
+    color: colors.goldStat,
+  },
+  trophyTierPrice: {
+    fontFamily: fonts.bold,
+    fontSize: 14,
+    color: colors.onLavender,
+    backgroundColor: colors.lavender,
+    paddingHorizontal: 14,
+    paddingVertical: 6,
+    borderRadius: 8,
+    overflow: "hidden",
   },
 
   cardWrap: {

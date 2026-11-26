@@ -47,6 +47,10 @@ const THEME = {
   surfaceLight: "#4A2A3F",
 };
 
+const HERO_GRADIENT = ["#E0457B", "#C03060", "#A02050"] as const;
+const BTN_GRADIENT = ["#E0457B", "#D03A6A", "#C03060"] as const;
+const GOLD_GRADIENT = ["#F6E3A6", "#F0D78C", "#D4A843"] as const;
+
 // ---------------------------------------------------------------------------
 // Types
 // ---------------------------------------------------------------------------
@@ -937,7 +941,7 @@ export default function TalentShowScreen() {
         }
       >
         <ScreenTitle title="Nobody's Got Talent" subtitle="Perform, buzz, and vote your way to victory!" />
-        <GradientCard fill={gradients.hero} borderColors={HERO_BORDER} contentStyle={st.heroContent}>
+        <GradientCard fill={HERO_GRADIENT} borderColors={HERO_BORDER} contentStyle={st.heroContent}>
           <View style={st.heroCopy}>
             <Eyebrow tone="dark">3 rounds · 1 winner</Eyebrow>
             <Text style={st.heroTitle}>Auditions, Semifinals, The Finals.</Text>
@@ -988,7 +992,7 @@ export default function TalentShowScreen() {
           }
           pill={`Round ${gs.round}`}
         />
-        <GradientCard fill={gradients.hero} borderColors={HERO_BORDER} contentStyle={st.heroContent}>
+        <GradientCard fill={HERO_GRADIENT} borderColors={HERO_BORDER} contentStyle={st.heroContent}>
           <View style={st.heroCopy}>
             <Eyebrow tone="dark">Round {gs.round}</Eyebrow>
             <Text style={st.heroTitle}>{roundNames[gs.round] ?? `Round ${gs.round}`}</Text>
@@ -1062,7 +1066,7 @@ export default function TalentShowScreen() {
           </View>
         </GradientCard>
         <GradientCard contentStyle={st.taskCard}>
-          <Eyebrow tone="lavender">{isPerformer ? "Your task" : "The task"}</Eyebrow>
+          <Eyebrow style={{ color: THEME.accent }}>{isPerformer ? "Your task" : "The task"}</Eyebrow>
           <Text style={st.taskText}>{gs.prompt}</Text>
           <View style={st.taskMeta}>
             <Ionicons name="timer-outline" size={16} color={colors.gray400} />
@@ -1224,7 +1228,7 @@ export default function TalentShowScreen() {
       >
         <ScreenTitle title="The verdict" subtitle={`${ROUND_NAMES[gs.round] ?? `Round ${gs.round}`}`} />
         <GradientCard
-          fill={outcome === "golden" ? gradients.gold : outcome === "advanced" ? gradients.hero : undefined}
+          fill={outcome === "golden" ? GOLD_GRADIENT : outcome === "advanced" ? HERO_GRADIENT : undefined}
           borderColors={outcome === "golden" ? GOLD_BORDER : outcome === "advanced" ? HERO_BORDER : DANGER_BORDER}
           contentStyle={st.resultCard}
         >
@@ -1413,7 +1417,7 @@ export default function TalentShowScreen() {
         }
       >
         <ScreenTitle title={iWon ? "YOU WIN!" : `${winnerName} WINS!`} subtitle="Final results" />
-        <GradientCard fill={gradients.hero} borderColors={HERO_BORDER} contentStyle={st.winnerContent}>
+        <GradientCard fill={HERO_GRADIENT} borderColors={HERO_BORDER} contentStyle={st.winnerContent}>
           <View style={[st.rankTile, st.rankTileHero]}>
             <Text style={[st.rankText, st.rankTextHero]}>1</Text>
           </View>
@@ -1460,7 +1464,7 @@ export default function TalentShowScreen() {
                       {playerMap[entry.id] ?? "?"}
                     </Text>
                   </View>
-                  <Pill tone="lavender" label={`${entry.count} vote${entry.count !== 1 ? "s" : ""}`} />
+                  <Pill tone="peach" label={`${entry.count} vote${entry.count !== 1 ? "s" : ""}`} />
                 </GradientCard>
               ))}
           </>
@@ -1486,14 +1490,14 @@ const HERO_BORDER = ["rgba(255,255,255,0.55)", "rgba(255,255,255,0.12)"] as cons
 const GOLD_BORDER = ["rgba(246,227,166,0.9)", "rgba(212,168,67,0.35)"] as const;
 const DANGER_BORDER = ["rgba(239,68,68,0.6)", "rgba(239,68,68,0.1)"] as const;
 const SELECTED_BORDER = [THEME.accent, THEME.accent] as const;
-const TASK_CARD_EDGE = ["rgba(186,162,249,0.38)", "rgba(186,162,249,0.16)"] as const;
-const SELECTED_FILL = ["rgba(184,174,232,0.20)", "rgba(184,174,232,0.05)"] as const;
+const TASK_CARD_EDGE = ["rgba(224,69,123,0.38)", "rgba(224,69,123,0.16)"] as const;
+const SELECTED_FILL = ["rgba(224,69,123,0.20)", "rgba(224,69,123,0.05)"] as const;
 
 /** Screen frame: background, room toolbar, scrolling body and pinned footer. */
 function Shell({ children, footer }: { children: React.ReactNode; footer?: React.ReactNode }) {
   return (
     <SafeAreaView style={st.container} edges={["top", "left", "right"]}>
-      <ScreenBackground />
+      
       <GameHeader />
       <ScrollView
         contentContainerStyle={[st.scroll, !footer && st.scrollNoFooter]}
@@ -1549,7 +1553,7 @@ function GoldenButton({
       style={({ pressed }) => [st.judgeBtn, pressed && st.pressed]}
     >
       <LinearGradient
-        colors={gradients.gold}
+        colors={GOLD_GRADIENT}
         start={{ x: 0, y: 0 }}
         end={{ x: 0.6, y: 1 }}
         style={[StyleSheet.absoluteFill, st.pillRadius]}
@@ -1626,7 +1630,7 @@ function SubmittedScreen({ submitted, total }: { submitted: number; total: numbe
         <Eyebrow>Votes in</Eyebrow>
         <View style={st.progressTrack}>
           <LinearGradient
-            colors={gradients.primaryButton}
+            colors={BTN_GRADIENT}
             start={{ x: 0, y: 0 }}
             end={{ x: 1, y: 0 }}
             style={[st.progressFill, { width: `${total > 0 ? Math.min(100, (submitted / total) * 100) : 0}%` }]}
@@ -1712,14 +1716,14 @@ const st = StyleSheet.create({
     width: 28,
     height: 28,
     borderRadius: 8,
-    backgroundColor: "rgba(186,162,249,0.15)",
+    backgroundColor: THEME.accentSoft,
     alignItems: "center",
     justifyContent: "center",
   },
   lineupNumberText: {
     fontFamily: fonts.bold,
     fontSize: 13,
-    color: colors.lavender,
+    color: THEME.accent,
   },
   chipText: { fontFamily: fonts.semibold, fontSize: 14, color: colors.white, maxWidth: 140 },
 
@@ -1748,7 +1752,7 @@ const st = StyleSheet.create({
     marginTop: spacing.md,
   },
   progressFill: { height: "100%", borderRadius: radii.pill },
-  progressFillLavender: { backgroundColor: colors.lavender },
+  progressFillLavender: { backgroundColor: THEME.accent },
   taskEyebrow: { fontSize: 9, letterSpacing: 0.8, color: "rgba(255,255,255,0.6)" },
   performerHelp: { gap: 6 },
   performerHelpTitle: { fontFamily: fonts.bold, fontSize: 14, color: colors.white },
@@ -1843,12 +1847,12 @@ const st = StyleSheet.create({
   },
   checkOn: { backgroundColor: THEME.accent, borderColor: THEME.accent },
   voteCountBadge: {
-    backgroundColor: "rgba(184,174,232,0.18)",
+    backgroundColor: THEME.accentSoft,
     borderRadius: 10,
     paddingHorizontal: 10,
     paddingVertical: 5,
   },
-  voteCountText: { fontFamily: fonts.bold, fontSize: 13, color: colors.lavender },
+  voteCountText: { fontFamily: fonts.bold, fontSize: 13, color: THEME.accent },
   voteTag: { flexDirection: "row", alignItems: "center", gap: 2 },
   voteTagText: { fontFamily: fonts.bold, fontSize: 12, letterSpacing: 1.2, color: THEME.accent },
 
@@ -1877,6 +1881,6 @@ const st = StyleSheet.create({
   rankText: { fontFamily: fonts.extrabold, fontSize: 16, color: colors.white },
   rankTextHero: { color: THEME.accent },
   winnerName: { fontFamily: fonts.extrabold, fontSize: 24, color: colors.onPrimary },
-  trophyGain: { fontFamily: fonts.bold, fontSize: 16, color: "#FFD700", textAlign: "center", marginTop: spacing.sm },
+  trophyGain: { fontFamily: fonts.bold, fontSize: 16, color: THEME.gold, textAlign: "center", marginTop: spacing.sm },
   trophyLoss: { fontFamily: fonts.bold, fontSize: 16, color: colors.gray400, textAlign: "center", marginTop: spacing.sm },
 });
