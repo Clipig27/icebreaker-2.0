@@ -12,14 +12,14 @@ export default function PieCharts() {
   const playerMap: Record<string, string> = {};
   players.forEach((p) => { playerMap[p.user_id] = p.username; });
 
-  if (!gs || phase === "starting" || phase === "intro" || phase === "setup") {
+  if (!gs || phase === "starting" || phase === "intro" || phase === "setup" || phase === "question-intro") {
     return <Screen><p style={S.waiting}>Waiting for the game to begin...</p></Screen>;
   }
 
   if (phase === "voting") {
-    const qIdx = gs.currentQuestionIdx ?? 0;
+    const qIdx = gs.questionIdx ?? 0;
     const question = gs.questions?.[qIdx];
-    const hasVoted = gs.allVotes?.some((v: any) => v.voterId === userId && v.questionIdx === qIdx);
+    const hasVoted = (gs.submittedVoterIds ?? []).includes(userId);
 
     if (hasVoted) {
       return <Screen><p style={S.submitted}>Vote locked! Waiting for everyone...</p></Screen>;
@@ -54,13 +54,14 @@ export default function PieCharts() {
 
   return <Screen><p style={S.waiting}>{phase}...</p></Screen>;
 
-  async function handleVote(voteFor: string, questionIdx: number) {
+  async function handleVote(voteeId: string, questionIdx: number) {
     await mutate((cur: any) => {
       if (!cur || cur.phase !== "voting") return null;
-      if (cur.allVotes?.some((v: any) => v.voterId === userId && v.questionIdx === questionIdx)) return null;
+      if ((cur.submittedVoterIds ?? []).includes(userId)) return null;
       return {
         ...cur,
-        allVotes: [...(cur.allVotes ?? []), { voterId: userId, voteFor, questionIdx }],
+        allVotes: [...(cur.allVotes ?? []), { voterId: userId, voteeId, questionIdx }],
+        submittedVoterIds: [...(cur.submittedVoterIds ?? []), userId],
       };
     });
   }

@@ -7,32 +7,39 @@ export default function NumberGuessor() {
   const players = useRoomStore((s) => s.players);
   const mutate = useRoomStore((s) => s.mutateGameState);
   const userId = useAuthStore((s) => s.userId);
+  const username = useAuthStore((s) => s.username);
   const gs = room?.game_state;
   const phase = gs?.phase;
 
   const [guess, setGuess] = useState("");
   const [secondsLeft, setSecondsLeft] = useState(0);
+  const [guessStartTime] = useState(Date.now());
 
-  // Timer
+  // Timer — native uses roundStartedAt + a fixed duration, not timerEnd
+  // We show a countdown based on roundStartedAt (30s default guessing window)
   useEffect(() => {
-    if (!gs?.timerEnd) return;
-    const tick = () => setSecondsLeft(Math.max(0, Math.ceil((gs.timerEnd - Date.now()) / 1000)));
+    if (!gs?.roundStartedAt) return;
+    const GUESS_DURATION = 30000; // 30s — matches native default
+    const end = gs.roundStartedAt + GUESS_DURATION;
+    const tick = () => setSecondsLeft(Math.max(0, Math.ceil((end - Date.now()) / 1000)));
     tick();
     const id = setInterval(tick, 250);
     return () => clearInterval(id);
-  }, [gs?.timerEnd]);
+  }, [gs?.roundStartedAt]);
 
   const hasGuessed = gs?.guesses?.some((g: any) => g.userId === userId);
 
   const submitGuess = async () => {
     const num = parseInt(guess);
     if (isNaN(num) || num < 0 || num > 100) return;
+    const myUsername = players.find((p) => p.user_id === userId)?.username ?? username ?? "Player";
+    const elapsed = Date.now() - (gs?.roundStartedAt || guessStartTime);
     await mutate((cur: any) => {
       if (!cur || cur.phase !== "guessing") return null;
       if (cur.guesses?.some((g: any) => g.userId === userId)) return null;
       return {
         ...cur,
-        guesses: [...(cur.guesses ?? []), { userId, guess: num, time: Date.now() }],
+        guesses: [...(cur.guesses ?? []), { userId, username: myUsername, value: num, timeMs: elapsed, timedOut: false }],
       };
     });
     setGuess("");
@@ -43,7 +50,7 @@ export default function NumberGuessor() {
   }
 
   if (phase === "guessing") {
-    const prompt = gs.prompts?.[gs.currentRound ?? 0];
+    const prompt = gs.currentPrompt;
     return (
       <Screen>
         <div style={S.eyebrow}>{prompt?.category?.toUpperCase() ?? "TRIVIA"}</div>
@@ -71,8 +78,8 @@ export default function NumberGuessor() {
     );
   }
 
-  if (phase === "reveal" || phase === "roundResult") {
-    const answer = gs.prompts?.[gs.currentRound ?? 0]?.answer;
+  if (phase === "reveal" || phase === "round-end") {
+    const answer = gs.currentPrompt?.correctAnswer;
     return (
       <Screen>
         <div style={S.eyebrow}>CORRECT ANSWER</div>
@@ -82,15 +89,20 @@ export default function NumberGuessor() {
     );
   }
 
-  if (phase === "gameOver" || phase === "winner") {
-    const penalties = gs.penalties ?? [];
-    const sorted = [...penalties].sort((a: any, b: any) => a.penalty - b.penalty);
+  if (phase === "game-over") {
+    // penalties is Record<string, number> — userId -> cumulative penalty
+    const penaltyMap: Record<string, number> = gs.penalties ?? {};
+    const playerMap: Record<string, string> = {};
+    players.forEach((p) => { playerMap[p.user_id] = p.username; });
+    const sorted = Object.entries(penaltyMap)
+      .map(([uid, penalty]) => ({ userId: uid, username: playerMap[uid] ?? "Player", penalty: penalty as number }))
+      .sort((a, b) => a.penalty - b.penalty);
     const winner = sorted[0];
     return (
       <Screen>
         <h2 style={S.title}>{winner?.username ?? "?"} wins!</h2>
         <div style={S.results}>
-          {sorted.map((p: any, i: number) => (
+          {sorted.map((p, i: number) => (
             <div key={p.userId} style={{ ...S.resultRow, background: i === 0 ? "rgba(127,224,214,0.15)" : "transparent" }}>
               <span style={S.rank}>#{i + 1}</span>
               <span style={S.pName}>{p.username}{p.userId === userId ? " (You)" : ""}</span>

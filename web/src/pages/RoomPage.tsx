@@ -5,11 +5,19 @@ import { useAuthStore } from "../stores/authStore";
 import NumberGuessor from "../games/NumberGuessor";
 import TalentShow from "../games/TalentShow";
 import PieCharts from "../games/PieCharts";
+import PotLuck from "../games/PotLuck";
+import BlindRanking from "../games/BlindRanking";
+import TenSecondTasks from "../games/TenSecondTasks";
+import AuctionDraft from "../games/AuctionDraft";
 
 const GAME_COMPONENTS: Record<string, React.FC> = {
   numberGuessor: NumberGuessor,
   talentShow: TalentShow,
   pieCharts: PieCharts,
+  potLuck: PotLuck,
+  blindRanking: BlindRanking,
+  tenSecondTasks: TenSecondTasks,
+  auctionDraft: AuctionDraft,
 };
 
 export default function RoomPage() {
