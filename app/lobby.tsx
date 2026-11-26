@@ -525,6 +525,18 @@ export default function Lobby() {
           </Pressable>
         </View>
         <Text style={s.codeHelper}>Share this code so friends can join.</Text>
+        <Pressable
+          style={({ pressed }) => [s.shareLinkBtn, pressed && { opacity: 0.7 }]}
+          onPress={() => {
+            const url = `https://play.icebreaker.app/join/${room.code}`;
+            Clipboard.setStringAsync(url);
+            Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+            Alert.alert("Link Copied!", `Share this link:\n${url}\n\nFriends can join from their browser — no download needed!`);
+          }}
+        >
+          <Ionicons name="link" size={16} color={colors.lavender} />
+          <Text style={s.shareLinkText}>Copy Join Link (no download needed)</Text>
+        </Pressable>
       </GradientCard>
 
       <View style={s.section}>
@@ -641,6 +653,23 @@ const s = StyleSheet.create({
     letterSpacing: 1,
   },
   codeHelper: { fontFamily: fonts.regular, fontSize: 12, color: colors.gray400, marginTop: 8 },
+  shareLinkBtn: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 8,
+    marginTop: 10,
+    paddingVertical: 10,
+    paddingHorizontal: 14,
+    backgroundColor: "rgba(186,162,249,0.1)",
+    borderRadius: 10,
+    borderWidth: 1,
+    borderColor: "rgba(186,162,249,0.2)",
+  },
+  shareLinkText: {
+    fontFamily: fonts.semibold,
+    fontSize: 13,
+    color: colors.lavender,
+  },
   copyBtn: {
     alignItems: "center",
     justifyContent: "center",
