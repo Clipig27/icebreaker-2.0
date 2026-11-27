@@ -138,23 +138,46 @@ export default function Profile() {
 
     setUploading(true);
     try {
-      const ext = uri.split(".").pop() ?? "jpg";
+      const ext = uri.split(".").pop()?.toLowerCase() ?? "jpg";
+      const mimeType = ext === "png" ? "image/png" : "image/jpeg";
       const fileName = `${user.id}/avatar.${ext}`;
 
-      const response = await fetch(uri);
-      const blob = await response.blob();
-      const arrayBuffer = await new Response(blob).arrayBuffer();
+      // Use FormData — the only reliable upload method in React Native
+      const formData = new FormData();
+      formData.append("file", {
+        uri,
+        name: `avatar.${ext}`,
+        type: mimeType,
+      } as any);
 
       const { error: uploadErr } = await supabase.storage
         .from("avatars")
-        .upload(fileName, arrayBuffer, {
-          contentType: `image/${ext}`,
+        .upload(fileName, formData, {
+          contentType: mimeType,
           upsert: true,
         });
 
       if (uploadErr) {
-        console.warn("[profile] upload failed, using local URI:", uploadErr.message);
-        await setAvatarUrl(uri);
+        // Try the fetch/blob fallback
+        console.warn("[profile] FormData upload failed, trying blob:", uploadErr.message);
+        const response = await fetch(uri);
+        const blob = await response.blob();
+        const { error: blobErr } = await supabase.storage
+          .from("avatars")
+          .upload(fileName, blob, {
+            contentType: mimeType,
+            upsert: true,
+          });
+
+        if (blobErr) {
+          console.warn("[profile] blob upload also failed:", blobErr.message);
+          // Save local URI as last resort (won't work cross-device)
+          await setAvatarUrl(uri);
+          Alert.alert("Upload issue", "Photo saved locally but may not show on other devices. Try again later.");
+        } else {
+          const { data } = supabase.storage.from("avatars").getPublicUrl(fileName);
+          await setAvatarUrl(data.publicUrl + "?t=" + Date.now());
+        }
       } else {
         const { data } = supabase.storage.from("avatars").getPublicUrl(fileName);
         await setAvatarUrl(data.publicUrl + "?t=" + Date.now());
@@ -162,6 +185,7 @@ export default function Profile() {
     } catch (e: any) {
       console.warn("[profile] avatar error:", e.message);
       await setAvatarUrl(uri);
+      Alert.alert("Upload issue", "Photo saved locally. Try again later.");
     } finally {
       setUploading(false);
     }

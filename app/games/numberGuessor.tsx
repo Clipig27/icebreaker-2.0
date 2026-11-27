@@ -582,7 +582,7 @@ export default function NumberGuessorScreen() {
                     contentStyle={styles.roundOption}
                   >
                     <Text style={[styles.roundOptionText, active && styles.roundOptionTextActive]}>{n}</Text>
-                    <Eyebrow tone={active ? "lavender" : "gray"}>Rounds</Eyebrow>
+                    <Eyebrow style={active ? { color: THEME.accent } : undefined}>Rounds</Eyebrow>
                   </GradientCard>
                 </Pressable>
               );

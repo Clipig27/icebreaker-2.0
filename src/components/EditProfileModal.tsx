@@ -91,18 +91,36 @@ export default function EditProfileModal({ visible, onClose }: EditProfileModalP
 
     setUploading(true);
     try {
-      const ext = uri.split(".").pop() ?? "jpg";
+      const ext = uri.split(".").pop()?.toLowerCase() ?? "jpg";
+      const mimeType = ext === "png" ? "image/png" : "image/jpeg";
       const fileName = `${user.id}/avatar.${ext}`;
-      const response = await fetch(uri);
-      const blob = await response.blob();
-      const arrayBuffer = await new Response(blob).arrayBuffer();
+
+      // Use FormData for reliable React Native uploads
+      const formData = new FormData();
+      formData.append("file", {
+        uri,
+        name: `avatar.${ext}`,
+        type: mimeType,
+      } as any);
 
       const { error: uploadErr } = await supabase.storage
         .from("avatars")
-        .upload(fileName, arrayBuffer, { contentType: `image/${ext}`, upsert: true });
+        .upload(fileName, formData, { contentType: mimeType, upsert: true });
 
       if (uploadErr) {
-        setAvatarUrlLocal(uri);
+        // Fallback to blob
+        const response = await fetch(uri);
+        const blob = await response.blob();
+        const { error: blobErr } = await supabase.storage
+          .from("avatars")
+          .upload(fileName, blob, { contentType: mimeType, upsert: true });
+
+        if (blobErr) {
+          setAvatarUrlLocal(uri);
+        } else {
+          const { data } = supabase.storage.from("avatars").getPublicUrl(fileName);
+          setAvatarUrlLocal(data.publicUrl + "?t=" + Date.now());
+        }
       } else {
         const { data } = supabase.storage.from("avatars").getPublicUrl(fileName);
         setAvatarUrlLocal(data.publicUrl + "?t=" + Date.now());

@@ -80,8 +80,8 @@ const THEME = {
   accentSoft: "rgba(90,191,156,0.15)",
   accentBorder: "rgba(90,191,156,0.25)",
   cardBorder: "rgba(90,191,156,0.12)",
-  surface: "#243824",
-  surfaceLight: "#2E4A2E",
+  surface: "#1E3820",
+  surfaceLight: "#254228",
 };
 
 const HERO_GRADIENT = ["#5ABF9C", "#48A888", "#358870", "#2A7060"] as const;
@@ -91,7 +91,7 @@ const BTN_GRADIENT = ["#5ABF9C", "#48A888", "#358870"] as const;
 // Types
 // ---------------------------------------------------------------------------
 
-type Phase = "intro" | "setup" | "auction" | "reveal" | "voting" | "vote-results" | "game-over";
+type Phase = "intro" | "setup" | "countdown" | "auction" | "reveal" | "voting" | "vote-results" | "game-over";
 
 type GameState = {
   phase: Phase;
@@ -104,6 +104,7 @@ type GameState = {
   votedPlayerIds: string[];
   winners: string[];
   round: number; // 1-based, bumps on Play Again
+  countdownStart?: number; // timestamp when countdown phase began
 };
 
 const GAME_ID = "auctionDraft";
@@ -279,6 +280,19 @@ export default function AuctionDraftScreen() {
     if (voterIds.every((id) => voted.includes(id))) tallyAndShowResults(voterIds);
   }, [isHost, phase, gs?.votedPlayerIds?.length, voterIds]);
 
+  // Countdown: host auto-advances to auction after 3 seconds
+  useEffect(() => {
+    if (phase !== "countdown") return;
+    const delay = isHost ? 3000 : 3000 + BACKUP_GRACE_MS;
+    const t = setTimeout(() => {
+      mutateGameState((cur: GameState) => {
+        if (!cur || cur.phase !== "countdown" || !cur.auction) return null;
+        return { ...cur, phase: "auction", auction: { ...cur.auction, deadline: Date.now() + TURN_MS } };
+      }).catch(warn);
+    }, delay);
+    return () => clearTimeout(t);
+  }, [isHost, phase]);
+
   // -----------------------------------------------------------------------
   // Everyone: local resets, stats, navigation
   // -----------------------------------------------------------------------
@@ -409,7 +423,8 @@ export default function AuctionDraftScreen() {
       if (!cur || cur.phase !== "setup") return null;
       return {
         ...cur,
-        phase: "auction",
+        phase: "countdown",
+        countdownStart: Date.now(),
         theme: info,
         auction: { ...auctionState, deadline: Date.now() + TURN_MS },
         names,
@@ -423,10 +438,13 @@ export default function AuctionDraftScreen() {
 
   const placeBid = useCallback(
     async (amount: number) => {
-      if (acting) return;
+      if (acting || amount < 1) return;
       setActing(true);
       const ok = await mutateGameState((cur: GameState) => {
         if (!cur || cur.phase !== "auction" || !cur.auction) return null;
+        // Enforce minimum bid of $1 and must beat current high bid
+        const minBid = Math.max(1, (cur.auction.highBid ?? 0) + 1);
+        if (amount < minBid) return null;
         return withAuction(cur, applyBid(cur.auction, myId, amount, Date.now()));
       }).catch(warn);
       if (!ok) setActing(false);
@@ -667,7 +685,7 @@ export default function AuctionDraftScreen() {
                 hitSlop={8}
                 style={({ pressed }) => [st.addBtn, pressed && st.pressed]}
               >
-                <Ionicons name="add" size={24} color={colors.onLavender} />
+                <Ionicons name="add" size={24} color="#FFFFFF" />
               </Pressable>
             </View>
           </View>
@@ -743,6 +761,11 @@ export default function AuctionDraftScreen() {
         </View>
       </Shell>
     );
+  }
+
+  // === COUNTDOWN ===
+  if (phase === "countdown" && theme) {
+    return <CountdownPhase theme={theme} roundPill={roundPill} />;
   }
 
   // === AUCTION ===
@@ -1026,6 +1049,31 @@ export default function AuctionDraftScreen() {
 }
 
 // ---------------------------------------------------------------------------
+// Countdown phase (3-2-1 before auction starts)
+// ---------------------------------------------------------------------------
+
+function CountdownPhase({ theme, roundPill }: { theme: AuctionThemeInfo; roundPill?: string }) {
+  const [count, setCount] = useState(3);
+  useEffect(() => {
+    if (count <= 0) return;
+    const t = setTimeout(() => setCount((c) => c - 1), 1000);
+    return () => clearTimeout(t);
+  }, [count]);
+
+  return (
+    <Shell>
+      <ScreenTitle title={theme.name} subtitle="Get ready to bid!" pill={roundPill} />
+      <View style={st.countdownCenter}>
+        <View style={st.countdownCircle}>
+          <Text style={st.countdownNum}>{count > 0 ? count : "GO!"}</Text>
+        </View>
+        <Text style={st.countdownLabel}>Auction starts in...</Text>
+      </View>
+    </Shell>
+  );
+}
+
+// ---------------------------------------------------------------------------
 // Auction phase view
 // ---------------------------------------------------------------------------
 
@@ -1076,7 +1124,7 @@ function AuctionView({
     footer = (
       <View style={st.footerStack} testID="ad-my-turn">
         <View style={st.stepRow}>
-          <Stepper label="-$1" testID="ad-bid-minus" disabled={!canRaise || bidAmount <= min} onPress={() => setBidAmount(clamp(bidAmount - 1))} />
+          <Stepper label="-$1" testID="ad-bid-minus" disabled={!canRaise || bidAmount <= min || bidAmount <= 1} onPress={() => setBidAmount(Math.max(1, clamp(bidAmount - 1)))} />
           <View style={st.amountBox}>
             <Text style={st.amountText}>${canRaise ? bidAmount : "—"}</Text>
             <Text style={st.amountMeta}>max ${max}</Text>
@@ -1090,7 +1138,7 @@ function AuctionView({
             label={canRaise ? `Bid $${bidAmount}` : "Can't raise"}
             icon="hammer"
             onPress={() => onBid(bidAmount)}
-            disabled={!canRaise || acting || bidAmount < min || bidAmount > max}
+            disabled={!canRaise || acting || bidAmount < 1 || bidAmount < min || bidAmount > max}
             style={st.bidBtn}
             testID="ad-bid-submit"
           />
@@ -1181,13 +1229,24 @@ function AuctionView({
       </View>
 
       {amIn ? (
-        <GradientCard radius={radii.lg} contentStyle={st.mineRow}>
+        <GradientCard radius={radii.lg} contentStyle={st.mineCol}>
           <Eyebrow>Your {theme.finishedNoun}</Eyebrow>
-          <Text style={st.mineEmojis} numberOfLines={1}>
-            {theme.baseEmoji}
-            {(auction.players[myId]?.items ?? []).map((it) => it.emoji).join("")}
-            {"▫️".repeat(Math.max(0, auction.itemsPerPlayer - (auction.players[myId]?.items.length ?? 0)))}
-          </Text>
+          <View style={st.mineItemRow}>
+            <Text style={st.mineItemEmoji}>{theme.baseEmoji}</Text>
+            <Text style={st.mineItemName} numberOfLines={1}>{theme.baseName}</Text>
+          </View>
+          {(auction.players[myId]?.items ?? []).map((it) => (
+            <View key={it.id} style={st.mineItemRow}>
+              <Text style={st.mineItemEmoji}>{it.emoji}</Text>
+              <Text style={st.mineItemName} numberOfLines={1}>{it.name}</Text>
+            </View>
+          ))}
+          {Array.from({ length: Math.max(0, auction.itemsPerPlayer - (auction.players[myId]?.items.length ?? 0)) }).map((_, i) => (
+            <View key={`empty-${i}`} style={st.mineItemRow}>
+              <Text style={st.mineItemEmoji}>{"▫️"}</Text>
+              <Text style={[st.mineItemName, { color: colors.gray500 }]} numberOfLines={1}>Empty slot</Text>
+            </View>
+          ))}
         </GradientCard>
       ) : null}
     </Shell>
@@ -1580,7 +1639,7 @@ const st = StyleSheet.create({
     alignItems: "center",
     justifyContent: "center",
   },
-  catEmojiTileOn: { backgroundColor: "rgba(186,162,249,0.35)" },
+  catEmojiTileOn: { backgroundColor: "rgba(90,191,156,0.35)" },
   catEmoji: { fontSize: 22 },
   catLabel: { fontFamily: fonts.semibold, fontSize: 12, lineHeight: 16, color: colors.white, textAlign: "center" },
   catItemCount: { fontFamily: fonts.medium, fontSize: 10, color: colors.gray500 },
@@ -1664,8 +1723,10 @@ const st = StyleSheet.create({
   chipSlots: { fontFamily: fonts.medium, fontSize: 11, color: colors.gray400 },
   chipStatus: { fontFamily: fonts.bold, fontSize: 9, letterSpacing: 0.8, color: colors.gray500 },
 
-  mineRow: { flexDirection: "row", alignItems: "center", gap: spacing.md, paddingVertical: 12, paddingHorizontal: spacing.lg },
-  mineEmojis: { flex: 1, fontSize: 22, textAlign: "right" },
+  mineCol: { gap: spacing.sm, paddingVertical: 12, paddingHorizontal: spacing.lg },
+  mineItemRow: { flexDirection: "row", alignItems: "center", gap: spacing.sm },
+  mineItemEmoji: { fontSize: 20, width: 28, textAlign: "center" },
+  mineItemName: { flex: 1, fontFamily: fonts.medium, fontSize: 14, color: colors.white },
 
   // Bid controls
   stepRow: { flexDirection: "row", alignItems: "center", gap: spacing.sm },
@@ -1733,4 +1794,19 @@ const st = StyleSheet.create({
   winnerName: { fontFamily: fonts.extrabold, fontSize: 24, color: colors.onPrimary },
   trophyGain: { fontFamily: fonts.bold, fontSize: 16, color: THEME.gold, textAlign: "center", marginTop: spacing.sm },
   trophyLoss: { fontFamily: fonts.bold, fontSize: 16, color: colors.gray400, textAlign: "center", marginTop: spacing.sm },
+
+  // Countdown
+  countdownCenter: { flex: 1, alignItems: "center", justifyContent: "center", gap: spacing.lg, paddingVertical: 60 },
+  countdownCircle: {
+    width: 120,
+    height: 120,
+    borderRadius: 60,
+    backgroundColor: THEME.accentSoft,
+    borderWidth: 2,
+    borderColor: THEME.accent,
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  countdownNum: { fontFamily: fonts.extrabold, fontSize: 56, color: THEME.accent },
+  countdownLabel: { fontFamily: fonts.semibold, fontSize: 17, color: colors.gray300 },
 });
