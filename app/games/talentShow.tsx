@@ -934,7 +934,7 @@ export default function TalentShowScreen() {
       <Shell
         footer={
           isHost ? (
-            <PrimaryAction label="Start Game" icon="play" onPress={startFromIntro} />
+            <PrimaryAction label="Start Game" icon="play" onPress={startFromIntro} accentColor={THEME.accent} />
           ) : (
             <WaitingNote label="Waiting for host to start..." />
           )
@@ -975,7 +975,7 @@ export default function TalentShowScreen() {
       <Shell
         footer={
           isHost ? (
-            <PrimaryAction label="Continue" icon="arrow-forward" onPress={advanceToPrep} />
+            <PrimaryAction label="Continue" icon="arrow-forward" onPress={advanceToPrep} accentColor={THEME.accent} />
           ) : (
             <WaitingNote label="Waiting for host..." />
           )
@@ -1041,7 +1041,7 @@ export default function TalentShowScreen() {
       <Shell
         footer={
           isPerformer ? (
-            <PrimaryAction label="Start!" icon="play" onPress={startPerforming} />
+            <PrimaryAction label="Start!" icon="play" onPress={startPerforming} accentColor={THEME.accent} />
           ) : (
             <WaitingNote label={`Waiting for ${currentPerformerName} to start...`} />
           )
@@ -1093,7 +1093,7 @@ export default function TalentShowScreen() {
       footer = (
         <>
           <Text style={st.footerHelper}>Your moment. Give it your best.</Text>
-          <PrimaryAction label="I'm done" onPress={handleDoneEarly} />
+          <PrimaryAction label="I'm done" onPress={handleDoneEarly} accentColor={THEME.accent} />
         </>
       );
     } else if (isR1) {
@@ -1220,7 +1220,7 @@ export default function TalentShowScreen() {
       <Shell
         footer={
           isHost ? (
-            <PrimaryAction label="Continue" icon="arrow-forward" onPress={advanceFromR1Result} />
+            <PrimaryAction label="Continue" icon="arrow-forward" onPress={advanceFromR1Result} accentColor={THEME.accent} />
           ) : (
             <WaitingNote label="Waiting for host..." />
           )
@@ -1260,7 +1260,7 @@ export default function TalentShowScreen() {
     return (
       <Shell
         footer={
-          <PrimaryAction label="Submit Vote" onPress={handleR2Vote} disabled={r2Selected.length !== 2} />
+          <PrimaryAction label="Submit Vote" onPress={handleR2Vote} disabled={r2Selected.length !== 2} accentColor={THEME.accent} />
         }
       >
         <ScreenTitle
@@ -1303,7 +1303,7 @@ export default function TalentShowScreen() {
       <Shell
         footer={
           isHost ? (
-            <PrimaryAction label="Start Tiebreaker" icon="flash" onPress={advanceFromTBAnnote} />
+            <PrimaryAction label="Start Tiebreaker" icon="flash" onPress={advanceFromTBAnnote} accentColor={THEME.accent} />
           ) : (
             <View style={st.centerRow}>
               <HostWaitingPill label="Waiting for host..." />
@@ -1406,6 +1406,7 @@ export default function TalentShowScreen() {
                 icon="refresh"
                 iconPosition="left"
                 onPress={() => startGame("talentShow")}
+                accentColor={THEME.accent}
               />
               <PrimaryAction label="Back to Lobby" variant="ghost" onPress={handleBackToLobby} />
             </View>
@@ -1464,7 +1465,7 @@ export default function TalentShowScreen() {
                       {playerMap[entry.id] ?? "?"}
                     </Text>
                   </View>
-                  <Pill tone="peach" label={`${entry.count} vote${entry.count !== 1 ? "s" : ""}`} />
+                  <Pill color={THEME.accent} label={`${entry.count} vote${entry.count !== 1 ? "s" : ""}`} />
                 </GradientCard>
               ))}
           </>
@@ -1515,7 +1516,7 @@ function ScreenTitle({ title, subtitle, pill }: { title: string; subtitle?: stri
     <View style={st.titleBlock}>
       <View style={st.eyebrowRow}>
         <GameLogo gameId="talentShow" height={44} />
-        {pill ? <Pill tone="peach" label={pill} /> : null}
+        {pill ? <Pill color={THEME.accent} label={pill} /> : null}
       </View>
       {subtitle ? <Text style={type.subtitle}>{subtitle}</Text> : null}
     </View>

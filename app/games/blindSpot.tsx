@@ -400,7 +400,7 @@ export default function BlindSpotScreen() {
       <Shell
         footer={
           isHost ? (
-            <PrimaryAction label="Start Game" icon="play" onPress={startFromIntro} />
+            <PrimaryAction label="Start Game" icon="play" onPress={startFromIntro} accentColor={THEME.accent} />
           ) : (
             <WaitingNote label="Waiting for host to start..." />
           )
@@ -424,14 +424,21 @@ export default function BlindSpotScreen() {
         </View>
 
         <View style={st.metaRow}>
-          <Pill tone="peach" label={`${gs.totalRounds} rounds`} />
-          <Pill tone="peach" label={`${players.length} players`} />
+          <Pill color={THEME.accent} label={`${gs.totalRounds} rounds`} />
+          <Pill color={THEME.accent} label={`${players.length} players`} />
         </View>
       </Shell>
     );
   }
 
   // === ROLE REVEAL ===
+  const [roleRevealed, setRoleRevealed] = useState(false);
+
+  // Reset reveal state when phase changes
+  useEffect(() => {
+    if (phase === "role-reveal") setRoleRevealed(false);
+  }, [phase]);
+
   if (phase === "role-reveal") {
     let roleTitle = "";
     let roleDesc = "";
@@ -460,26 +467,55 @@ export default function BlindSpotScreen() {
       <Shell
         footer={
           isHost ? (
-            <PrimaryAction label="Everyone Ready" icon="arrow-forward" onPress={advanceFromRoleReveal} />
+            <PrimaryAction label="Everyone Ready" icon="arrow-forward" onPress={advanceFromRoleReveal} accentColor={THEME.accent} />
           ) : (
             <WaitingNote label="Waiting for host..." />
           )
         }
       >
         <ScreenTitle title="Your Role" subtitle={`Round ${gs.round} of ${gs.totalRounds}`} />
-        <View style={st.roleCard}>
-          <Text style={st.roleEmoji}>{roleEmoji}</Text>
-          <Text style={[st.roleTitle, { color: roleColor }]}>{roleTitle}</Text>
-          <Text style={st.roleDesc}>{roleDesc}</Text>
-        </View>
 
-        {!isBlind && (
-          <GradientCard radius={radii.lg} contentStyle={st.infoRow}>
-            <Ionicons name="eye-off" size={20} color={THEME.accent} />
-            <Text style={st.infoText}>
-              {playerMap[gs.blindPlayerId] ?? "?"} is the Blind player this round.
-            </Text>
-          </GradientCard>
+        {!roleRevealed ? (
+          <>
+            <GradientCard radius={radii.lg} contentStyle={st.hiddenRoleCard}>
+              <Ionicons name="lock-closed" size={36} color={THEME.accent} />
+              <Text style={st.hiddenRoleText}>Your role is hidden</Text>
+              <Text style={st.hiddenRoleSub}>Make sure no one else can see your screen</Text>
+            </GradientCard>
+            <Pressable
+              style={({ pressed }) => [st.revealBtn, pressed && { opacity: 0.8 }]}
+              onPress={() => setRoleRevealed(true)}
+            >
+              <Ionicons name="eye" size={18} color={THEME.bg} />
+              <Text style={st.revealBtnText}>Reveal My Role</Text>
+            </Pressable>
+          </>
+        ) : (
+          <>
+            <View style={st.roleCard}>
+              <Text style={st.roleEmoji}>{roleEmoji}</Text>
+              <Text style={[st.roleTitle, { color: roleColor }]}>{roleTitle}</Text>
+              <Text style={st.roleDesc}>{roleDesc}</Text>
+            </View>
+
+            {!isBlind && (
+              <>
+                <GradientCard radius={radii.lg} contentStyle={st.infoRow}>
+                  <Ionicons name="eye-off" size={20} color={THEME.accent} />
+                  <Text style={st.infoText}>
+                    {playerMap[gs.blindPlayerId] ?? "?"} is the Blind player this round.
+                  </Text>
+                </GradientCard>
+
+                <GradientCard radius={radii.lg} borderColors={[THEME.danger + "60", THEME.danger + "20"]} contentStyle={st.warningRow}>
+                  <Ionicons name="warning" size={20} color={THEME.danger} />
+                  <Text style={st.warningText}>
+                    DO NOT say what the task is! Only give step-by-step instructions.
+                  </Text>
+                </GradientCard>
+              </>
+            )}
+          </>
         )}
       </Shell>
     );
@@ -491,7 +527,7 @@ export default function BlindSpotScreen() {
       <Shell
         footer={
           isHost ? (
-            <PrimaryAction label="Start Guiding" icon="mic" onPress={advanceFromTaskReveal} />
+            <PrimaryAction label="Start Guiding" icon="mic" onPress={advanceFromTaskReveal} accentColor={THEME.accent} />
           ) : (
             <WaitingNote label="Waiting for host..." />
           )
@@ -519,6 +555,13 @@ export default function BlindSpotScreen() {
                   : "Help them complete this task with your voice."}
               </Text>
             </GradientCard>
+
+            <GradientCard radius={radii.lg} borderColors={[THEME.danger + "60", THEME.danger + "20"]} contentStyle={st.warningRow}>
+              <Ionicons name="warning" size={20} color={THEME.danger} />
+              <Text style={st.warningText}>
+                DO NOT say what the task is! Only give step-by-step instructions. Never reveal the goal.
+              </Text>
+            </GradientCard>
           </>
         )}
       </Shell>
@@ -535,7 +578,7 @@ export default function BlindSpotScreen() {
       <Shell
         footer={
           isMyTurnToGuide ? (
-            <PrimaryAction label="Done Speaking" icon="checkmark" onPress={handleDoneSpeaking} />
+            <PrimaryAction label="Done Speaking" icon="checkmark" onPress={handleDoneSpeaking} accentColor={THEME.accent} />
           ) : isHost && !isMyTurnToGuide ? (
             <PrimaryAction label="Skip (Host)" icon="play-skip-forward" variant="ghost" onPress={handleDoneSpeaking} />
           ) : null
@@ -625,7 +668,7 @@ export default function BlindSpotScreen() {
         footer={
           isHost ? (
             <View style={st.footerStack}>
-              <PrimaryAction label="Yes, they did it!" icon="checkmark-circle" onPress={() => handleResultCheck(true)} />
+              <PrimaryAction label="Yes, they did it!" icon="checkmark-circle" onPress={() => handleResultCheck(true)} accentColor={THEME.accent} />
               <PrimaryAction label="No, they failed" icon="close-circle" variant="ghost" onPress={() => handleResultCheck(false)} />
             </View>
           ) : (
@@ -710,7 +753,7 @@ export default function BlindSpotScreen() {
       <Shell
         footer={
           isHost ? (
-            <PrimaryAction label="See Scores" icon="podium" onPress={advanceFromVoteReveal} />
+            <PrimaryAction label="See Scores" icon="podium" onPress={advanceFromVoteReveal} accentColor={THEME.accent} />
           ) : (
             <WaitingNote label="Waiting for host..." />
           )
@@ -781,6 +824,7 @@ export default function BlindSpotScreen() {
               label={isLastRound ? "Final Results" : "Next Round"}
               icon={isLastRound ? "trophy" : "arrow-forward"}
               onPress={isLastRound ? advanceToNextRound : advanceToNextRound}
+              accentColor={THEME.accent}
             />
           ) : (
             <WaitingNote label="Waiting for host..." />
@@ -831,6 +875,7 @@ export default function BlindSpotScreen() {
                 icon="refresh"
                 iconPosition="left"
                 onPress={() => startGame("blindSpot")}
+                accentColor={THEME.accent}
               />
               <PrimaryAction label="Back to Lobby" variant="ghost" onPress={handleBackToLobby} />
             </View>
@@ -872,7 +917,7 @@ export default function BlindSpotScreen() {
               <View style={{ flex: 1 }}>
                 <Text style={st.scoreName} numberOfLines={1}>{entry.name}</Text>
               </View>
-              <Pill tone="peach" label={`${entry.score} pts`} />
+              <Pill color={THEME.accent} label={`${entry.score} pts`} />
             </GradientCard>
           ))}
         </View>
@@ -914,7 +959,7 @@ function ScreenTitle({ title, subtitle, pill }: { title: string; subtitle?: stri
     <View style={st.titleBlock}>
       <View style={st.eyebrowRow}>
         <Text style={st.fallbackTitle}>{title}</Text>
-        {pill ? <Pill tone="peach" label={pill} /> : null}
+        {pill ? <Pill color={THEME.accent} label={pill} /> : null}
       </View>
       {subtitle ? <Text style={type.subtitle}>{subtitle}</Text> : null}
     </View>
@@ -1019,6 +1064,44 @@ const st = StyleSheet.create({
   roleEmoji: { fontSize: 64 },
   roleTitle: { fontFamily: fonts.extrabold, fontSize: 28, textAlign: "center" },
   roleDesc: { fontFamily: fonts.medium, fontSize: 16, lineHeight: 22, color: colors.gray300, textAlign: "center" },
+
+  // Hidden role
+  hiddenRoleCard: {
+    padding: 40,
+    alignItems: "center",
+    gap: 14,
+  },
+  hiddenRoleText: {
+    fontFamily: fonts.bold,
+    fontSize: 20,
+    color: colors.white,
+  },
+  hiddenRoleSub: {
+    fontFamily: fonts.regular,
+    fontSize: 14,
+    color: colors.gray400,
+    textAlign: "center",
+  },
+  revealBtn: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "center",
+    gap: 8,
+    backgroundColor: THEME.accent,
+    paddingVertical: 14,
+    paddingHorizontal: 24,
+    borderRadius: radii.lg,
+    alignSelf: "stretch",
+  },
+  revealBtnText: {
+    fontFamily: fonts.bold,
+    fontSize: 16,
+    color: THEME.bg,
+  },
+
+  // Warning row
+  warningRow: { flexDirection: "row", alignItems: "center", gap: 12, padding: spacing.lg },
+  warningText: { flex: 1, fontFamily: fonts.bold, fontSize: 13, lineHeight: 18, color: THEME.danger },
 
   // Info row
   infoRow: { flexDirection: "row", alignItems: "center", gap: 12, padding: spacing.lg },

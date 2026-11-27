@@ -8,6 +8,8 @@ interface PillProps {
   label?: string;
   children?: ReactNode;
   tone?: PillTone;
+  /** Override the tone with a custom accent color (bg = color, fg = dark). */
+  color?: string;
   /** Rotate slightly (~-6deg) so the pill reads like a sticker. */
   tilt?: boolean;
   style?: StyleProp<ViewStyle>;
@@ -21,8 +23,8 @@ const TONES: Record<PillTone, { bg: string; fg: string; border?: string }> = {
 };
 
 /** Small rounded uppercase badge. */
-export default function Pill({ label, children, tone = "lavender", tilt = false, style }: PillProps) {
-  const t = TONES[tone];
+export default function Pill({ label, children, tone = "lavender", color, tilt = false, style }: PillProps) {
+  const t = color ? { bg: color, fg: "#1A1420" as string, border: undefined as string | undefined } : TONES[tone];
   return (
     <View
       style={[

@@ -526,7 +526,7 @@ export default function AuctionDraftScreen() {
       <Shell
         footer={
           isHost ? (
-            <PrimaryAction label="Continue" icon="arrow-forward" onPress={startFromIntro} testID="ad-start" />
+            <PrimaryAction label="Continue" icon="arrow-forward" onPress={startFromIntro} testID="ad-start" accentColor={THEME.accent} />
           ) : (
             <WaitingNote label="Waiting for host to start..." />
           )
@@ -598,6 +598,7 @@ export default function AuctionDraftScreen() {
                 onPress={beginAuction}
                 disabled={!canStart}
                 loading={launching}
+                accentColor={THEME.accent}
                 testID="ad-begin"
               />
             </View>
@@ -606,7 +607,7 @@ export default function AuctionDraftScreen() {
           <View style={st.titleBlock}>
             <View style={st.eyebrowRow}>
               <GameLogo gameId="auctionDraft" height={44} />
-              <Pill tone="peach" label="Custom" />
+              <Pill color={THEME.accent} label="Custom" />
             </View>
             <Text style={type.title}>Custom Theme</Text>
           </View>
@@ -711,6 +712,7 @@ export default function AuctionDraftScreen() {
               onPress={beginAuction}
               disabled={!canStart}
               loading={launching}
+              accentColor={THEME.accent}
               testID="ad-begin"
             />
           </View>
@@ -799,6 +801,7 @@ export default function AuctionDraftScreen() {
               icon="arrow-forward"
               onPress={toVoting}
               testID="ad-next"
+              accentColor={THEME.accent}
             />
           ) : (
             <WaitingNote label="Waiting for host to continue..." />
@@ -876,6 +879,7 @@ export default function AuctionDraftScreen() {
               onPress={submitVote}
               disabled={!myVote || submittingVote}
               loading={submittingVote}
+              accentColor={THEME.accent}
               testID="ad-vote-submit"
             />
             {hostForce}
@@ -929,7 +933,7 @@ export default function AuctionDraftScreen() {
       <Shell
         footer={
           isHost ? (
-            <PrimaryAction label="See Final Results" icon="arrow-forward" onPress={toGameOver} testID="ad-next" />
+            <PrimaryAction label="See Final Results" icon="arrow-forward" onPress={toGameOver} testID="ad-next" accentColor={THEME.accent} />
           ) : (
             <WaitingNote label="Waiting for host..." />
           )
@@ -994,7 +998,7 @@ export default function AuctionDraftScreen() {
         footer={
           isHost ? (
             <View style={st.footerStack}>
-              <PrimaryAction label="Play Again" icon="refresh" iconPosition="left" onPress={playAgain} testID="ad-play-again" />
+              <PrimaryAction label="Play Again" icon="refresh" iconPosition="left" onPress={playAgain} testID="ad-play-again" accentColor={THEME.accent} />
               <PrimaryAction label="Back to Lobby" variant="dark" onPress={() => endGame()} testID="ad-lobby" />
             </View>
           ) : (
@@ -1140,6 +1144,7 @@ function AuctionView({
             onPress={() => onBid(bidAmount)}
             disabled={!canRaise || acting || bidAmount < 1 || bidAmount < min || bidAmount > max}
             style={st.bidBtn}
+            accentColor={THEME.accent}
             testID="ad-bid-submit"
           />
         </View>
@@ -1147,7 +1152,7 @@ function AuctionView({
     );
   } else if (!isBidding) {
     footer = isHost ? (
-      <PrimaryAction label="Next Item" icon="arrow-forward" onPress={onNext} testID="ad-next" />
+      <PrimaryAction label="Next Item" icon="arrow-forward" onPress={onNext} testID="ad-next" accentColor={THEME.accent} />
     ) : (
       <WaitingNote label="Next item coming up..." />
     );
@@ -1168,7 +1173,7 @@ function AuctionView({
     <Shell footer={footer}>
       <View style={st.eyebrowRow}>
         <GameLogo gameId="auctionDraft" height={44} />
-        <Pill tone="peach" label={`Item ${showing + 1} of ${total}`} />
+        <Pill color={THEME.accent} label={`Item ${showing + 1} of ${total}`} />
         <Pill tone="dark" label={theme.name} />
       </View>
 
@@ -1525,7 +1530,7 @@ function ScreenTitle({ title, subtitle, pill }: { title: string; subtitle?: stri
     <View style={st.titleBlock}>
       <View style={st.eyebrowRow}>
         <GameLogo gameId="auctionDraft" height={44} />
-        {pill ? <Pill tone="peach" label={pill} /> : null}
+        {pill ? <Pill color={THEME.accent} label={pill} /> : null}
       </View>
       {subtitle ? <Text style={type.subtitle}>{subtitle}</Text> : null}
     </View>

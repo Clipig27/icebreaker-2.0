@@ -405,7 +405,7 @@ export default function PieChartsScreen() {
       <Shell
         footer={
           isHost ? (
-            <PrimaryAction label="Continue" icon="arrow-forward" onPress={advanceToSetup} />
+            <PrimaryAction label="Continue" icon="arrow-forward" onPress={advanceToSetup} accentColor={THEME.accent} />
           ) : (
             <WaitingNote label="Waiting for host to start..." />
           )
@@ -462,7 +462,7 @@ export default function PieChartsScreen() {
     return (
       <Shell
         keyboard
-        footer={<PrimaryAction label="Start Game" icon="arrow-forward" onPress={handleStartGame} />}
+        footer={<PrimaryAction label="Start Game" icon="arrow-forward" onPress={handleStartGame} accentColor={THEME.accent} />}
       >
         <ScreenTitle
           title="Pie Charts"
@@ -542,7 +542,7 @@ export default function PieChartsScreen() {
       <Shell
         footer={
           isHost ? (
-            <PrimaryAction label="Start Voting" icon="arrow-forward" onPress={handleStartVoting} />
+            <PrimaryAction label="Start Voting" icon="arrow-forward" onPress={handleStartVoting} accentColor={THEME.accent} />
           ) : (
             <WaitingNote label="Waiting for host to open voting..." />
           )
@@ -628,7 +628,7 @@ export default function PieChartsScreen() {
     const footer =
       rStage === "suspense" ? (
         isHost ? (
-          <PrimaryAction label="Reveal" icon="arrow-forward" onPress={handleReveal} />
+          <PrimaryAction label="Reveal" icon="arrow-forward" onPress={handleReveal} accentColor={THEME.accent} />
         ) : (
           <WaitingNote label="Waiting for the reveal..." />
         )
@@ -637,6 +637,7 @@ export default function PieChartsScreen() {
           label={isLast ? "See Final Results" : "Next Question"}
           icon="arrow-forward"
           onPress={handleNextReveal}
+          accentColor={THEME.accent}
         />
       ) : (
         <WaitingNote label="Waiting for host to continue..." />
@@ -717,6 +718,7 @@ export default function PieChartsScreen() {
                 icon="refresh"
                 iconPosition="left"
                 onPress={() => startGame("pieCharts")}
+                accentColor={THEME.accent}
               />
               <PrimaryAction label="Back to Lobby" variant="dark" onPress={handleBackToLobby} />
             </View>
@@ -753,7 +755,7 @@ export default function PieChartsScreen() {
                     </Text>
                   </View>
                 ))}
-                {qWinners.length > 1 && <Pill tone="peach" label="Tie" />}
+                {qWinners.length > 1 && <Pill color={THEME.accent} label="Tie" />}
               </View>
               <DonutChart playerIds={playerIds} playerMap={playerMap} counts={counts} size={SW * 0.45} />
             </GradientCard>
@@ -816,7 +818,7 @@ function ScreenTitle({ title, subtitle, pill }: { title: string; subtitle?: stri
     <View style={s.titleBlock}>
       <View style={s.eyebrowRow}>
         <GameLogo gameId="pieCharts" height={44} />
-        {pill ? <Pill tone="peach" label={pill} /> : null}
+        {pill ? <Pill color={THEME.accent} label={pill} /> : null}
       </View>
       {subtitle ? <Text style={type.subtitle}>{subtitle}</Text> : null}
     </View>

@@ -502,7 +502,7 @@ export default function NumberGuessorScreen() {
       footer={
         isHost ? (
           <View onTouchStart={() => console.log("[tapdiag] numberGuessor Start onPressIn")}>
-            <PrimaryAction label="Start Game" icon="play" iconPosition="left" onPress={advanceToSetup} />
+            <PrimaryAction label="Start Game" icon="play" iconPosition="left" onPress={advanceToSetup} accentColor={THEME.accent} />
           </View>
         ) : (
           <WaitingNote label="Waiting for host to start..." />
@@ -542,7 +542,7 @@ export default function NumberGuessorScreen() {
     <Screen
       footer={
         isHost ? (
-          <PrimaryAction label="Start Game" icon="play" iconPosition="left" onPress={beginGame} />
+          <PrimaryAction label="Start Game" icon="play" iconPosition="left" onPress={beginGame} accentColor={THEME.accent} />
         ) : (
           <WaitingNote label="Waiting for host to start..." />
         )
@@ -607,7 +607,7 @@ export default function NumberGuessorScreen() {
           <View style={styles.guessTop}>
             <View style={styles.eyebrowRow}>
               <GameLogo gameId="numberGuessor" height={44} />
-              <Pill tone="peach" label={roundPill} />
+              <Pill color={THEME.accent} label={roundPill} />
             </View>
 
             <Text style={styles.guessSubtitle}>Guess the number</Text>
@@ -733,7 +733,7 @@ export default function NumberGuessorScreen() {
         fade={fadeAnim}
         footer={
           isHost ? (
-            <PrimaryAction label="Leaderboard" icon="arrow-forward" onPress={advanceToRoundEnd} />
+            <PrimaryAction label="Leaderboard" icon="arrow-forward" onPress={advanceToRoundEnd} accentColor={THEME.accent} />
           ) : (
             <WaitingNote label="Waiting for host..." />
           )
@@ -843,6 +843,7 @@ export default function NumberGuessorScreen() {
             label={(gs?.currentRound ?? 0) >= (gs?.totalRounds ?? 0) ? "Final Results" : "Next Round"}
             icon="arrow-forward"
             onPress={advanceToNextRound}
+            accentColor={THEME.accent}
           />
         ) : (
           <WaitingNote label="Waiting for host..." />
@@ -873,6 +874,7 @@ export default function NumberGuessorScreen() {
                 icon="refresh"
                 iconPosition="left"
                 onPress={() => startGame("numberGuessor")}
+                accentColor={THEME.accent}
               />
               <PrimaryAction label="Back to Lobby" variant="dark" onPress={backToLobby} />
             </View>
@@ -983,7 +985,7 @@ function ScreenTitle({ title, subtitle, pill }: { title: string; subtitle?: stri
     <View style={styles.titleBlock}>
       <View style={styles.eyebrowRow}>
         <GameLogo gameId="numberGuessor" height={44} />
-        {pill ? <Pill tone="peach" label={pill} /> : null}
+        {pill ? <Pill color={THEME.accent} label={pill} /> : null}
       </View>
       {subtitle ? <Text style={type.subtitle}>{subtitle}</Text> : null}
     </View>

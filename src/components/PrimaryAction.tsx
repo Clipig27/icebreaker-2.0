@@ -26,6 +26,8 @@ interface PrimaryActionProps {
   disabled?: boolean;
   loading?: boolean;
   variant?: PrimaryActionVariant;
+  /** Override the primary variant's gradient with a solid accent color. */
+  accentColor?: string;
   style?: StyleProp<ViewStyle>;
   testID?: string;
 }
@@ -36,7 +38,7 @@ const VARIANTS: Record<PrimaryActionVariant, { bg: string; fg: string; border?: 
   ghost: { bg: "transparent", fg: colors.white, border: colors.cardBorder },
 };
 
-/** Full-width lavender action button with dark bold text. */
+/** Full-width action button. Pass `accentColor` to replace the default purple gradient with a solid game-themed color. */
 export default function PrimaryAction({
   label,
   onPress,
@@ -45,12 +47,15 @@ export default function PrimaryAction({
   disabled = false,
   loading = false,
   variant = "primary",
+  accentColor,
   style,
   testID,
 }: PrimaryActionProps) {
   const v = VARIANTS[variant];
+  const useSolid = variant === "primary" && !!accentColor;
+  const fg = useSolid ? "#1A1420" : v.fg;
   const inactive = disabled || loading;
-  const iconEl = icon ? <Ionicons name={icon} size={18} color={v.fg} /> : null;
+  const iconEl = icon ? <Ionicons name={icon} size={18} color={fg} /> : null;
 
   return (
     <Pressable
@@ -61,14 +66,20 @@ export default function PrimaryAction({
       disabled={inactive}
       style={({ pressed }) => [
         s.base,
-        { backgroundColor: variant === "primary" ? "transparent" : v.bg },
+        {
+          backgroundColor: useSolid
+            ? accentColor
+            : variant === "primary"
+              ? "transparent"
+              : v.bg,
+        },
         v.border ? { borderWidth: 1, borderColor: v.border } : null,
         inactive && s.dimmed,
         pressed && !inactive && s.pressed,
         style,
       ]}
     >
-      {variant === "primary" ? (
+      {variant === "primary" && !useSolid ? (
         <LinearGradient
           colors={gradients.primaryButton}
           locations={[0, 0.5, 1]}
@@ -79,11 +90,11 @@ export default function PrimaryAction({
         />
       ) : null}
       {loading ? (
-        <ActivityIndicator color={v.fg} size="small" />
+        <ActivityIndicator color={fg} size="small" />
       ) : (
         <View style={s.inner}>
           {iconPosition === "left" && iconEl}
-          <Text style={[s.label, { color: v.fg }]} numberOfLines={1}>
+          <Text style={[s.label, { color: fg }]} numberOfLines={1}>
             {label}
           </Text>
           {iconPosition === "right" && iconEl}

@@ -461,7 +461,7 @@ export default function BlindRankingScreen() {
       <Shell
         footer={
           isHost ? (
-            <PrimaryAction label="Continue" icon="arrow-forward" onPress={startFromIntro} />
+            <PrimaryAction label="Continue" icon="arrow-forward" onPress={startFromIntro} accentColor={THEME.accent} />
           ) : (
             <WaitingNote label="Waiting for host to start..." />
           )
@@ -534,6 +534,7 @@ export default function BlindRankingScreen() {
                 label={editingCategory ? "Save Changes" : "Save Category"}
                 onPress={saveCustomCategory}
                 disabled={!canSave}
+                accentColor={THEME.accent}
               />
               <PrimaryAction
                 label="Cancel"
@@ -607,7 +608,7 @@ export default function BlindRankingScreen() {
 
           {customCategories.length > 0 && (
             <>
-              <Eyebrow tone="lavender" style={st.sectionEyebrow}>Your Categories</Eyebrow>
+              <Eyebrow tone="gray" style={[st.sectionEyebrow, { color: THEME.accent }]}>Your Categories</Eyebrow>
               <View style={st.catGrid}>
                 {customCategories.map((cat) => (
                   <Pressable
@@ -689,7 +690,7 @@ export default function BlindRankingScreen() {
     return (
       <Shell
         footer={
-          <PrimaryAction label="Start" icon="play" onPress={() => launchGame(1, gs.currentGame ?? 1)} />
+          <PrimaryAction label="Start" icon="play" onPress={() => launchGame(1, gs.currentGame ?? 1)} accentColor={THEME.accent} />
         }
       >
         <CategoryTitle
@@ -721,6 +722,7 @@ export default function BlindRankingScreen() {
             <PrimaryAction
               label={`Rank ${remaining} more item${remaining !== 1 ? "s" : ""} (${filledCount}/${gs.size})`}
               disabled
+              accentColor={THEME.accent}
             />
           )
         }
@@ -728,7 +730,7 @@ export default function BlindRankingScreen() {
         <View style={st.titleBlock}>
           <View style={st.eyebrowRow}>
             <GameLogo gameId="blindRanking" height={44} />
-            <Pill tone="peach" label={`Top ${gs.size}`} />
+            <Pill color={THEME.accent} label={`Top ${gs.size}`} />
           </View>
           <View style={st.promptRow}>
             <View style={st.flex1}>
@@ -864,7 +866,7 @@ export default function BlindRankingScreen() {
       <Shell
         footer={
           isHost ? (
-            <PrimaryAction label="Vote for Best List" icon="arrow-forward" onPress={advanceToVoting} />
+            <PrimaryAction label="Vote for Best List" icon="arrow-forward" onPress={advanceToVoting} accentColor={THEME.accent} />
           ) : (
             <WaitingNote label="Waiting for host to continue..." />
           )
@@ -1015,6 +1017,7 @@ export default function BlindRankingScreen() {
               label="See Final Results"
               icon="arrow-forward"
               onPress={handleNextGameOrEnd}
+              accentColor={THEME.accent}
             />
           ) : (
             <WaitingNote label="Waiting for host..." />
@@ -1057,6 +1060,7 @@ export default function BlindRankingScreen() {
                 icon="refresh"
                 iconPosition="left"
                 onPress={() => startGame("blindRanking")}
+                accentColor={THEME.accent}
               />
               <PrimaryAction label="Back to Lobby" variant="dark" onPress={handleBackToLobby} />
             </View>
@@ -1232,7 +1236,7 @@ function ScreenTitle({ title, subtitle, pill }: { title: string; subtitle?: stri
     <View style={st.titleBlock}>
       <View style={st.eyebrowRow}>
         <GameLogo gameId="blindRanking" height={44} />
-        {pill ? <Pill tone="peach" label={pill} /> : null}
+        {pill ? <Pill color={THEME.accent} label={pill} /> : null}
       </View>
       {subtitle ? <Text style={type.subtitle}>{subtitle}</Text> : null}
     </View>
@@ -1254,7 +1258,7 @@ function CategoryTitle({
     <View style={st.titleBlock}>
       <View style={st.eyebrowRow}>
         <GameLogo gameId="blindRanking" height={44} />
-        {pill ? <Pill tone="peach" label={pill} /> : null}
+        {pill ? <Pill color={THEME.accent} label={pill} /> : null}
       </View>
       <View style={st.promptRow}>
         <View style={st.flex1}>

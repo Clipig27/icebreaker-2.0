@@ -420,7 +420,7 @@ export default function TenSecondTasksScreen() {
       <Shell
         footer={
           isHost ? (
-            <PrimaryAction label="Start Game" icon="play" onPress={handleStartGame} />
+            <PrimaryAction label="Start Game" icon="play" onPress={handleStartGame} accentColor={THEME.accent} />
           ) : (
             <WaitingNote label="Waiting for host to start..." />
           )
@@ -495,7 +495,7 @@ export default function TenSecondTasksScreen() {
 
     if (isHolder) {
       return (
-        <Shell footer={<PrimaryAction label="DONE!" icon="checkmark" onPress={handleDone} />}>
+        <Shell footer={<PrimaryAction label="DONE!" icon="checkmark" onPress={handleDone} accentColor={THEME.accent} />}>
           <ScreenTitle
             title="You're on!"
             subtitle={`Turn ${gs.turnNumber} \u00B7 Do every task, then tap Done`}
@@ -627,6 +627,7 @@ export default function TenSecondTasksScreen() {
                 icon="refresh"
                 iconPosition="left"
                 onPress={() => startGame("tenSecondTasks")}
+                accentColor={THEME.accent}
               />
               <PrimaryAction label="Back to Lobby" variant="dark" onPress={handleBackToLobby} />
             </View>
@@ -719,7 +720,7 @@ function ScreenTitle({ title, subtitle, pill }: { title: string; subtitle?: stri
     <View style={st.titleBlock}>
       <View style={st.eyebrowRow}>
         <GameLogo gameId="tenSecondTasks" height={44} />
-        {pill ? <Pill tone="peach" label={pill} /> : null}
+        {pill ? <Pill color={THEME.accent} label={pill} /> : null}
       </View>
       {subtitle ? <Text style={type.subtitle}>{subtitle}</Text> : null}
     </View>

@@ -581,7 +581,7 @@ export default function PotLuckScreen() {
       <Shell
         footer={
           isHost ? (
-            <PrimaryAction label="Start Game" icon="play" onPress={startFromIntro} />
+            <PrimaryAction label="Start Game" icon="play" onPress={startFromIntro} accentColor={THEME.accent} />
           ) : (
             <WaitingNote label="Waiting for host to start..." />
           )
@@ -896,7 +896,7 @@ export default function PotLuckScreen() {
       <Shell
         footer={
           isHost ? (
-            <PrimaryAction label="Next Question" icon="arrow-forward" onPress={handleNextQuestion} />
+            <PrimaryAction label="Next Question" icon="arrow-forward" onPress={handleNextQuestion} accentColor={THEME.accent} />
           ) : (
             <WaitingNote label="Waiting for host to continue..." />
           )
@@ -946,6 +946,7 @@ export default function PotLuckScreen() {
                 icon="refresh"
                 iconPosition="left"
                 onPress={() => startGame("potLuck")}
+                accentColor={THEME.accent}
               />
               <PrimaryAction label="Back to Lobby" variant="dark" onPress={handleBackToLobby} />
             </View>
@@ -1028,7 +1029,7 @@ function ScreenTitle({ title, subtitle, pill }: { title: string; subtitle?: stri
     <View style={st.titleBlock}>
       <View style={st.eyebrowRow}>
         <GameLogo gameId="potLuck" height={44} />
-        {pill ? <Pill tone="peach" label={pill} /> : null}
+        {pill ? <Pill color={THEME.accent} label={pill} /> : null}
       </View>
       {subtitle ? <Text style={type.subtitle}>{subtitle}</Text> : null}
     </View>
